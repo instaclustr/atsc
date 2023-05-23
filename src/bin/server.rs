@@ -42,13 +42,35 @@ fn read_metrics_from_flac(filename: &str) -> Vec<i16> {
     return samples;
 }
 
+fn read_metrics_from_flac_in_interval(filename: &str, start: u32, end: u32) -> Vec<i16> {
+    let mut reader = claxon::FlacReader::open(filename).unwrap();
+    // Create a vector to hold the audio data
+    let start_sample = start * reader.streaminfo().sample_rate;
+    let end_sample = end * reader.streaminfo().sample_rate;
+    //let mut samples = Vec::with_capacity(reader.streaminfo().samples.unwrap() as usize);
+    let mut samples: Vec<i16> = Vec::new();
+    let mut i = 0;
+    for sample in reader.samples() {
+        if  start_sample <=i && i <= end_sample {
+            samples.push(sample.unwrap() as i16);
+        }
+        else if i > end_sample {
+            break;
+        }
+        i+=1;
+    }
+    return samples;
+}
+
 fn main() {
     println!("Testing, does FLAC reading is the same as WAV?");
     let filename = "2023-05-11_15-11-19.wav";
     let filename_flac = "2023-05-11_15-11-19.flac";
-    let samples = read_metrics_from_wav(filename);
+    //let samples = read_metrics_from_wav(filename);
     //println!("{:?}", samples);
-    let samples_flac = read_metrics_from_flac(filename_flac);
+    //let samples_flac = read_metrics_from_flac(filename_flac);
     //println!("{:?}", samples_flac);
-    assert_eq!(samples, samples_flac);
+    //assert_eq!(samples, samples_flac);
+    let samples_flac_in_interval = read_metrics_from_flac_in_interval(filename_flac, 5, 7);
+    println!("Sample Flac {:?}", samples_flac_in_interval.len());
 }

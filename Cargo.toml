@@ -15,3 +15,6 @@ prometheus = "*"
 warp = "*"
 tokio = { version= "1", features = ["full"] }
 futures="*"
+symphonia= { version = "*", features = ["flac"] } 
+prom-remote-api = { version = "0.2.2", features=["warp"]}
+async-trait = "*"

@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, SeekFrom, Seek};
 use std::path::Path;
 
 use prometheus::{Gauge, GaugeVec, Opts, Registry, TextEncoder, Encoder};
@@ -7,6 +7,35 @@ use prometheus::{Gauge, GaugeVec, Opts, Registry, TextEncoder, Encoder};
 use warp::{http::StatusCode, Filter, Rejection, Reply};
 
 use claxon::{FlacReader};
+
+// This function returns the content of a FLAC file from a timestamp to another timestamp
+fn extract_flac_content(start_time: u32, end_time: u32, file_path: &str) -> Result<Vec<u8>, std::io::Error> {
+    let mut file = File::open(file_path)?;
+    let metadata = file.metadata()?;
+    let total_samples = (metadata.len() / 4) as u32; // Assuming 16-bit FLAC, where each sample is 4 bytes
+
+    // Calculate start and end samples based on time period
+    let sample_rate = 44100; // Assuming 44.1 kHz sample rate
+    let start_sample = (start_time as u64 * sample_rate as u64) as u32;
+    let end_sample = (end_time as u64 * sample_rate as u64) as u32;
+
+    // Ensure start and end samples are within the valid range
+    let start_sample = start_sample.min(total_samples);
+    let end_sample = end_sample.min(total_samples);
+
+    // Calculate byte positions for start and end samples
+    let start_byte = (start_sample as u64) * 4;
+    let end_byte = (end_sample as u64) * 4;
+
+    // Seek to the start position in the file
+    file.seek(SeekFrom::Start(start_byte))?;
+
+    // Read the content between start and end positions
+    let mut content = vec![0; (end_byte - start_byte) as usize];
+    file.read_exact(&mut content)?;
+
+    Ok(content)
+}
 
 #[tokio::main]
 async fn main() {
