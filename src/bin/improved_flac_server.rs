@@ -9,44 +9,6 @@ use symphonia::core::probe::Hint;
 use symphonia::core::units::{Time, TimeBase};
 use symphonia::core::io::MediaSourceStream;
 
-pub trait RemoteStorage: Sync {
-    type Err: Send;
-    type Context: Send + Sync;
-
-    /// Write samples to remote storage.
-    async fn write(&self, ctx: Self::Context, req: WriteRequest) -> Result<(), Self::Err>;
-
-    /// Process one query within [ReadRequest](crate::types::ReadRequest).
-    ///
-    /// Note: Prometheus remote protocol sends multiple queries by default,
-    /// use [read](crate::types::RemoteStorage::read) to serve ReadRequest.
-    async fn process_query(
-        &self,
-        ctx: &Self::Context,
-        q: Query,
-    ) -> Result<QueryResult, Self::Err>;
-
-    /// Read samples from remote storage.
-    ///
-    /// [ReadRequest](crate::types::ReadRequest) may contain more than one sub [queries](crate::types::Query).
-    async fn read(
-        &self,
-        ctx: Self::Context,
-        req: ReadRequest,
-    ) -> Result<ReadResponse, Self::Err> {
-        let results = futures::future::join_all(
-            req.queries
-                .into_iter()
-                .map(|q| async { self.process_query(&ctx, q).await }),
-        )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, Self::Err>>()?;
-
-        Ok(ReadResponse { results })
-    }
-}
-
 fn extract_flac_content_from_interval(start_time: u64, end_time: u64)-> Result<Vec<i16>, Error> {
     let file_path = "2023-05-11_15-11-19.flac";
 
