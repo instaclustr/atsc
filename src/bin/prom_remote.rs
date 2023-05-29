@@ -1,13 +1,15 @@
 
-//! To configure Prometheus to send samples to this binary, add the following to your prometheus.yml:
-//!
-//! ```yml
-//! remote_write:
-//!   - url: "http://localhost:9201/api/write"
-//!
-//! remote_read:
-//!   - url: "http://localhost:9201/api/read"
-//! ```
+/* Starting a changelog here
+
+TODO:
+Write metrics to FLAC files from Prometheus Write
+Return the same metrics to prometheus via the remote read
+
+
+## 26/05/2023
+ - Currently Reading From Flac and serving prometheus via remote write
+
+ */
 
 use async_trait::async_trait;
 use std::{convert::Infallible, sync::Arc};
@@ -23,7 +25,7 @@ use std::fs::File;
 
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::errors::Error as SymphoniaError;
-use symphonia::core::codecs::{DecoderOptions};
+use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::formats::{FormatOptions, SeekMode, SeekTo};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;

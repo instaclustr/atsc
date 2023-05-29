@@ -89,7 +89,7 @@ fn extract_flac_content_from_interval(start_time: u64, end_time: u64)-> Result<V
         }
         if packet.ts >= end_point_ts {
             // Stop the loop, we are done!
-            println!("Packet TS : {:?}, Packet Time: {:?}", packet.ts, end_point_ts);
+            println!("Packet TS : {:?}, Requested End Time: {:?}", packet.ts, end_point_ts);
             break;
         }
     }
