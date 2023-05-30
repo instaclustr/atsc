@@ -73,7 +73,8 @@ fn main() {
         sample_format: hound::SampleFormat::Int
     };
 
-    let ts = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
+    // One file per day
+    let ts = chrono::Local::now().format("%Y-%m-%d");
 
     // Need one file for each CPU
     for cpu in sys.cpus() {

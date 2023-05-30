@@ -2,7 +2,7 @@ use std::fs::File;
 
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::errors::Error;
-use symphonia::core::codecs::{DecoderOptions};
+use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::formats::{FormatOptions, SeekMode, SeekTo};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;

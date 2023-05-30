@@ -28,7 +28,6 @@ This repository contains several programs that serve different purposes, some ar
 3. `flac_server.rs` Reading full FLAC files, acting as a prometheus client. Mostly for initial testing, obsolete now.
 4. `prom_remote.rs` A prometheus remote storage implementation that can *READ* from flac files. Write is not supported.
 5. `server.rs` Started with the objective of being a data server, was replaced by `prom_remote.rs`. Still has the capacity to compare raw data with the compressed FLAC to make sure there is no information loss. Should rename this probably.
-6. `wav_generator.rs` No use whatsoever. Was replaced by `monitoring_agents.rs`. Could be deleted anytime soon.
 
 ## How to make this work?
 
