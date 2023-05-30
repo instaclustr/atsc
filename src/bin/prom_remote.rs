@@ -41,6 +41,11 @@ static FLAC_SAMPLE_RATE: u32 = 8000;
 // THIS IS A HACK!! This is to fix the issue that we don't have the full day of samples.
 static DELTA_SHIFT: u64 = 37696;
 
+// HACK 2! CPU was adjusted to fit into the WAV file, needs to be divided by 100.
+fn adjust_cpu(cpu: i16)-> i16 {
+    return cpu/100
+}
+
 /// The rate at which the samples are added to the file, never match the sample rate of the flac file.
 /// The way the enconder/decoder works an high enough sample rate is needed (8kHz minimun)
 /// But we never retrieve metric data at such a high rate, so we need to convert between sample rates
@@ -118,8 +123,7 @@ fn get_flac_samples(metric: &str, start_time: i64, end_time: i64)-> std::result:
         Ok(point) => { println!("Initial point: {:?}", point);},
         Err(err) => { panic!("Unable to find starting point! Error: {}", err); }
     }
-    
-    // Not stopping on the required time (yet)
+
     loop {
         // Get the next packet from the media format.
         let packet = match format_reader.next_packet() {
@@ -138,14 +142,18 @@ fn get_flac_samples(metric: &str, start_time: i64, end_time: i64)-> std::result:
                     let spec = *decoded.spec();
                     // Get the capacity of the decoded buffer. Note: This is capacity, not length!
                     let duration = decoded.capacity() as u64;
-                    // Create the f32 sample buffer.
+                    // Create the i16 sample buffer.
                     sample_buf = Some(SampleBuffer::<i16>::new(duration, spec));
                 }
                 if let Some(buf) = &mut sample_buf {
                     //buf.copy_interleaved_ref(decoded);
                     buf.copy_planar_ref(decoded);
                     for sample in buf.samples() {
-                        buffer.push(*sample);
+                        if metric[..3].eq("cpu") {
+                            buffer.push(adjust_cpu(*sample));
+                        } else {
+                            buffer.push(*sample);
+                        }
                     }
                     //print!("\rSamples decoded: {:?} samples", buffer);
                 }
@@ -274,7 +282,8 @@ fn get_flac_samples_to_prom(metric: &str, start_ms: i64, end_ms: i64, step_ms: i
     // It can only return has many results as (END - START / STEP)
     let return_samples_number = (end_ms - start_ms)/step_ms;
     println!("Returning {} samples out of {}", return_samples_number, flac_content.len());
-    flac_content.iter().enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).take(return_samples_number as usize).collect()
+    //flac_content.iter().enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).take(return_samples_number as usize).collect()
+    flac_content.iter().take(return_samples_number as usize).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
     
 }
 
