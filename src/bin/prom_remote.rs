@@ -4,6 +4,7 @@
 TODO:
 Write metrics to FLAC files from Prometheus Write
 Return the same metrics to prometheus via the remote read
+Make the code decent, as in, split into different files and those nice things
 
 ## 26/05/2023
  - Currently Reading From Flac and serving prometheus via remote write
@@ -11,11 +12,11 @@ Return the same metrics to prometheus via the remote read
  */
 
 use async_trait::async_trait;
-use std::{convert::Infallible, sync::Arc};
+use std::{convert::Infallible, sync::Arc, time};
 
 use prom_remote_api::{
     types::{
-        Error, Label, Query, QueryResult, RemoteStorage, Result, Sample, TimeSeries, WriteRequest,
+        Error, Label, Query, QueryResult, RemoteStorage, Result, Sample, TimeSeries, WriteRequest, MetricMetadata,
     },
     web,
 };
@@ -209,12 +210,55 @@ fn get_flac_samples_to_prom(metric: &str, start_ms: i64, end_ms: i64, step_ms: i
     // Transforming the result into Samples
     let step_size: usize = (step_ms/DATA_INTERVAL_MSEC).try_into().unwrap();
     println!("[DEBUG] # of FLaC samples: {} Step size ms: {} Internal step: {}", flac_content.len(), step_ms, step_size);
-    //flac_content.iter().take(return_samples_number as usize).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
     flac_content.iter().step_by(step_size).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
 }
+// --- Write layer
+// Remote write spec: https://prometheus.io/docs/concepts/remote_write_spec/
+struct WavMetric {
+    metric_name: String,
+    instance: String,
+    job: String,
+    timeseries_data: Option<Vec<WavData>>
+}
+// Here is where things get tricky. Either we have a single strutcure and implement several WavWriters or we segment at the metric collection level.
+// The advantage of implementing at the writing level is that we can look into the data and make a better guess based on the data.
+struct WavData {
+    timestamp: i64,
+    value: f64
+}
 
-// For testing sake, I'm always sending the the same block of the FLAC file to the server on instant query,
-// and the same sequence on range query
+impl WavMetric {
+    pub fn new(name: String, source: String, job: String) -> WavMetric {
+        WavMetric { metric_name: name, instance: source, job: job, timeseries_data: None }
+    }
+}
+
+fn parse_remote_write_request(timeseries: &TimeSeries, metadata: Option<&MetricMetadata>) -> Result<()> {
+    println!("[DEBUG][WRITE] samples: {:?}", timeseries.samples);
+    println!("[DEBUG][WRITE] labels: {:?}", timeseries.labels);
+    println!("[DEBUG][WRITE] exemplars: {:?}", timeseries.exemplars); // empty?
+    
+    let mut metric: Option<&str> = None;
+    let mut source: Option<&str> = None;
+    let mut job: Option<&str> = None;
+    
+    for label in &timeseries.labels {
+        match label.name.as_str() {
+            "__name__" => metric = Some(&label.value),
+            "instance" => source = Some(&label.value),
+            "job" => job = Some(&label.value),
+            _ => ()
+        }
+    }
+    
+    if let (Some(metric), Some(source), Some(job)) = (metric, source, job) {
+        let metric = WavMetric::new(metric.to_string(), source.to_string(), job.to_string());
+        // Use the metric variable here
+    } else {
+        println!("Missing metric or source");
+    }
+    Ok(())
+}
 
 #[derive(Clone, Copy)]
 struct FlacStorage;
@@ -232,6 +276,16 @@ impl RemoteStorage for FlacStorage {
 
     async fn write(&self, _ctx: Self::Context, req: WriteRequest) -> Result<()> {
         //println!("flac write, req:{req:?}");
+        if req.metadata.is_empty() {
+            for timeseries in req.timeseries {
+                parse_remote_write_request(&timeseries, None);
+                //break;
+            }
+        } else {
+            for (timeseries, metadata) in req.timeseries.iter().zip(req.metadata.iter()) {
+                parse_remote_write_request(timeseries, Some(metadata));
+            }
+        }
         Ok(())
     }
 
@@ -251,7 +305,7 @@ impl RemoteStorage for FlacStorage {
                     },
                     Label {
                         name: "__name__".to_string(),
-                        value: "up".to_string(),
+                        value: metric.to_string(),
                     },
                 ],
                 samples: get_flac_samples_to_prom(

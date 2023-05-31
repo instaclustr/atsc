@@ -1,3 +1,4 @@
 /target
 *.wav
 *.flac
+.vscode/settings.json
