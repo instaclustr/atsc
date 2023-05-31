@@ -5,7 +5,6 @@ TODO:
 Write metrics to FLAC files from Prometheus Write
 Return the same metrics to prometheus via the remote read
 
-
 ## 26/05/2023
  - Currently Reading From Flac and serving prometheus via remote write
 
@@ -36,6 +35,7 @@ use chrono::{DateTime, Utc, Timelike};
 
 // Data sampling frequency. How many seconds between each sample.
 static DATA_INTERVAL_SEC: u32 = 1;
+static DATA_INTERVAL_MSEC: i64 = 1000;
 static FLAC_SAMPLE_RATE: u32 = 8000;
 
 // THIS IS A HACK!! This is to fix the issue that we don't have the full day of samples.
@@ -115,15 +115,19 @@ fn get_flac_samples(metric: &str, start_time: i64, end_time: i64)-> std::result:
     let end_point_ts = TimeBase::new(1, sample_rate).calc_timestamp(get_flac_timeshift(end_time));
     
     // Prepare to store data, with Optimal Seek (less performance) this can be a static value, otherwise will stay like this
+    // Listen to me! This is messed up, and I'm cutting and trimming and messing up the buffer, but until I
+    // implement decent sample parsing, it is what it is.
     let mut buffer = Vec::new();
     let mut sample_buf = None;
     // Seek to the correct point
     let initial_point = format_reader.seek(SeekMode::Accurate, seek_point);
-    match initial_point {
-        Ok(point) => { println!("Initial point: {:?}", point);},
+    let point = match initial_point {
+        Ok(point) => { 
+            println!("Initial point: {:?}", point);
+            point
+        },
         Err(err) => { panic!("Unable to find starting point! Error: {}", err); }
-    }
-
+    };
     loop {
         // Get the next packet from the media format.
         let packet = match format_reader.next_packet() {
@@ -133,6 +137,16 @@ fn get_flac_samples(metric: &str, start_time: i64, end_time: i64)-> std::result:
                 panic!("{}", err);
             }
         };
+        // If we are above the end TS, stop!
+        // In the best case we only added in full Packet of samples, so we have to trim the bufffer
+        if packet.ts >= end_point_ts {
+            let buff_total_size = end_point_ts - point.required_ts;
+            if buffer.len() > buff_total_size as usize {
+                buffer.drain(buff_total_size as usize..);
+            }
+            println!("Packet TS : {:?}, End Point Time: {:?}", packet.ts, end_point_ts);
+            break;
+        }
         // Decode the packet into audio samples.
         match decoder.decode(&packet) {
             Ok(decoded) => {
@@ -148,7 +162,9 @@ fn get_flac_samples(metric: &str, start_time: i64, end_time: i64)-> std::result:
                 if let Some(buf) = &mut sample_buf {
                     //buf.copy_interleaved_ref(decoded);
                     buf.copy_planar_ref(decoded);
-                    for sample in buf.samples() {
+                    println!("[DEBUG] Sample number: {} Packet Duration: {} Packet Timestamp: {}",buf.len(), packet.dur, packet.ts);
+                    for  sample in buf.samples() {
+                        
                         if metric[..3].eq("cpu") {
                             buffer.push(adjust_cpu(*sample));
                         } else {
@@ -171,100 +187,12 @@ fn get_flac_samples(metric: &str, start_time: i64, end_time: i64)-> std::result:
                 panic!("{}", err);
             }
         }
-        if packet.ts >= end_point_ts {
-            // Stop the loop, we are done!
-            println!("Packet TS : {:?}, Packet Time: {:?}", packet.ts, end_point_ts);
-            break;
+        // Trim initial uneeded samples
+        if packet.ts < point.required_ts {
+            let trim_size = (point.required_ts - packet.ts) as usize;
+            buffer.drain(0..trim_size);
         }
-    }
-    Ok(buffer)
-}
 
-/// Old retired code
-fn extract_flac_content_from_interval(start_time: u64, end_time: u64)-> std::result::Result<Vec<i16>, SymphoniaError> {
-    // Let's select a file acordingly to the time
-    let file_path = "2023-05-11_15-11-19.flac";
-
-    let file = Box::new(File::open(file_path).unwrap());
-    let reader = MediaSourceStream::new(file, Default::default());
-
-    let format_options = FormatOptions::default();
-    let decoder_options = DecoderOptions::default();
-    let metadata_opts: MetadataOptions = Default::default();
-
-    // Lets probe
-    let probed = symphonia::default::get_probe().format(Hint::new().mime_type("FLaC"), reader, &format_options, &metadata_opts).unwrap();
-    let mut format_reader = probed.format;
-    let track = format_reader.default_track().unwrap();
-    let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &decoder_options).unwrap();
-
-    let sample_rate = format_reader.tracks()[0].codec_params.sample_rate.unwrap();
-
-    let seek_point = SeekTo::Time {
-        time: Time::new(start_time, 0.0),
-        track_id: Some(format_reader.tracks()[0].id) };
-
-    let end_point_ts = TimeBase::new(1, sample_rate).calc_timestamp(Time::new(end_time, 0.0));
-    
-    // Prepare to store data, with Optimal Seek (less performance) this can be a static value, otherwise will stay like this
-    let mut buffer = Vec::new();
-    let mut sample_buf = None;
-    // Seek to the correct point
-    let initial_point = format_reader.seek(SeekMode::Coarse, seek_point);
-    match initial_point {
-        Ok(point) => { println!("Initial point: {:?}", point);},
-        Err(err) => { panic!("Unable to find starting point! Error: {}", err); }
-    }
-    
-    // Not stopping on the required time (yet)
-    loop {
-        // Get the next packet from the media format.
-        let packet = match format_reader.next_packet() {
-            Ok(packet) => packet,
-            Err(err) => {
-                // A unrecoverable error occured, halt decoding.
-                panic!("{}", err);
-            }
-        };
-        // Decode the packet into audio samples.
-        match decoder.decode(&packet) {
-            Ok(decoded) => {
-                // Consume the decoded audio samples (see below).
-                if sample_buf.is_none() {
-                    // Get the audio buffer specification.
-                    let spec = *decoded.spec();
-                    // Get the capacity of the decoded buffer. Note: This is capacity, not length!
-                    let duration = decoded.capacity() as u64;
-                    // Create the f32 sample buffer.
-                    sample_buf = Some(SampleBuffer::<i16>::new(duration, spec));
-                }
-                if let Some(buf) = &mut sample_buf {
-                    //buf.copy_interleaved_ref(decoded);
-                    buf.copy_planar_ref(decoded);
-                    for sample in buf.samples() {
-                        buffer.push(*sample);
-                    }
-                    //print!("\rSamples decoded: {:?} samples", buffer);
-                }
-            }
-            Err(SymphoniaError::IoError(_)) => {
-                // The packet failed to decode due to an IO error, skip the packet.
-                continue;
-            }
-            Err(SymphoniaError::DecodeError(_)) => {
-                // The packet failed to decode due to invalid data, skip the packet.
-                continue;
-            }
-            Err(err) => {
-                // An unrecoverable error occured, halt decoding.
-                panic!("{}", err);
-            }
-        }
-        if packet.ts >= end_point_ts {
-            // Stop the loop, we are done!
-            println!("Packet TS : {:?}, Packet Time: {:?}", packet.ts, end_point_ts);
-            break;
-        }
     }
     Ok(buffer)
 }
@@ -277,14 +205,12 @@ fn get_flac_samples_to_prom(metric: &str, start_ms: i64, end_ms: i64, step_ms: i
         }];
     }
     let flac_content = get_flac_samples(metric, start_ms, end_ms).unwrap();
-    //let flac_content = extract_flac_content_from_interval(3, 7).unwrap();
+    // Flac reader is ignoring step returning way to many samples. So we have to deal with step here
     // Transforming the result into Samples
-    // It can only return has many results as (END - START / STEP)
-    let return_samples_number = (end_ms - start_ms)/step_ms;
-    println!("Returning {} samples out of {}", return_samples_number, flac_content.len());
-    //flac_content.iter().enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).take(return_samples_number as usize).collect()
-    flac_content.iter().take(return_samples_number as usize).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
-    
+    let step_size: usize = (step_ms/DATA_INTERVAL_MSEC).try_into().unwrap();
+    println!("[DEBUG] # of FLaC samples: {} Step size ms: {} Internal step: {}", flac_content.len(), step_ms, step_size);
+    //flac_content.iter().take(return_samples_number as usize).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
+    flac_content.iter().step_by(step_size).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
 }
 
 // For testing sake, I'm always sending the the same block of the FLAC file to the server on instant query,
@@ -344,91 +270,17 @@ impl RemoteStorage for FlacStorage {
     }
 }
 
-#[derive(Clone, Copy)]
-struct MockStorage;
-
-fn generate_samples(start_ms: i64, end_ms: i64, step_ms: i64) -> Vec<Sample> {
-    // instant query
-    if step_ms == 0 {
-        return vec![Sample {
-            value: 1.0,
-            timestamp: start_ms,
-        }];
-    }
-
-    // range query
-    (start_ms..end_ms)
-        .step_by(step_ms as usize)
-        .enumerate()
-        .map(|(i, timestamp)| Sample {
-            value: 1.0 + i as f64,
-            timestamp,
-        })
-        .collect()
-}
-impl MockStorage {
-    fn with_context() -> impl Filter<Extract = (u64,), Error = Infallible> + Clone {
-        warp::any().map(|| 1)
-    }
-}
-
-#[async_trait]
-impl RemoteStorage for MockStorage {
-    type Err = Error;
-    type Context = u64;
-
-    async fn write(&self, _ctx: Self::Context, req: WriteRequest) -> Result<()> {
-        // Very verbose, for now...
-        //println!("mock write, req:{req:?}");
-        Ok(())
-    }
-
-    async fn process_query(&self, _ctx: &Self::Context, query: Query) -> Result<QueryResult> {
-        println!("mock read, req:{query:?}");
-
-        Ok(QueryResult {
-            timeseries: vec![TimeSeries {
-                labels: vec![
-                    Label {
-                        name: "job".to_string(),
-                        value: "mock-remote".to_string(),
-                    },
-                    Label {
-                        name: "instance".to_string(),
-                        value: "127.0.0.1:9201".to_string(),
-                    },
-                    Label {
-                        name: "__name__".to_string(),
-                        value: "up".to_string(),
-                    },
-                ],
-                samples: generate_samples(
-                    query.start_timestamp_ms,
-                    query.end_timestamp_ms,
-                    query
-                        .hints
-                        .as_ref()
-                        .map(|hint| hint.step_ms)
-                        .unwrap_or(1000),
-                ),
-                ..Default::default()
-            }],
-        })
-    }
-}
-
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    //let storage = Arc::new(MockStorage);
     let storage = Arc::new(FlacStorage);
     let write_api = warp::path!("write")
         .and(web::warp::with_remote_storage(storage.clone()))
-        .and(MockStorage::with_context())
+        .and(FlacStorage::with_context())
         .and(web::warp::protobuf_body())
         .and_then(web::warp::write);
     let query_api = warp::path!("read")
         .and(web::warp::with_remote_storage(storage))
-        .and(MockStorage::with_context())
+        .and(FlacStorage::with_context())
         .and(web::warp::protobuf_body())
         .and_then(web::warp::read);
 
