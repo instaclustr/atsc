@@ -17,4 +17,13 @@ impl WavMetric {
     pub fn new(name: String, source: String, job: String) -> WavMetric {
         WavMetric { metric_name: name, instance: source, job: job, timeseries_data: None }
     }
+    /// Flushes the metric to a WAV file
+    pub fn flush(self) -> Result<Error, ()> {
+        if self.timeseries_data = None {
+            // Can't flush empty data
+            return Error;
+        }
+        // Append if file exists, otherwise create spec and flush a new file
+        Ok()
+    }
 }

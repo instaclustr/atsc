@@ -65,7 +65,7 @@ fn main() {
         bits_per_sample: 16,
         sample_format: hound::SampleFormat::Int
     };
-    // Memory has large numbers, we can go with 32Bit per sample (16bit PCM, 8kHZ)
+    // Memory has large numbers, we can go with 32Bit per sample (32bit PCM, 8kHZ)
     let fat_spec = hound::WavSpec {
         channels: 1,
         sample_rate: 8000,

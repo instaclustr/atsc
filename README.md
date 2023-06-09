@@ -12,8 +12,9 @@ Also learning RUST while I go at this.
 
 1. Write to WAV (It's a uncompressed format. Header and binary samples)
 2. Compress to FLAC - Compare sizes
-3. ?
-4. Serve FLAC file via Prometheus remote READ
+3. Serve FLAC file via Prometheus remote READ
+4. Write WAV files via Prometheus Write Requests <- I'm here now!
+5. Compare results and native prometheus files with FLAC files.
 
 ## Results
 

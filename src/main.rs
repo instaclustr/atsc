@@ -12,7 +12,9 @@ Make the code decent, as in, split into different files and those nice things
  */
 
 use async_trait::async_trait;
-use std::{convert::Infallible, sync::Arc, time};
+use std::{convert::Infallible, sync::Arc};
+
+mod WavWriter;
 
 use prom_remote_api::{
     types::{
