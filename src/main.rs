@@ -11,10 +11,10 @@ Make the code decent, as in, split into different files and those nice things
 
  */
 
-use async_trait::async_trait;
-use std::{convert::Infallible, sync::Arc};
-
 mod WavWriter;
+use WavWriter::WavMetric;
+use async_trait::async_trait;
+use std::{convert::Infallible, sync::Arc, collections::HashMap};
 
 use prom_remote_api::{
     types::{
@@ -214,26 +214,6 @@ fn get_flac_samples_to_prom(metric: &str, start_ms: i64, end_ms: i64, step_ms: i
     println!("[DEBUG] # of FLaC samples: {} Step size ms: {} Internal step: {}", flac_content.len(), step_ms, step_size);
     flac_content.iter().step_by(step_size).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
 }
-// --- Write layer
-// Remote write spec: https://prometheus.io/docs/concepts/remote_write_spec/
-struct WavMetric {
-    metric_name: String,
-    instance: String,
-    job: String,
-    timeseries_data: Option<Vec<WavData>>
-}
-// Here is where things get tricky. Either we have a single strutcure and implement several WavWriters or we segment at the metric collection level.
-// The advantage of implementing at the writing level is that we can look into the data and make a better guess based on the data.
-struct WavData {
-    timestamp: i64,
-    value: f64
-}
-
-impl WavMetric {
-    pub fn new(name: String, source: String, job: String) -> WavMetric {
-        WavMetric { metric_name: name, instance: source, job: job, timeseries_data: None }
-    }
-}
 
 fn parse_remote_write_request(timeseries: &TimeSeries, metadata: Option<&MetricMetadata>) -> Result<()> {
     println!("[DEBUG][WRITE] samples: {:?}", timeseries.samples);
@@ -254,8 +234,12 @@ fn parse_remote_write_request(timeseries: &TimeSeries, metadata: Option<&MetricM
     }
     
     if let (Some(metric), Some(source), Some(job)) = (metric, source, job) {
-        let metric = WavMetric::new(metric.to_string(), source.to_string(), job.to_string());
-        // Use the metric variable here
+        // Not going to share state, flush it once you're done.
+        let mut wav_metric = WavMetric::new(metric.to_string(), source.to_string(), job.to_string());
+        let mut metric_data = timeseries.samples.iter().map(|x| (x.timestamp, x.value)).collect();
+        let mutable_metric_data = &mut metric_data;
+        wav_metric.add_bulk_timeseries(mutable_metric_data);
+        wav_metric.flush();
     } else {
         println!("Missing metric or source");
     }

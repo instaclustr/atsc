@@ -1,17 +1,17 @@
 use std::{error::Error, fs::File};
-use std::fs::OpenOptions;
+use std::fs::{OpenOptions, metadata};
 use chrono::{DateTime, Utc};
 use hound::{WavWriter, WavSpec};
 
 // --- Write layer
 // Remote write spec: https://prometheus.io/docs/concepts/remote_write_spec/
-struct WavMetric {
+pub struct WavMetric {
     metric_name: String,      // Metric name provided by prometheus
     instance: String,         // Instance name provided by prometheus
     job: String,              // Job name provided by prometheus 
     timeseries_data: Vec<(i64, f64)>, // Sample Data
     creation_time: String,    // The timestamp that this structure was created.
-    last_file_created: Option<String> // Name of the last file created
+    last_file_created: Option<String> // Name of the last file created, !! might not make sense anymore !!
 }
 // Here is where things get tricky. Either we have a single strutcure and implement several WavWriters or we segment at the metric collection level.
 // The advantage of implementing at the writing level is that we can look into the data and make a better guess based on the data.
@@ -68,11 +68,18 @@ impl WavMetric {
         let spec = WavMetric::generate_wav_header(None);
         let file_name = format!("{}_{}_{}.wav", self.metric_name,self.instance, self.creation_time);
         let file_path = format!("./{}", file_name);
-        let file = OpenOptions::new().write(true).create(true).read(true).open(file_path.clone());
-        // Create a new WAV file
-        let wav_writer = WavWriter::new(file.unwrap(), spec);
+        // Create a new WAV file, if exists or open the existing one
+        if let Ok(meta) = metadata(&file_path) {
+            if meta.is_file() {
+                let file = OpenOptions::new().write(true).open(&file_path)?;
+                let wav_writer = WavWriter::new_append(file)?;
+                return Ok(wav_writer);
+            }
+        }
+        let file = OpenOptions::new().write(true).create(true).read(true).open(&file_path)?;
+        let wav_writer = WavWriter::new(file, spec)?;
         self.last_file_created = Some(file_path);
-        return  wav_writer;
+        Ok(wav_writer)
     }
 
     /// Generate the WAV file header.
@@ -86,9 +93,14 @@ impl WavMetric {
         return spec;
     }
 
-    /// Add a metric value to the structure
+    /// Add a single metric value to the structure
     pub fn add_timeseries(mut self, ts: i64, value: f64){
         self.timeseries_data.push((ts,value))
+    }
+
+    /// Add a vector of data to the existing timeseries
+    pub fn add_bulk_timeseries(&mut self, timeseries: &mut Vec<(i64, f64)>){
+        self.timeseries_data.append(timeseries)
     }
 
     /// Read a range in the structure
