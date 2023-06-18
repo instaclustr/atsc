@@ -50,7 +50,7 @@ impl WavMetric {
             }
             
         };
-        // TODO: Check if the timestamp is one day ahead, if so, create another file
+        // TODO: Check if the timestamp is one day ahead, if so, create another file, should be minor atm
         // TODO: Deal with results too
         for (ts, sample ) in self.timeseries_data.drain(..) {
             let channel_data = WavMetric::split_f64_into_i16s(sample);
@@ -71,7 +71,7 @@ impl WavMetric {
         // Create a new WAV file, if exists or open the existing one
         if let Ok(meta) = metadata(&file_path) {
             if meta.is_file() {
-                let file = OpenOptions::new().write(true).open(&file_path)?;
+                let file = OpenOptions::new().write(true).read(true).open(&file_path)?;
                 let wav_writer = WavWriter::new_append(file)?;
                 return Ok(wav_writer);
             }

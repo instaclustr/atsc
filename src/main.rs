@@ -11,10 +11,13 @@ Make the code decent, as in, split into different files and those nice things
 
  */
 
-mod WavWriter;
-use WavWriter::WavMetric;
+mod wav_writer;
+use wav_writer::WavMetric;
+
+mod flac_reader;
+
 use async_trait::async_trait;
-use std::{convert::Infallible, sync::Arc, collections::HashMap};
+use std::{convert::Infallible, sync::Arc};
 
 use prom_remote_api::{
     types::{
@@ -163,9 +166,9 @@ fn get_flac_samples(metric: &str, start_time: i64, end_time: i64)-> std::result:
                     sample_buf = Some(SampleBuffer::<i16>::new(duration, spec));
                 }
                 if let Some(buf) = &mut sample_buf {
-                    //buf.copy_interleaved_ref(decoded);
-                    buf.copy_planar_ref(decoded);
-                    println!("[DEBUG] Sample number: {} Packet Duration: {} Packet Timestamp: {}",buf.len(), packet.dur, packet.ts);
+                    buf.copy_interleaved_ref(decoded);
+                    //buf.copy_planar_ref(decoded);
+                    println!("[DEBUG] Sample number: {} Packet Duration: {} Packet Timestamp: {}", buf.len(), packet.dur, packet.ts);
                     for  sample in buf.samples() {
                         
                         if metric[..3].eq("cpu") {
@@ -218,7 +221,6 @@ fn get_flac_samples_to_prom(metric: &str, start_ms: i64, end_ms: i64, step_ms: i
 fn parse_remote_write_request(timeseries: &TimeSeries, metadata: Option<&MetricMetadata>) -> Result<()> {
     println!("[DEBUG][WRITE] samples: {:?}", timeseries.samples);
     println!("[DEBUG][WRITE] labels: {:?}", timeseries.labels);
-    println!("[DEBUG][WRITE] exemplars: {:?}", timeseries.exemplars); // empty?
     
     let mut metric: Option<&str> = None;
     let mut source: Option<&str> = None;

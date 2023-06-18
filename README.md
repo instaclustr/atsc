@@ -22,13 +22,16 @@ At this point in time, CPU utilization can be clearly approximated by an harmoni
 
 ## Programs and description
 
-This repository contains several programs that serve different purposes, some are for just testing, others do some actual work.
+This repository contains one main program and other programs that serve different purposes, some are for just testing, others do some actual work.
+
+The main program is in `main.rs` and implements a lousy prometheus READ and WRITE storage.
+
+The other programs do the following:
 
 1. `monitoring_agents.rs` Is a monitoring agent that generates WAV files. Those need to be converted manualy to flac after the program termination. The use of this program is to gather real system data for compression and having something to read from.
 2. `improved_flac_server.rs` Reading FLAC files without full decompression, support for seeking and only decompressing part of the file needed. Mostly used to test stuff around the FLAC format.
 3. `flac_server.rs` Reading full FLAC files, acting as a prometheus client. Mostly for initial testing, obsolete now.
-4. `prom_remote.rs` A prometheus remote storage implementation that can *READ* from flac files. Write is not supported.
-5. `server.rs` Started with the objective of being a data server, was replaced by `prom_remote.rs`. Still has the capacity to compare raw data with the compressed FLAC to make sure there is no information loss. Should rename this probably.
+4. `server.rs` Started with the objective of being a data server, was replaced by `prom_remote.rs`. Still has the capacity to compare raw data with the compressed FLAC to make sure there is no information loss. Should rename this probably.
 
 ## How to make this work?
 
