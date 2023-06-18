@@ -20,10 +20,11 @@ static FLAC_SAMPLE_RATE: u32 = 8000;
 // --- Flac Reader
 // Remote Reader Spec: ?
 
-/* --- SAMPLE STRUCTURE
-///  note: t=point in time, chan = channel
+/* --- File Structure STRUCTURE
+note: t=point in time, chan = channel, samples are the bytes for each channel.
+      in this example, each sample is made of 2 bytes (16bit)
 +---------------------------+---------------------------+-----
-|         sample 1          |         sample 2          |  etc
+|         Frame 1           |         Frame 2           |  etc
 +-------------+-------------+-------------+-------------+-----
 | chan 1 @ t1 | chan 2 @ t1 | chan 1 @ t2 | chan 2 @ t2 |  etc
 +------+------+------+------+------+------+------+------+-----
@@ -72,6 +73,7 @@ impl FlacMetric {
         return datetime_str;
     }
 
+    /// Load sample data into the Flac Object
     fn load_samples(self) -> Vec<(i64, f64)> {
         Vec::new()
     }
@@ -106,114 +108,132 @@ impl FlacMetric {
         println!("Shifted time: {} {}", time_object.seconds, time_object.frac);
         return time_object;
     }
-}
 
-/// Get the samples from the file provided within the interval provided
-fn get_flac_samples(file_path: &str, start_time: i64, end_time: i64)-> std::result::Result<Vec<i16>, SymphoniaError> {
-    // Let's select a file acordingly to the time
-    let file = Box::new(File::open(file_path).unwrap());
+    /// Get the samples from the file provided within the interval provided
+    /// TODO: Split the decoding loop into a separated function so it can deal with different Vec sizes
+    fn get_flac_samples(file_path: &str, start_time: i64, end_time: i64)-> std::result::Result<Vec<f64>, SymphoniaError> {
+        // Let's select a file acordingly to the time
+        let file = Box::new(File::open(file_path).unwrap());
 
-    // Get the file created time, to in case it is needed, apply a timeshift
-    // TODO: Too many corner cases where this would go wrong, fix it
-    let metadata = fs::metadata(file_path)?;
-    let time_shift = metadata.created().unwrap_or(SystemTime::now());
-   
-    let reader = MediaSourceStream::new(file, Default::default());
-
-    let format_options = FormatOptions::default();
-    let decoder_options = DecoderOptions::default();
-    let metadata_opts: MetadataOptions = Default::default();
-
-    // Probe to get file information, we hint that this is a FLaC file
-    let probed = symphonia::default::get_probe().format(Hint::new().mime_type("FLaC"), reader, &format_options, &metadata_opts).unwrap();
-    let mut format_reader = probed.format;
-    let track = format_reader.default_track().unwrap();
-    let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &decoder_options).unwrap();
-    // It should be a single track file
-    let sample_rate = format_reader.tracks()[0].codec_params.sample_rate.unwrap();
-
-
-
-    let seek_point = SeekTo::Time {
-        time: FlacMetric::get_flac_timeshift(start_time, Some(0)),
-        track_id: Some(format_reader.tracks()[0].id) };
-
-    let end_point_ts = TimeBase::new(1,
-                                          sample_rate)
-                                          .calc_timestamp(FlacMetric::get_flac_timeshift(end_time,
-                                                          Some(0)));
+        // Get the file created time, to in case it is needed, apply a timeshift
+        // TODO: Too many corner cases where this would go wrong, fix it later
+        let metadata = fs::metadata(file_path)?;
+        let time_shift = metadata.created().unwrap_or(SystemTime::now());
     
-    // We should make the Buffer static in size.
-    let mut buffer = Vec::new();
-    let mut sample_buf = None;
-    // Seek to the correct point
-    let initial_point = format_reader.seek(SeekMode::Accurate, seek_point);
-    let point = match initial_point {
-        Ok(point) => { 
-            println!("Initial point: {:?}", point);
-            point
-        },
-        Err(err) => { panic!("Unable to find starting point! Error: {}", err); }
-    };
-    loop {
-        // Get the next packet from the media format.
-        let packet = match format_reader.next_packet() {
-            Ok(packet) => packet,
-            Err(err) => {
-                // A unrecoverable error occured, halt decoding.
-                panic!("{}", err);
-            }
-        };
-        // If we are above the end TS, stop!
-        // In the best case we only added in full Packet of samples, so we have to trim the bufffer
-        if packet.ts >= end_point_ts {
-            let buff_total_size = end_point_ts - point.required_ts;
-            if buffer.len() > buff_total_size as usize {
-                buffer.drain(buff_total_size as usize..);
-            }
-            println!("Packet TS : {:?}, End Point Time: {:?}", packet.ts, end_point_ts);
-            break;
-        }
-        // Decode the packet into audio samples.
-        match decoder.decode(&packet) {
-            Ok(decoded) => {
-                // Consume the decoded audio samples (see below).
-                if sample_buf.is_none() {
-                    // Get the audio buffer specification.
-                    let spec = *decoded.spec();
-                    // Get the capacity of the decoded buffer. Note: This is capacity, not length!
-                    let duration = decoded.capacity() as u64;
-                    // Create the i16 sample buffer.
-                    sample_buf = Some(SampleBuffer::<i16>::new(duration, spec));
-                }
-                if let Some(buf) = &mut sample_buf {
-                    buf.copy_interleaved_ref(decoded);
-                    println!("[DEBUG] Sample number: {} Packet Duration: {} Packet Timestamp: {}", buf.len(), packet.dur, packet.ts);
-                    for  sample in buf.samples() {
-                        buffer.push(*sample);
-                    }
-                    //print!("\rSamples decoded: {:?} samples", buffer);
-                }
-            }
-            Err(SymphoniaError::IoError(_)) => {
-                // The packet failed to decode due to an IO error, skip the packet.
-                continue;
-            }
-            Err(SymphoniaError::DecodeError(_)) => {
-                // The packet failed to decode due to invalid data, skip the packet.
-                continue;
-            }
-            Err(err) => {
-                // An unrecoverable error occured, halt decoding.
-                panic!("{}", err);
-            }
-        }
-        // Trim initial uneeded samples
-        if packet.ts < point.required_ts {
-            let trim_size = (point.required_ts - packet.ts) as usize;
-            buffer.drain(0..trim_size);
-        }
+        let reader = MediaSourceStream::new(file, Default::default());
 
+        let format_options = FormatOptions::default();
+        let decoder_options = DecoderOptions::default();
+        let metadata_opts: MetadataOptions = Default::default();
+
+        // Probe to get file information, we hint that this is a FLaC file
+        let probed = symphonia::default::get_probe().format(Hint::new().mime_type("FLaC"), reader, &format_options, &metadata_opts).unwrap();
+        let mut format_reader = probed.format;
+        let track = format_reader.default_track().unwrap();
+        let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &decoder_options).unwrap();
+        let channels = decoder.codec_params().channels.unwrap().count();
+        // It should be a single track file
+        let sample_rate = format_reader.tracks()[0].codec_params.sample_rate.unwrap();
+
+        let seek_point = SeekTo::Time {
+            time: FlacMetric::get_flac_timeshift(start_time, Some(0)),
+            track_id: Some(format_reader.tracks()[0].id) };
+
+        // TODO: Fix the timeshift if needed
+        let end_point_ts = TimeBase::new(1,
+                                            sample_rate)
+                                            .calc_timestamp(FlacMetric::get_flac_timeshift(end_time,
+                                                            Some(0)));
+        
+        let mut buffer = Vec::new();
+        let mut sample_buf = None;
+        // Seek to the correct point
+        let initial_point = format_reader.seek(SeekMode::Accurate, seek_point);
+        let point = match initial_point {
+            Ok(point) => { 
+                println!("Initial point: {:?}", point);
+                point
+            },
+            Err(err) => { panic!("Unable to find starting point! Error: {}", err); }
+        };
+        loop {
+            // Get the next packet from the media format.
+            let packet = match format_reader.next_packet() {
+                Ok(packet) => packet,
+                Err(err) => {
+                    // A unrecoverable error occured, halt decoding.
+                    panic!("{}", err);
+                }
+            };
+            // If we are above the end TS, stop!
+            // In the best case we only added in full Packet of samples, so we have to trim the bufffer
+            if packet.ts >= end_point_ts {
+                let buff_total_size = end_point_ts - point.required_ts;
+                if buffer.len() > buff_total_size as usize {
+                    buffer.drain(buff_total_size as usize..);
+                }
+                println!("Packet TS : {:?}, End Point Time: {:?}", packet.ts, end_point_ts);
+                break;
+            }
+            // Decode the packet into audio samples.
+            match decoder.decode(&packet) {
+                Ok(decoded) => {
+                    // Consume the decoded audio samples (see below).
+                    if sample_buf.is_none() {
+                        // Get the audio buffer specification.
+                        let spec = *decoded.spec();
+                        // Get the capacity of the decoded buffer. Note: This is capacity, not length!
+                        let duration = decoded.capacity() as u64;
+                        // Create the sample buffer.
+                        sample_buf = Some(SampleBuffer::<i16>::new(duration, spec));
+                    }
+                    if let Some(buf) = &mut sample_buf {
+                        buf.copy_interleaved_ref(decoded);
+                        let mut i16_samples: [u16; 4] = [0,0,0,0];
+                        let mut i = 1; // Starting at 1, channel number is not 0 indexed...
+                        for  sample in buf.samples() {
+                            if i >= channels {
+                                buffer.push(FlacMetric::join_u16_into_f64(i16_samples));
+                                i = 1;
+                            }
+                            i16_samples[i-1] = *sample as u16;
+                            i += 1;
+                        }
+                        //print!("\rSamples decoded: {:?} samples", buffer);
+                    }
+                }
+                Err(SymphoniaError::IoError(_)) => {
+                    // The packet failed to decode due to an IO error, skip the packet.
+                    continue;
+                }
+                Err(SymphoniaError::DecodeError(_)) => {
+                    // The packet failed to decode due to invalid data, skip the packet.
+                    continue;
+                }
+                Err(err) => {
+                    // An unrecoverable error occured, halt decoding.
+                    panic!("{}", err);
+                }
+            }
+            // Trim initial uneeded samples
+            if packet.ts < point.required_ts {
+                let trim_size = (point.required_ts - packet.ts) as usize;
+                buffer.drain(0..trim_size);
+            }
+
+        }
+        Ok(buffer)
     }
-    Ok(buffer)
+
+    /// Recreate a f64
+    fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
+    let u64_bits = (bits[0] as u64) |
+                ((bits[1] as u64) << 16) |
+                ((bits[2] as u64) << 32) |
+                ((bits[3] as u64) << 48);
+    
+    let f64_value = f64::from_bits(u64_bits);
+    
+    f64_value
+    }
 }
