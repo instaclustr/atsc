@@ -2,6 +2,7 @@ use std::{error::Error, fs::File};
 use std::fs::{OpenOptions, metadata};
 use chrono::{DateTime, Utc};
 use hound::{WavWriter, WavSpec};
+use std::process::Command;
 
 // --- Write layer
 // Remote write spec: https://prometheus.io/docs/concepts/remote_write_spec/
@@ -50,7 +51,7 @@ impl WavMetric {
             }
             
         };
-        // TODO: Check if the timestamp is one day ahead, if so, create another file, should be minor atm
+        // TODO: Check if the timestamp is one day ahead, if so, create another file, worst case is 
         // TODO: Deal with results too
         for (ts, sample ) in self.timeseries_data.drain(..) {
             let channel_data = WavMetric::split_f64_into_i16s(sample);
@@ -141,8 +142,20 @@ impl WavMetric {
         
         f64_value
     }
+
+    /// Rotate the wav file after the interval and save it as a FLaC file
+    fn rotate_wav_into_flac(self) {
+        let file_in = format!("{}_{}_{}.wav", self.metric_name,self.instance, self.creation_time);
+        let file_out = format!("{}_{}_{}.flac", self.metric_name,self.instance, self.creation_time);
+        // Command: sox input.wav output.flac
+        let output = Command::new("sox").arg(file_in).arg(file_out).output().expect("Error converting WAV to FLAC");
+        if !output.status.success() {
+            panic!("Could not rotate file!")
+        }
+    }
+
+    /// Check if the current timestamp is within the file period
+    fn is_ts_valid(ts: i64) -> bool {
+        true
+    }
 }
-
-
-
-
