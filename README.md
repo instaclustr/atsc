@@ -28,15 +28,16 @@ The main program is in `main.rs` and implements a lousy prometheus READ and WRIT
 
 The other programs do the following:
 
-1. `monitoring_agents.rs` Is a monitoring agent that generates WAV files. Those need to be converted manualy to flac after the program termination. The use of this program is to gather real system data for compression and having something to read from.
+1. `monitoring_agents.rs` UPDATE: Use prometheus directly, since remote write is supported. Is a monitoring agent that generates WAV files. Those need to be converted manualy to flac after the program termination. The use of this program is to gather real system data for compression and having something to read from.
 2. `improved_flac_server.rs` Reading FLAC files without full decompression, support for seeking and only decompressing part of the file needed. Mostly used to test stuff around the FLAC format.
-3. `flac_server.rs` Reading full FLAC files, acting as a prometheus client. Mostly for initial testing, obsolete now.
-4. `server.rs` Started with the objective of being a data server, was replaced by `prom_remote.rs`. Still has the capacity to compare raw data with the compressed FLAC to make sure there is no information loss. Should rename this probably.
+3. `flac_reader_tester.rs` Compare raw data with the compressed FLAC to make sure there is no information loss.
+4. `symphonia_test.rs` Test the reading of FLAC files with the same framework as the main code uses.
 
 ## How to make this work?
 
-Run `monitoring_agents.rs` to collect some data. Compress the generated data with `sox` (https://github.com/chirlu/sox) to FLAC with the following command: `sox <input>.wav <output>.flac`.
-Launch `prom_remote.rs` make sure, it is targeting the output files generated above. Run a prometheus and Grafana server. Setup a prometheus remote pointing to `prom_remote`.
+1. Launch `flac_sysmonitor`. 
+2. Run a prometheus and Grafana server. Make sure that prometheus remote is pointing to `flac_sysmonitor`.
+3. After everyday (It is default for now) compress the generated data with `sox` (https://github.com/chirlu/sox) to FLAC with the following command: `sox <input>.wav <output>.flac`.
 
 Example:
 ```
