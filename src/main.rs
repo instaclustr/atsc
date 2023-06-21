@@ -12,6 +12,7 @@ Make the code decent, as in, split into different files and those nice things
  */
 
 mod wav_writer;
+mod fs_utils;
 use wav_writer::WavMetric;
 
 mod flac_reader;
