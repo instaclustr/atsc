@@ -13,7 +13,7 @@
 /// best case for sample retrival O(1)
 /// worst case O(N) (N is the number of segments)
 /// Space usage: 5Bytes for 64k samples. 
-/// Or: 30Bytes for 2^64 Samples
+/// Or: 30Bytes for 2^32 Samples
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -68,12 +68,13 @@ impl VSRI {
         self.max_ts
     }
 
-    fn calculate_b(self, segment: &[i32; 4]) -> i32 {
+    fn calculate_b(&self, segment: &[i32; 4]) -> i32 {
         // b = y - mx
         let b = segment[2] - segment[0] * segment[1];
         b
     }
 
+    /// Get the sample location for a given point in time, or None if there is no sample
     pub fn get_sample(&self, y: i32) -> Option<i32> {
         for segment in &self.vsri_segments {
             let sample_rate = segment[0];
@@ -93,17 +94,22 @@ impl VSRI {
         None // No matching segment found for the given Y value
     }
 
-    // Generates a segment from 2 points
+    /// Generates a segment from a sample rate, points
     fn generate_segment() -> [i32; 4] {
-
+        [0, 0, 0, 0]
     }
 
-    // Returns true if a point fits the last segment of the index
+    /// Returns true if a point fits the last segment of the index
     fn fits_segment(self, x: i32, y: i32) -> bool {
         let last_segment = self.vsri_segments[self.vsri_segments.len()-1];
         let b = self.calculate_b(&last_segment);
         let y1 = last_segment[0] * x - b;
         y == y1
+    }
+
+    /// Writes the index to the disk
+    pub fn flush(self) -> Result<(), std::io::Error> {
+        Ok(())
     }
     
 }

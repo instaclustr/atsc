@@ -51,7 +51,7 @@ impl WavMetric {
             }
             
         };
-        // TODO: Check if the timestamp is one day ahead, if so, create another file, worst case is 
+        // TODO: Check if the timestamp is one day ahead, if so, create another file, and pack the previous one as FLAC
         // TODO: Deal with results too
         for (ts, sample ) in self.timeseries_data.drain(..) {
             let channel_data = WavMetric::split_f64_into_i16s(sample);
