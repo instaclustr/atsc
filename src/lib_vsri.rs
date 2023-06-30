@@ -4,7 +4,7 @@
 /// the number of points in the data series.
 /// m - Sampling rate
 /// b - Series initial point in time in [x,y]
-/// x - sample # in the data file
+/// x - sample # in the data file, this is ALWAYS sequential. There are no holes in samples
 /// y - time
 /// 
 /// This way, discovering the segment number is solving the above equation for X if the 
@@ -24,16 +24,19 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 /// we can't do a proper segment calculation. So there will a special first segment
 /// that will hold the first point so we can calculate the segments from there.
 /// 
+/// # Examples
 /// Creating a new index, metric is of expected time 0, but for sure location of X is 0
+/// ```no_run
+/// let vsri = VSRI::new("metric_name", 0, 0);
+/// vsri.flush();
 /// ```
-/// VSRI::new("metric_name", 0, 0);
-/// ```
-/// Updating an index, adding point 1 at time 5sec
-/// ```
-/// VSRI::load("metric_name").unwrap().update_for_point(1,5);
+/// Updating an index, adding point at time 5sec
+/// ```no_run
+/// let vsri = VSRI::load("metric_name").unwrap().update_for_point(5);
+/// vsri.flush();
 /// ```
 /// Fetch a point from the index
-/// ```
+/// ```no_run
 /// VSRI::get_sample_location("metric_name", 5);
 /// ```
 
@@ -45,7 +48,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 ///                [sample_rate (m), initial_point(x,y), # of samples(lenght)]
 /// Each segments describes a line with the form of mX + B that has a lenght 
 /// of # of samples.
-struct VSRI {
+pub struct VSRI {
     index_file: String,
     min_ts: i32,
     max_ts: i32,
@@ -55,8 +58,8 @@ struct VSRI {
 impl VSRI {
     /// Reads an index file and loads the content into the structure
     /// TODO: Add error control
-    pub fn load(filename: String) -> Result<VSRI, std::io::Error> {
-        let file = File::open(&filename)?;
+    pub fn load(filename: &String) -> Result<Self, std::io::Error> {
+        let file = File::open(format!("{}.vsri", &filename))?;
         let reader = BufReader::new(file);
         let mut segments: Vec<[i32; 4]> = Vec::new();
         let mut max_ts: u32 = 0;
@@ -67,11 +70,11 @@ impl VSRI {
             segments.push([values[0],values[1],values[2],values[3]]);
         }
         // Min TS is the initial point of the first segment
-        let min_ts = segments[0][1];
+        let min_ts = segments[0][2];
         // Max TS is the initial point of the last segment plus the sample rate x number of samples
-        let max_ts = segments[segments.len()-1][1] + segments[segments.len()-1][0] * (segments[segments.len()-1][2]-1);
+        let max_ts = segments[segments.len()-1][2] + segments[segments.len()-1][1] * (segments[segments.len()-1][3]-1);
         Ok(VSRI {
-            index_file: filename,
+            index_file: filename.to_string(),
             min_ts,
             max_ts,
             vsri_segments: segments
@@ -80,11 +83,11 @@ impl VSRI {
 
     /// Creates the index, it doesn't create the file in the disk
     /// flush needs to be called for that
-    pub fn new(filename: String, x: i32, y: i32) -> VSRI {
+    pub fn new(filename: &String, x: i32, y: i32) -> Self {
         let mut segments: Vec<[i32; 4]> = Vec::new();
         segments.push([0,x,y,1]);
         VSRI {
-            index_file: filename,
+            index_file: filename.to_string(),
             min_ts: y,
             max_ts: y,
             vsri_segments: segments
@@ -94,18 +97,20 @@ impl VSRI {
     /// Given a filename and a time location, returns the sample location in the 
     /// data file. Or None in case it doesn't exist.
     pub fn get_sample_location(filename: String, y: i32) -> Option<i32> {
-        let vsri = match  VSRI::load(filename) {
+        let vsri = match  VSRI::load(&filename) {
             Ok(vsri) => vsri,
             Err(_err) => { return None }
          };
-         vsri.get_sample(y)
+         if vsri.min() <= y && y <= vsri.max() {
+            return vsri.get_sample(y)
+         }
+         None
     }
 
     /// Update the index for the provided point
-    /// x - segment position
     /// y - time in seconds
     /// TODO: Change PANIC for proper error control
-    pub fn update_for_point(mut self, x: i32, y: i32) {
+    pub fn update_for_point(&mut self, y: i32) {
         // Y needs to be bigger that the current max_ts, otherwise we are appending a point in the past
         if y <= self.max_ts {
             panic!("[DEBUG] Trying to index a point in the past, or the same point! last point: {}, provided point: {}",self.max_ts, y );
@@ -115,26 +120,26 @@ impl VSRI {
         if self.is_fake_segment() {
             // In the presence of a fake segment (where m is 0), and a new point, we are now
             // in a situation we can calculate a decent segment
-            self.vsri_segments[segment_count-1] = self.generate_segment(x, y);
+            self.vsri_segments[segment_count-1] = self.generate_segment(y);
         } else {
             // Check ownership by the current segment
-            if self.fits_segment(x, y) {
+            if self.fits_segment(y) {
                 // It fits, increase the sample count and it's done
                 self.vsri_segments[segment_count-1][3] += 1;
                 return
             }
             // If it doesn't fit, create a new fake segment
-            self.vsri_segments.push(VSRI::create_fake_segment(x, y));
+            self.vsri_segments.push(self.create_fake_segment(y));
         }
     }
 
     /// Minimum time stamp
-    pub fn min(self) -> i32 {
+    pub fn min(&self) -> i32 {
         self.min_ts
     }
 
     /// Maximum time stamp
-    pub fn max(self) -> i32 {
+    pub fn max(&self) -> i32 {
         self.max_ts
     }
 
@@ -160,17 +165,17 @@ impl VSRI {
 
             if y >= y0 && y <= segment_end_y {
                 // x = (y - b)/ m
+                // TODO: This can return floats!
                 let x_value = (y-self.calculate_b(segment))/sample_rate;
                 return Some(x_value);
             }
         }
-
         None // No matching segment found for the given Y value
     }
 
     /// Generates a segment from a point. It uses information stored in the segment
     /// to regenerate the same segment with the new point information. 
-    fn generate_segment(&self, x: i32, y: i32) -> [i32; 4] {
+    fn generate_segment(&self, y: i32) -> [i32; 4] {
         // Retrieve the last segment
         let last_segment = self.current_segment();
         // double check for correctness
@@ -178,8 +183,8 @@ impl VSRI {
             return last_segment;
         }
         // Calculate the new segment
-        // m = (y1-y0)/(x1-x0)
-        let m = (y-last_segment[2])/(x-last_segment[1]);
+        // m = (y1-y0)/(x1-x0) -> (x1-x0) = 1 => m = y1-y0 (X is a sequence)
+        let m = y-last_segment[2];
         // We got m, the initial points are the same, and now we have 2 samples
         [m, last_segment[1], last_segment[2], 2]
     }
@@ -190,8 +195,10 @@ impl VSRI {
     }
 
     /// Generate a fake segment, this can't be used for ownership testing
-    /// We only have the first x0,y0 point, nothing else
-    fn create_fake_segment(x:i32, y:i32) -> [i32; 4] {
+    /// x is the previous segment sample number
+    /// We only have the first y0 point, nothing else
+    fn create_fake_segment(&self, y:i32) -> [i32; 4] {
+        let x = self.current_segment()[3];
         [0,x,y,1]
     }
 
@@ -202,16 +209,21 @@ impl VSRI {
     }
 
     /// Returns true if a point fits the last segment of the index
-    fn fits_segment(&self, x: i32, y: i32) -> bool {
+    fn fits_segment(&self, y: i32) -> bool {
         let last_segment = self.current_segment();
         let b = self.calculate_b(&last_segment);
-        let y1 = last_segment[0] * x - b;
-        y == y1
+        // What we have to check, is with the given y, calculate x.
+        // Then check if x fits the interval for the current line
+        // and it has to be the next one in the line
+        // x = (y - b)/ m
+        // TODO: Can return float, watch out
+        let x_value = (y-b)/last_segment[0];
+        x_value == last_segment[3] + 1
     }
 
     /// Writes the index to the disk
     pub fn flush(&self) -> Result<(), std::io::Error> {
-        let file = File::create(&self.index_file)?;
+        let file = File::create(format!("{}.vsri", &self.index_file))?;
         let mut writer = BufWriter::new(file);
     
         // Write index_file, min_ts, max_ts on the first three lines

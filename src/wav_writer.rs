@@ -4,15 +4,17 @@ use chrono::{DateTime, Utc};
 use hound::{WavWriter, WavSpec};
 use std::process::Command;
 
+use crate::lib_vsri::VSRI;
+
 // --- Write layer
 // Remote write spec: https://prometheus.io/docs/concepts/remote_write_spec/
 pub struct WavMetric {
-    metric_name: String,      // Metric name provided by prometheus
-    instance: String,         // Instance name provided by prometheus
-    job: String,              // Job name provided by prometheus 
-    timeseries_data: Vec<(i64, f64)>, // Sample Data
-    creation_time: String,    // The timestamp that this structure was created.
-    last_file_created: Option<String> // Name of the last file created, !! might not make sense anymore !!
+    pub metric_name: String,      // Metric name provided by prometheus
+    pub instance: String,         // Instance name provided by prometheus
+    pub job: String,              // Job name provided by prometheus 
+    pub timeseries_data: Vec<(i64, f64)>, // Sample Data
+    pub creation_time: String,    // The timestamp that this structure was created.
+    pub last_file_created: Option<String> // Name of the last file created, !! might not make sense anymore !!
 }
 // Here is where things get tricky. Either we have a single strutcure and implement several WavWriters or we segment at the metric collection level.
 // The advantage of implementing at the writing level is that we can look into the data and make a better guess based on the data.
@@ -38,28 +40,41 @@ impl WavMetric {
     /// TODO: Unwrap hell in here. Fix it later
     /// Too many assumptions on correct behavior of all the code. Assumption is the mother of all... Needs to be fixed
     pub fn flush(mut self) -> Result<(), ()> {
+        let mut vsri: Option<VSRI> = None;
         if self.timeseries_data.is_empty() {
             // Can't flush empty data
             return Err(());
         }
         // Append if file exists, otherwise create spec and flush a new file
         let mut wav_writer = match self.last_file_created.is_none() {
-            true => self.create_file().unwrap(),
+            true => {
+                // I also need a new index
+                vsri = Some(VSRI::new(&self.metric_name,0 ,0));
+                self.create_file().unwrap()
+            },
             false => {    
                 let file = OpenOptions::new().write(true).read(true).open(self.last_file_created.unwrap()).unwrap();
-                WavWriter::new_append(file).unwrap() 
+                // Load the index file
+                // TODO: one more unwrap to work on later
+                vsri = Some(VSRI::load(&self.metric_name).unwrap());
+                WavWriter::new_append(file).unwrap()
             }
             
         };
         // TODO: Check if the timestamp is one day ahead, if so, create another file, and pack the previous one as FLAC
         // TODO: Deal with results too
+        let vsri_unwrapped = &mut vsri.unwrap();
         for (ts, sample ) in self.timeseries_data.drain(..) {
+            let ts_i32 = (ts / 1000) as i32;
+            vsri_unwrapped.update_for_point(ts_i32);
             let channel_data = WavMetric::split_f64_into_i16s(sample);
             // Write the samples interleaved
             for sample in channel_data {
                 wav_writer.write_sample(sample);
             }
         }
+        // TODO: Take care of the results
+        vsri_unwrapped.flush();
         wav_writer.finalize();
         Ok(())
     }
