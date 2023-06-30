@@ -18,6 +18,25 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
+
+/// 
+/// In this implementation we are writting sample by sample to the WAV file, so
+/// we can't do a proper segment calculation. So there will a special first segment
+/// that will hold the first point so we can calculate the segments from there.
+/// 
+/// Creating a new index, metric is of expected time 0, but for sure location of X is 0
+/// ```
+/// VSRI::new("metric_name", 0, 0);
+/// ```
+/// Updating an index, adding point 1 at time 5sec
+/// ```
+/// VSRI::load("metric_name").unwrap().update_for_point(1,5);
+/// ```
+/// Fetch a point from the index
+/// ```
+/// VSRI::get_sample_location("metric_name", 5);
+/// ```
+
 /// Index Structure
 /// index_name: Name of the index file we are indexing
 /// min_ts: the minimum TS available in this file
@@ -26,10 +45,6 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 ///                [sample_rate (m), initial_point(x,y), # of samples(lenght)]
 /// Each segments describes a line with the form of mX + B that has a lenght 
 /// of # of samples.
-/// 
-/// In this implementation we are writting sample by sample to the WAV file, so
-/// we can't do a proper segment calculation. So there will a special first segment
-/// that will hold the first point so we can calculate the segments from there.
 struct VSRI {
     index_file: String,
     min_ts: i32,
@@ -74,6 +89,16 @@ impl VSRI {
             max_ts: y,
             vsri_segments: segments
             }
+    }
+
+    /// Given a filename and a time location, returns the sample location in the 
+    /// data file. Or None in case it doesn't exist.
+    pub fn get_sample_location(filename: String, y: i32) -> Option<i32> {
+        let vsri = match  VSRI::load(filename) {
+            Ok(vsri) => vsri,
+            Err(_err) => { return None }
+         };
+         vsri.get_sample(y)
     }
 
     /// Update the index for the provided point
@@ -204,3 +229,4 @@ impl VSRI {
     }
     
 }
+
