@@ -96,21 +96,21 @@ impl WavMetric {
     /// TODO: Create file shouldn't open a file for append. Should only create. Fix this (or rename)
     fn create_file(&mut self) -> Result<(WavWriter<File>, VSRI), hound::Error> {
         let spec = WavMetric::generate_wav_header(None);
-        let file_name = format!("{}_{}_{}.wav", self.metric_name,self.instance, self.creation_time);
-        let file_path = format!("./{}", file_name);
+        let file_name = format!("{}_{}_{}", self.metric_name,self.instance, self.creation_time);
+        let file_path = format!("./{}.wav", file_name);
         // Create a new WAV file, if exists or open the existing one
         if let Ok(meta) = metadata(&file_path) {
             if meta.is_file() {
                 let file = OpenOptions::new().write(true).read(true).open(&file_path)?;
                 let wav_writer = WavWriter::new_append(file)?;
-                return Ok((wav_writer,VSRI::load(&self.metric_name).unwrap()));
+                return Ok((wav_writer,VSRI::load(&file_name).unwrap()));
             }
         }
         let file = OpenOptions::new().write(true).create(true).read(true).open(&file_path)?;
         let wav_writer = WavWriter::new(file, spec)?;
         self.last_file_created = Some(file_path);
         // TODO: Y can't be 0. Needs to be TS
-        Ok((wav_writer, VSRI::new(&self.metric_name)))
+        Ok((wav_writer, VSRI::new(&file_name)))
     }
 
     /// Generate the WAV file header.
