@@ -110,7 +110,7 @@ impl WavMetric {
         let wav_writer = WavWriter::new(file, spec)?;
         self.last_file_created = Some(file_path);
         // TODO: Y can't be 0. Needs to be TS
-        Ok((wav_writer, VSRI::new(&self.metric_name,0 ,0)))
+        Ok((wav_writer, VSRI::new(&self.metric_name)))
     }
 
     /// Generate the WAV file header.

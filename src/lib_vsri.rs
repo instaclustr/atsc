@@ -59,14 +59,13 @@ impl VSRI {
 
     /// Creates the index, it doesn't create the file in the disk
     /// flush needs to be called for that
-    pub fn new(filename: &String, x: i32, y: i32) -> Self {
+    pub fn new(filename: &String) -> Self {
         println!("[DEBUG][INDEX] Creating new index!");
-        let mut segments: Vec<[i32; 4]> = Vec::new();
-        segments.push([0,x,y,1]);
+        let segments: Vec<[i32; 4]> = Vec::new();
         VSRI {
             index_file: filename.to_string(),
-            min_ts: y,
-            max_ts: y,
+            min_ts: 0,
+            max_ts: 0,
             vsri_segments: segments
             }
     }
@@ -95,6 +94,12 @@ impl VSRI {
         }
         self.max_ts = y;
         let segment_count = self.vsri_segments.len();
+        // Empty segments, create a new one, this is also a new index, update the timestamps
+        if segment_count == 0 {
+            self.min_ts = y;
+            self.vsri_segments.push(self.create_fake_segment(y));
+            return
+        }
         if self.is_fake_segment() {
             // In the presence of a fake segment (where m is 0), and a new point, we are now
             // in a situation we can calculate a decent segment
@@ -130,7 +135,10 @@ impl VSRI {
 
     /// Returns the most recent calculated segment
     fn current_segment(&self) -> [i32; 4] {
-        self.vsri_segments[self.vsri_segments.len()-1]
+        match self.vsri_segments.len() {
+            0 => [0,0,0,0],
+            _ => self.vsri_segments[self.vsri_segments.len()-1]
+        }
     }
 
     /// Get the sample location for a given point in time, or None if there is no sample
