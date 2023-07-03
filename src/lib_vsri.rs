@@ -56,30 +56,6 @@ pub struct VSRI {
 }
 
 impl VSRI {
-    /// Reads an index file and loads the content into the structure
-    /// TODO: Add error control
-    pub fn load(filename: &String) -> Result<Self, std::io::Error> {
-        let file = File::open(format!("{}.vsri", &filename))?;
-        let reader = BufReader::new(file);
-        let mut segments: Vec<[i32; 4]> = Vec::new();
-        let mut max_ts: u32 = 0;
-        for line in reader.lines() {
-            let line = line?;
-            // Why did I do this?? I'm having an hard time figuring this out the next day...
-            let values = line.split(',').map(|value| value.trim().parse::<i32>()).collect::<Result<Vec<i32>, _>>().unwrap();
-            segments.push([values[0],values[1],values[2],values[3]]);
-        }
-        // Min TS is the initial point of the first segment
-        let min_ts = segments[0][2];
-        // Max TS is the initial point of the last segment plus the sample rate x number of samples
-        let max_ts = segments[segments.len()-1][2] + segments[segments.len()-1][1] * (segments[segments.len()-1][3]-1);
-        Ok(VSRI {
-            index_file: filename.to_string(),
-            min_ts,
-            max_ts,
-            vsri_segments: segments
-            })
-    }
 
     /// Creates the index, it doesn't create the file in the disk
     /// flush needs to be called for that
@@ -222,6 +198,12 @@ impl VSRI {
     }
 
     /// Writes the index to the disk
+    /// File format
+    /// line | content
+    /// 1    | index name (should match file name). eg: cpu_index
+    /// 2    | minimum timestamp on this file. eg: 10
+    /// 3    | maximum timestamp on this file. eg: 34510 
+    /// 4..N | Segments. 4 fields separated by commas. ex: 0,1,2,3
     pub fn flush(&self) -> Result<(), std::io::Error> {
         let file = File::create(format!("{}.vsri", &self.index_file))?;
         let mut writer = BufWriter::new(file);
@@ -239,6 +221,36 @@ impl VSRI {
         writer.flush()?;
         Ok(())
     }
+
+    /// Reads an index file and loads the content into the structure
+    /// TODO: Add error control (Unwrap hell)
+    pub fn load(filename: &String) -> Result<Self, std::io::Error> {
+        let file = File::open(format!("{}.vsri", &filename))?;
+        let reader = BufReader::new(file);
+        let mut min_ts = 0;
+        let mut max_ts = 0;
+        let mut segments: Vec<[i32; 4]> = Vec::new();
+        let mut i = 1; // Line 1,2 and 3 are not segments.
+        for line in reader.lines() {
+            let line = line?;
+            match i {
+                1 => {println!("Processing index file: {}", line)}
+                2 => {min_ts = line.trim().parse::<i32>().unwrap();}
+                3 => {max_ts = line.trim().parse::<i32>().unwrap();}
+                _ => {
+                    let values = line.split(',').map(|value| value.trim().parse::<i32>()).collect::<Result<Vec<i32>, _>>().unwrap();
+                    segments.push([values[0],values[1],values[2],values[3]]);
+                }
+            }
+            i+=1;
+        }
+        Ok(VSRI {
+            index_file: filename.to_string(),
+            min_ts,
+            max_ts,
+            vsri_segments: segments
+            })
+        }
     
 }
 
