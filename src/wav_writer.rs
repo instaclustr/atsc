@@ -61,10 +61,9 @@ impl WavMetric {
         // Append if file exists, otherwise create spec and flush a new file
         let mut wav_writer = match self.last_file_created.is_none() {
             true => {
-                // I also need a new index
-                vsri = Some(VSRI::new(&self.metric_name,0 ,0));
-
-                self.create_file().unwrap()
+                let handlers = self.create_file().unwrap();
+                vsri = Some(handlers.1);
+                handlers.0
             },
             false => {    
                 let file = OpenOptions::new().write(true).read(true).open(self.last_file_created.unwrap()).unwrap();
@@ -94,7 +93,8 @@ impl WavMetric {
     }
 
     /// Create a file accordingly to the day of the year, the metric and the instance that generated the metric
-    fn create_file(&mut self) -> Result<WavWriter<File>, hound::Error> {
+    /// TODO: Create file shouldn't open a file for append. Should only create. Fix this (or rename)
+    fn create_file(&mut self) -> Result<(WavWriter<File>, VSRI), hound::Error> {
         let spec = WavMetric::generate_wav_header(None);
         let file_name = format!("{}_{}_{}.wav", self.metric_name,self.instance, self.creation_time);
         let file_path = format!("./{}", file_name);
@@ -103,13 +103,14 @@ impl WavMetric {
             if meta.is_file() {
                 let file = OpenOptions::new().write(true).read(true).open(&file_path)?;
                 let wav_writer = WavWriter::new_append(file)?;
-                return Ok(wav_writer);
+                return Ok((wav_writer,VSRI::load(&self.metric_name).unwrap()));
             }
         }
         let file = OpenOptions::new().write(true).create(true).read(true).open(&file_path)?;
         let wav_writer = WavWriter::new(file, spec)?;
         self.last_file_created = Some(file_path);
-        Ok(wav_writer)
+        // TODO: Y can't be 0. Needs to be TS
+        Ok((wav_writer, VSRI::new(&self.metric_name,0 ,0)))
     }
 
     /// Generate the WAV file header.

@@ -89,8 +89,9 @@ impl VSRI {
     /// TODO: Change PANIC for proper error control
     pub fn update_for_point(&mut self, y: i32) {
         // Y needs to be bigger that the current max_ts, otherwise we are appending a point in the past
-        if y <= self.max_ts {
-            panic!("[DEBUG][INDEX] Trying to index a point in the past, or the same point! last point: {}, provided point: {}",self.max_ts, y );
+        // TODO: Quantiles sends several metrics for the same time, how to handle it?
+        if y < self.max_ts {
+            panic!("[DEBUG][INDEX] Trying to index a point in the past: {}, provided point: {}",self.max_ts, y );
         }
         self.max_ts = y;
         let segment_count = self.vsri_segments.len();
@@ -177,7 +178,9 @@ impl VSRI {
     /// We only have the first y0 point, nothing else
     fn create_fake_segment(&self, y:i32) -> [i32; 4] {
         println!("[DEBUG][INDEX] New segment, creating for point: {}", y);
-        let x = self.current_segment()[3];
+        let segment = self.current_segment();
+        // First point of the new segment: Prior starting point + Number of samples
+        let x = segment[1] + segment[3];
         [0,x,y,1]
     }
 
@@ -188,7 +191,7 @@ impl VSRI {
     }
 
     /// Returns true if a point fits the last segment of the index
-    fn fits_segment(&self, y: i32) -> bool {
+    fn  fits_segment(&self, y: i32) -> bool {
         let last_segment = self.current_segment();
         let b = self.calculate_b(&last_segment);
         // What we have to check, is with the given y, calculate x.
@@ -197,7 +200,8 @@ impl VSRI {
         // x = (y - b)/ m
         // TODO: Can return float, watch out
         let x_value = (y-b)/last_segment[0];
-        x_value == last_segment[3] + 1
+        println!("[DEBUG][INDEX] Fit Calculation (Segment {:?}). b: {},  x: {}, calculated x: {}",last_segment,b,(last_segment[3] + last_segment[1]),x_value);
+        x_value == last_segment[3] + last_segment[1]
     }
 
     /// Writes the index to the disk
@@ -238,7 +242,7 @@ impl VSRI {
         for line in reader.lines() {
             let line = line?;
             match i {
-                1 => {println!("Processing index file: {}", line)}
+                1 => {println!("[DEBUG][INDEX] Processing index file: {}", line)}
                 2 => {min_ts = line.trim().parse::<i32>().unwrap();}
                 3 => {max_ts = line.trim().parse::<i32>().unwrap();}
                 _ => {
