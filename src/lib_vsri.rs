@@ -60,6 +60,7 @@ impl VSRI {
     /// Creates the index, it doesn't create the file in the disk
     /// flush needs to be called for that
     pub fn new(filename: &String, x: i32, y: i32) -> Self {
+        println!("[DEBUG][INDEX] Creating new index!");
         let mut segments: Vec<[i32; 4]> = Vec::new();
         segments.push([0,x,y,1]);
         VSRI {
@@ -89,7 +90,7 @@ impl VSRI {
     pub fn update_for_point(&mut self, y: i32) {
         // Y needs to be bigger that the current max_ts, otherwise we are appending a point in the past
         if y <= self.max_ts {
-            panic!("[DEBUG] Trying to index a point in the past, or the same point! last point: {}, provided point: {}",self.max_ts, y );
+            panic!("[DEBUG][INDEX] Trying to index a point in the past, or the same point! last point: {}, provided point: {}",self.max_ts, y );
         }
         self.max_ts = y;
         let segment_count = self.vsri_segments.len();
@@ -101,6 +102,7 @@ impl VSRI {
             // Check ownership by the current segment
             if self.fits_segment(y) {
                 // It fits, increase the sample count and it's done
+                println!("[DEBUG][INDEX] Same segment, updating. TS: {}", y);
                 self.vsri_segments[segment_count-1][3] += 1;
                 return
             }
@@ -174,6 +176,7 @@ impl VSRI {
     /// x is the previous segment sample number
     /// We only have the first y0 point, nothing else
     fn create_fake_segment(&self, y:i32) -> [i32; 4] {
+        println!("[DEBUG][INDEX] New segment, creating for point: {}", y);
         let x = self.current_segment()[3];
         [0,x,y,1]
     }
@@ -225,6 +228,7 @@ impl VSRI {
     /// Reads an index file and loads the content into the structure
     /// TODO: Add error control (Unwrap hell)
     pub fn load(filename: &String) -> Result<Self, std::io::Error> {
+        println!("[DEBUG][INDEX] Load existing index");
         let file = File::open(format!("{}.vsri", &filename))?;
         let reader = BufReader::new(file);
         let mut min_ts = 0;
