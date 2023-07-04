@@ -99,6 +99,50 @@ impl VSRI {
          None
     }
 
+    /// Returns the next sample for the provided timestamp.
+    /// This might be useful to find the next segment timestamp if the timestamp
+    /// is in between segments. It will return None in case the timestamp is over
+    /// the maximum timestamp of the index.
+    pub fn get_next_sample(&self, y: i32) -> Option<i32> {
+        if y < self.min() {
+            return Some(0);
+        } else if y >= self.max() {
+            return None;
+        }
+        // It wasn't smaller, so let's see if we have a sample that matches
+        for segment in &self.vsri_segments {
+            let first_sample = segment[1];
+            let y0 = segment[2];
+            if y <= y0 {
+                return Some(first_sample);
+            }
+        }
+        None
+    }
+
+    /// Returns the previous sample for the provided timestamp.
+    /// This might be useful to find the previous segment timestamp if the timestamp
+    /// is in between segments. It will return None in case the timestamp is bellow
+    /// the minimum timestamp of the index.
+    pub fn get_previous_sample(&self, y: i32) -> Option<i32> {
+        if y < self.min() {
+            return None;
+        } else if y >= self.max() {
+            // Return the last segment, # of samples. That is the total # of samples in a file 
+            return Some(self.current_segment()[3]);
+        }
+        // Cycle through the segments
+        for segment in &self.vsri_segments {
+            let first_sample = segment[1];
+            let y0 = segment[2];
+            if y <= y0 {
+                // Return the last sample of the previous segment
+                return Some(first_sample-1);
+            }
+        }
+        None
+    }
+
     /// Update the index for the provided point
     /// y - time in seconds
     /// TODO: Change PANIC for proper error control
@@ -157,7 +201,7 @@ impl VSRI {
         }
     }
 
-    /// Get the sample location for a given point in time, or None if there is no sample
+    /// Get the sample location for a given point in time, or None if there is no sample for that specific TS
     pub fn get_sample(&self, y: i32) -> Option<i32> {
         for segment in &self.vsri_segments {
             let sample_rate = segment[0];

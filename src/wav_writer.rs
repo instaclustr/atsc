@@ -1,24 +1,10 @@
-use std::{error::Error, fs::File};
+use std::fs::File;
 use std::fs::{OpenOptions, metadata};
-use chrono::{DateTime, Utc, Timelike};
+use chrono::{DateTime, Utc};
 use hound::{WavWriter, WavSpec};
 use std::process::Command;
 
-use crate::lib_vsri::VSRI;
-
-// TODO: remove this from here.
-fn seconds_today(timestamp_sec: i64) -> i32 {
-    let datetime = DateTime::<Utc>::from_utc(
-        chrono::NaiveDateTime::from_timestamp_opt(timestamp_sec, 0).unwrap(),
-        Utc,
-    );
-    // Extract the time components (hour, minute, and second) from the DateTime
-    let hour= datetime.time().hour();
-    let minute = datetime.time().minute();
-    let second =  datetime.time().second();
-    // Calculate the total seconds since the start of the day
-    (hour * 3600 + minute * 60 + second) as i32
-}
+use crate::lib_vsri::{VSRI, day_elapsed_seconds};
 
 // --- Write layer
 // Remote write spec: https://prometheus.io/docs/concepts/remote_write_spec/
@@ -80,7 +66,7 @@ impl WavMetric {
         let vsri_unwrapped = &mut vsri.unwrap();
         for (ts, sample ) in self.timeseries_data.drain(..) {
             let short_ts = ts / 1000;
-            vsri_unwrapped.update_for_point(seconds_today(short_ts));
+            vsri_unwrapped.update_for_point(day_elapsed_seconds(short_ts));
             let channel_data = WavMetric::split_f64_into_i16s(sample);
             // Write the samples interleaved
             for sample in channel_data {
