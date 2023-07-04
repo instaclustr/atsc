@@ -1,14 +1,12 @@
 /// All the utils/code related the to file management
 /// 
-/// Because I was trying to fix stuff within FLaC, and it needs to be sorted way before.
-/// 
-/// For a READ request that needs data for MetricX from Ta to Tn this would do the following:
+/// ASSUMPTION: EACH DAY HAS 1 FILE!!! If this assumption change, change this file!
+/// TODO: (BIG ONE!) Make this time period agnostic (so it would work with days, weeks, etc)
+/// For a READ request that needs data for MetricX from Ta to Tb this would do the following:
 /// 1. Do we have metricX? -> No, stop.
 /// 2. Which file has Ta, and which has Tb?
 ///     2.1 Select them to read
-/// 3. Do holes exist in between?
-///     3.1 If yes, where?
-///     3.2 What is the cost of having a timestamp in a separated channel? <- Probably going this way! Have a "tick counter" based on the data timestamp.
+/// 3. Read the indexes, and retrieve the available samples
 /// 
 /// Suggested internal Data Structure of the WAV file
 /// 
@@ -20,14 +18,16 @@
 /// 
 
 use std::fs::{self, File};
-use std::io::{Read, Seek};
 use std::mem;
-use chrono::{DateTime, Utc, Duration, Timelike, Datelike};
+use chrono::{DateTime, Utc, Duration, Datelike};
+use warp::fs::file;
 
-static MAX_INDEX_SIZE:i32 = 86400;
+use crate::lib_vsri::{VSRI, day_elapsed_seconds};
 
 struct DateRange(DateTime<Utc>, DateTime<Utc>);
 
+// Iterator for Day to Day
+// TODO: move this to several impl? So we can return iterators over several time periods?
 impl Iterator for DateRange {
     type Item = DateTime<Utc>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -47,16 +47,17 @@ struct DataPoint {
 }
 
 /// This will return a data point from a FLAC file for the provided point in time
-fn read_data_point(file: &mut File) -> DataPoint {
-    let mut data_point = DataPoint {
+fn read_data_point(file: &File) -> DataPoint {
+    let data_point = DataPoint {
         actual_data: [0; 4],
         time: 0,
     };
     data_point
 }
 
-fn get_file_names(start_time: i64, end_time: i64) -> Vec<String> {
-    let mut data_file_names = Vec::new();
+/// Given a metric name and a time interval, returns all the files handles for the files that contain that data
+fn get_file_names(metric_name: &String, start_time: i64, end_time: i64) -> Option<Vec<(File, VSRI)>> {
+    let mut file_index_vec = Vec::new();
     let start_date = DateTime::<Utc>::from_utc(
                                             chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
                                               Utc,
@@ -69,33 +70,50 @@ fn get_file_names(start_time: i64, end_time: i64) -> Vec<String> {
         let day = date.day();
         let month = date.month();
         let year = date.year();
-        // TODO: Change dataX to the metric name
-        let data_file_name = format!("dataX_{}_{}_{}", day, month, year);
-        let _file = match  fs::File::open(data_file_name.clone()) {
-            Ok(file) => file,
-            Err(_err) => { println!("File {} doesn't exist, skipping", data_file_name); continue; }
+        let data_file_name = format!("{}_{}_{}_{}",metric_name, day, month, year);
+        let vsri = VSRI::load(&data_file_name);
+        let file = match  fs::File::open(format!("{}.flac", data_file_name.clone())) {
+            Ok(file) => {
+                file
+            },
+            Err(_err) => {
+                println!("File {} doesn't exist, skipping", data_file_name); 
+                continue; 
+            }
          };
-        data_file_names.push(data_file_name);
+         // If I got here, I should be able to unwrap VSRI safely.
+         file_index_vec.push((file, vsri.unwrap()));
     }
-    data_file_names
+    // We have at least one file
+    if file_index_vec.len() >= 1 {
+        return Some(file_index_vec);
+    }
+    None
 }
 
-// TODO: We shouldn't open files twice. If we open the files at get_file_names(...) we should provide the file handles and work from there.
-fn get_data_between_timestamps(start_time: u64, end_time: u64, data_file_names: &[String]) -> Vec<DataPoint> {
+/// Retrieves all the available data points in a timerange in the provided Vector of files and indexes
+fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(File, VSRI)>) -> Vec<DataPoint> {
     let mut data_points = Vec::new();
-    for data_file_name in data_file_names {
-        let mut file = fs::File::open(data_file_name).unwrap();
-        let mut current_time = 0;
-        loop {
-            let data_point = read_data_point(&mut file);
-            current_time = data_point.time;
-            if current_time >= start_time && current_time <= end_time {
-                data_points.push(data_point);
-            }
-            if current_time > end_time {
-                break;
-            }
+    /* Processing logic:
+        Case 1 (2+ files):
+         The first file, the period if from `start_time` to end of the file (use index),
+         The second until the last file, we need all the data points we can get (read full file).
+         The last file we need from start until the `end_time` (use index).
+        Case 2 (Single file):
+         Read the index to locate the start sample and the end sample.
+         Read the file and obtain said samples.
+     */
+    let file_count = file_vec.len();
+    let start_ts_i32 = day_elapsed_seconds(start_time);
+    let end_ts_i32 = day_elapsed_seconds(end_time);
+    for pack in file_vec.into_iter().enumerate() {
+        if file_count == 1 {
+            // Case 2
+            let index = pack.1.1;
+            // get_sample can return None... TODO: implement a new method to return the next available sample
+            let samples = [index.get_sample(start_ts_i32), index.get_sample(end_ts_i32)];
         }
+        let mut current_time = 0;
     }
     data_points
 }

@@ -12,6 +12,8 @@ use symphonia::core::io::MediaSourceStream;
 
 use chrono::{DateTime, Utc, Timelike};
 
+use crate::lib_vsri::VSRI;
+
 // Data sampling frequency. How many seconds between each sample.
 static DATA_INTERVAL_SEC: u32 = 1;
 static DATA_INTERVAL_MSEC: i64 = 1000;
@@ -47,7 +49,7 @@ note: t=point in time, chan = channel, samples are the bytes for each channel.
 }
 
 impl FlacMetric {
-    pub fn new(name: String, source: String, job: String, start_ts: i64, end_ts: i64) -> FlacMetric {
+    pub fn new(name: String, source: String, job: String, start_ts: i64, end_ts: i64) -> Self {
         // Creation time
         let time = FlacMetric::datetime_from_ms(start_ts);
         let file_name = format!("{}_{}_{}.flac", name, source, time);
@@ -109,9 +111,36 @@ impl FlacMetric {
         return time_object;
     }
 
+
+    /// Get the samples from an indexed file 
+    fn get_indexed_flac_samples(file_path: &str, samples: Vec<i32>) -> std::result::Result<Vec<f64>, SymphoniaError> {
+        
+        let sample_vec: Vec<f64> = Vec::new();
+        // Let's select a file acordingly to the time
+        let file = Box::new(File::open(file_path).unwrap());
+        // Get the file created time, to in case it is needed, apply a timeshift
+        // TODO: Too many corner cases where this would go wrong, fix it later
+        let metadata = fs::metadata(file_path)?;
+        let time_shift = metadata.created().unwrap_or(SystemTime::now());
+        let reader = MediaSourceStream::new(file, Default::default());
+        let format_options = FormatOptions::default();
+        let decoder_options = DecoderOptions::default();
+        let metadata_opts: MetadataOptions = Default::default();
+        // Probe to get file information, we hint that this is a FLaC file
+        let probed = symphonia::default::get_probe().format(Hint::new().mime_type("FLaC"), reader, &format_options, &metadata_opts).unwrap();
+        let mut format_reader = probed.format;
+        let track = format_reader.default_track().unwrap();
+        let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &decoder_options).unwrap();
+        let channels = decoder.codec_params().channels.unwrap().count();
+        // It should be a single track file
+        let sample_rate = format_reader.tracks()[0].codec_params.sample_rate.unwrap();
+        // Just to make it compile
+        Ok(sample_vec)
+    }
+
     /// Get the samples from the file provided within the interval provided
     /// TODO: Split the decoding loop into a separated function so it can deal with different Vec sizes
-    fn get_flac_samples(file_path: &str, start_time: i64, end_time: i64)-> std::result::Result<Vec<f64>, SymphoniaError> {
+    fn get_flac_samples(file_path: &str, start_time: i64, end_time: i64) -> std::result::Result<Vec<f64>, SymphoniaError> {
         // Let's select a file acordingly to the time
         let file = Box::new(File::open(file_path).unwrap());
 

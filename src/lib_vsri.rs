@@ -17,7 +17,22 @@
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
+use chrono::{DateTime, Utc, Timelike};
 
+// Helper functions
+/// Returns the number of seconds elapsed for the day provided in the `timestamp_sec`
+pub fn day_elapsed_seconds(timestamp_sec: i64) -> i32 {
+    let datetime = DateTime::<Utc>::from_utc(
+        chrono::NaiveDateTime::from_timestamp_opt(timestamp_sec, 0).unwrap(),
+        Utc,
+    );
+    // Extract the time components (hour, minute, and second) from the DateTime
+    let hour= datetime.time().hour();
+    let minute = datetime.time().minute();
+    let second =  datetime.time().second();
+    // Calculate the total seconds since the start of the day
+    (hour * 3600 + minute * 60 + second) as i32
+}
 
 /// 
 /// In this implementation we are writting sample by sample to the WAV file, so
@@ -35,9 +50,10 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 /// let vsri = VSRI::load("metric_name").unwrap().update_for_point(5);
 /// vsri.flush();
 /// ```
-/// Fetch a point from the index
+/// Fetch a sample location from the index given a timestamp
 /// ```no_run
-/// VSRI::get_sample_location("metric_name", 5);
+/// let vsri = VSRI::load("metric_name").unwrap();
+/// vsri.get_sample_location("metric_name", 5);
 /// ```
 
 /// Index Structure

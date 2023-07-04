@@ -6,6 +6,7 @@ use std::process::Command;
 
 use crate::lib_vsri::VSRI;
 
+// TODO: remove this from here.
 fn seconds_today(timestamp_sec: i64) -> i32 {
     let datetime = DateTime::<Utc>::from_utc(
         chrono::NaiveDateTime::from_timestamp_opt(timestamp_sec, 0).unwrap(),
