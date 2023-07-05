@@ -53,7 +53,7 @@ fn main() {
     loop {
         // Get the next packet from the format reader.
         let packet = format.next_packet().unwrap();
-
+        println!("Packet size: {:?}", packet.dur());
         // If the packet does not belong to the selected track, skip it.
         if packet.track_id() != track_id {
             continue;
@@ -89,7 +89,7 @@ fn main() {
 
                     // The samples may now be access via the `samples()` function.
                     sample_count += buf.samples().len();
-                    print!("\rDecoded {} samples", sample_count);
+                    println!("\rDecoded {} samples", sample_count);
                 }
             }
             Err(Error::DecodeError(_)) => (),

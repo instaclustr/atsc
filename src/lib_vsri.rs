@@ -20,7 +20,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use chrono::{DateTime, Utc, Timelike};
 
 // TODO: This should be configurable. Indexes are build for 1 day worth of samples, at 1 sample per second
-static MAX_INDEX_SAMPLES: i32 = 86400;
+pub static MAX_INDEX_SAMPLES: i32 = 86400;
 
 // Helper functions
 /// Returns the number of seconds elapsed for the day provided in the `timestamp_sec`

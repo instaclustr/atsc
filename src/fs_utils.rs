@@ -22,7 +22,7 @@ use std::mem;
 use chrono::{DateTime, Utc, Duration, Datelike};
 use warp::fs::file;
 
-use crate::lib_vsri::{VSRI, day_elapsed_seconds};
+use crate::lib_vsri::{VSRI, day_elapsed_seconds, MAX_INDEX_SAMPLES};
 
 struct DateRange(DateTime<Utc>, DateTime<Utc>);
 
@@ -141,12 +141,12 @@ fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(Fi
                 // Other files
                 _ => {
                     // Collect the full file
-                    samples = [0, 0];
+                    samples = [0, MAX_INDEX_SAMPLES];
                 }
             }
         }
         // Collect the data points
-        data_points
+        
     }
     data_points
 }
