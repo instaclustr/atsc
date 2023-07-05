@@ -19,6 +19,9 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use chrono::{DateTime, Utc, Timelike};
 
+// TODO: This should be configurable. Indexes are build for 1 day worth of samples, at 1 sample per second
+static MAX_INDEX_SAMPLES: i32 = 86400;
+
 // Helper functions
 /// Returns the number of seconds elapsed for the day provided in the `timestamp_sec`
 pub fn day_elapsed_seconds(timestamp_sec: i64) -> i32 {
@@ -97,6 +100,16 @@ impl VSRI {
             return vsri.get_sample(y)
          }
          None
+    }
+
+    /// Get the sample for this timestamp or the next one
+    pub fn get_this_or_next(&self, y: i32) -> Option<i32> {
+        self.get_sample(y).or(self.get_next_sample(y))
+    }
+
+    /// Get the sample for this timestamp or the previous one
+    pub fn get_this_or_previous(&self, y: i32) -> Option<i32> {
+        self.get_sample(y).or(self.get_previous_sample(y))
     }
 
     /// Returns the next sample for the provided timestamp.
