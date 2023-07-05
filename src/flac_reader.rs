@@ -11,14 +11,8 @@ use symphonia::core::units::{Time, TimeBase};
 use symphonia::core::io::MediaSourceStream;
 
 use chrono::{DateTime, Utc, Timelike};
-use symphonia::default::codecs::FlacDecoder;
 
 use crate::lib_vsri::{VSRI, self};
-
-// Data sampling frequency. How many seconds between each sample.
-static DATA_INTERVAL_SEC: u32 = 1;
-static DATA_INTERVAL_MSEC: i64 = 1000;
-static FLAC_SAMPLE_RATE: u32 = 8000;
 
 // --- Flac Reader
 // Remote Reader Spec: ?
@@ -118,25 +112,26 @@ impl FlacMetric {
         let mut decoder = self.get_decoder();
         let channels = decoder.codec_params().channels.unwrap().count();
         let mut sample_buf = None;
-        let mut sample_counter: i32 = 0;
-        let start_sample = start.unwrap_or(0);
-        let end_sample = end.unwrap_or(lib_vsri::MAX_INDEX_SAMPLES);
+        let mut frame_counter: i32 = 0;
+        let start_frame = start.unwrap_or(0);
+        let end_frame = end.unwrap_or(lib_vsri::MAX_INDEX_SAMPLES);
         // Loop over all the packets, get all the samples and return them
         loop {
             let packet = match format_reader.next_packet() {
                 Ok(packet) => packet,
                 Err(err) => break println!("[DEBUG][READ]Reader error: {}", err),
             };
-            // How many samples inside the packet
-            sample_counter += packet.dur() as i32;
+            // How many frames inside the packet
+            let dur = packet.dur() as i32;
             // Check if we need to decode this packet or not
-            if !(start_sample < sample_counter && end_sample > sample_counter) { 
+            if !(start_frame < frame_counter+dur && end_frame > frame_counter+dur) { 
                 continue; 
             }
-            // Decode the packet into audio samples.
+            // Decode the packet into samples.
+            // TODO: This is overly complex, split into its own code
             match decoder.decode(&packet) {
                 Ok(decoded) => {
-                    // Consume the decoded audio samples (see below).
+                    // Consume the decoded samples (see below).
                     if sample_buf.is_none() {
                         // Get the audio buffer specification.
                         let spec = *decoded.spec();
@@ -145,13 +140,17 @@ impl FlacMetric {
                         // Create the sample buffer.
                         sample_buf = Some(SampleBuffer::<i16>::new(duration, spec));
                     }
+                    // Each frame contains several samples, we need to get the frame not the sample. Since samples = frames * channels
                     if let Some(buf) = &mut sample_buf {
                         buf.copy_interleaved_ref(decoded);
                         let mut i16_samples: [u16; 4] = [0,0,0,0];
                         let mut i = 1; // Starting at 1, channel number is not 0 indexed...
                         for  sample in buf.samples() {
                             if i >= channels {
-                                sample_vec.push(FlacMetric::join_u16_into_f64(i16_samples));
+                                frame_counter += 1;
+                                if frame_counter >= start_frame && frame_counter <= end_frame {
+                                    sample_vec.push(FlacMetric::join_u16_into_f64(i16_samples));
+                                }
                                 i = 1;
                             }
                             i16_samples[i-1] = *sample as u16;
