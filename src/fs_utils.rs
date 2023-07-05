@@ -106,14 +106,47 @@ fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(Fi
     let file_count = file_vec.len();
     let start_ts_i32 = day_elapsed_seconds(start_time);
     let end_ts_i32 = day_elapsed_seconds(end_time);
+    let mut samples = [0, 0];
     for pack in file_vec.into_iter().enumerate() {
         if file_count == 1 {
             // Case 2
             let index = pack.1.1;
-            // get_sample can return None... TODO: implement a new method to return the next available sample
-            let samples = [index.get_sample(start_ts_i32), index.get_sample(end_ts_i32)];
+            // get_sample can return None
+            let start_sample = index.get_this_or_next(start_ts_i32);
+            if start_sample.is_none() {
+                // No sample in the file fits the current requested interval
+                return data_points;
+            }
+            // If I can start reading the file, I can get at least one sample, so it is safe to unwrap.
+            let end_sample = index.get_this_or_previous(end_ts_i32).unwrap();
+            samples = [start_sample.unwrap(), end_sample];
+        } else {
+        // Case 1
+            let index = pack.1.1;
+            match pack.0 {
+                // First file
+                0 => {
+                    let start_sample = index.get_this_or_next(start_ts_i32);
+                    if start_sample.is_none() { continue; }
+                    let end_sample = index.get_this_or_previous(end_ts_i32).unwrap();
+                    samples = [start_sample.unwrap(), end_sample];
+                },
+                // Last file
+                _ if pack.0 == file_count-1 => {
+                    let end_sample = index.get_this_or_previous(start_ts_i32);
+                    if end_sample.is_none() { continue; }
+                    let start_sample = index.get_this_or_next(start_ts_i32).unwrap();
+                    samples = [start_sample, end_sample.unwrap()];
+                },
+                // Other files
+                _ => {
+                    // Collect the full file
+                    samples = [0, 0];
+                }
+            }
         }
-        let mut current_time = 0;
+        // Collect the data points
+        data_points
     }
     data_points
 }
