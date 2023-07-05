@@ -14,9 +14,8 @@ Make the code decent, as in, split into different files and those nice things
 mod wav_writer;
 mod fs_utils;
 mod lib_vsri;
-use wav_writer::WavMetric;
-
 mod flac_reader;
+use wav_writer::WavMetric;
 
 use async_trait::async_trait;
 use std::{convert::Infallible, sync::Arc};
@@ -263,17 +262,17 @@ impl FlacStorage {
 impl RemoteStorage for FlacStorage {
     type Err = Error;
     type Context = u64;
-
+    // TODO: Figure out why the empty Results
     async fn write(&self, _ctx: Self::Context, req: WriteRequest) -> Result<()> {
         //println!("flac write, req:{req:?}");
         if req.metadata.is_empty() {
             for timeseries in req.timeseries {
-                parse_remote_write_request(&timeseries, None);
+                let _ = parse_remote_write_request(&timeseries, None);
                 //break;
             }
         } else {
             for (timeseries, metadata) in req.timeseries.iter().zip(req.metadata.iter()) {
-                parse_remote_write_request(timeseries, Some(metadata));
+                let _ = parse_remote_write_request(timeseries, Some(metadata));
             }
         }
         Ok(())
@@ -315,6 +314,7 @@ impl RemoteStorage for FlacStorage {
 }
 
 #[tokio::main(flavor = "current_thread")]
+// BIG TODO: Make the code configurable (loads of hardcoded stuff)
 async fn main() {
     let storage = Arc::new(FlacStorage);
     let write_api = warp::path!("write")
