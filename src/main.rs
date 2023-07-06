@@ -242,7 +242,7 @@ fn parse_remote_write_request(timeseries: &TimeSeries, metadata: Option<&MetricM
         let mut metric_data = timeseries.samples.iter().map(|x| (x.timestamp, x.value)).collect();
         let mutable_metric_data = &mut metric_data;
         wav_metric.add_bulk_timeseries(mutable_metric_data);
-        wav_metric.flush();
+        let _ = wav_metric.flush();
     } else {
         println!("Missing metric or source");
     }

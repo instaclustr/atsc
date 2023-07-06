@@ -35,27 +35,18 @@ note: t=point in time, chan = channel, samples are the bytes for each channel.
 ///  the whole file content is returned.
 
  pub struct FlacMetric {
-    metric_name: String,      // Metric name provided by prometheus
-    instance: String,         // Instance name provided by prometheus
-    job: String,              // Job name provided by prometheus 
     timeseries_data: Vec<(i64, f64)>, // Sample Data
-    file_path: String,        // The filepath where the metric is
-    interval_start: i64,      // The start interval in timestamp with miliseconds
+    file: File,                       // The File where the metric is
+    interval_start: i64,              // The start interval in timestamp with miliseconds
     decoder: Option<Box<dyn Decoder>>, // Flac decoder
     format_reader: Option<Box<dyn FormatReader>> // Flac format reader
 }
 
 impl FlacMetric {
-    pub fn new(name: String, source: String, job: String, start_ts: i64) -> Self {
-        // Creation time
-        let time = FlacMetric::datetime_from_ms(start_ts);
-        let file_name = format!("{}_{}_{}.flac", name, source, time);
-        let file_path = format!("./{}", file_name);
-        FlacMetric { metric_name: name,
-                    instance: source,
-                    job,
+    pub fn new(file: File, start_ts: i64) -> Self {
+        FlacMetric {
                     timeseries_data: Vec::new(),
-                    file_path,
+                    file,
                     interval_start: start_ts,
                     decoder: None,
                     format_reader: None
@@ -79,10 +70,10 @@ impl FlacMetric {
     }
 
     fn get_format_reader(&self) -> Box<dyn FormatReader> {
-        let file_name = &self.file_path;
-        let file = Box::new(File::open(file_name).unwrap());
+        let file = &self.file;
+        let file = Box::new(file);
         // Create the media source stream using the boxed media source from above.
-        let mss = MediaSourceStream::new(file, Default::default());
+        let mss = MediaSourceStream::new(*file, Default::default());
         let mut hint_holder = Hint::new();
         let hint = hint_holder.mime_type("FLaC");
         // Use the default options when reading and decoding.
@@ -106,7 +97,7 @@ impl FlacMetric {
 
 
     /// Read samples from a file with an optional start and end point.
-    fn get_samples(&self, start: Option<i32>, end: Option<i32>) -> std::result::Result<Vec<f64>, SymphoniaError> {
+    pub fn get_samples(&self, start: Option<i32>, end: Option<i32>) -> std::result::Result<Vec<f64>, SymphoniaError> {
         let mut sample_vec: Vec<f64> = Vec::new();
         let mut format_reader = self.get_format_reader();
         let mut decoder = self.get_decoder();
@@ -166,7 +157,7 @@ impl FlacMetric {
     }
 
     /// Read all samples from a file
-    fn get_all_samples(&self) -> std::result::Result<Vec<f64>, SymphoniaError> {
+    pub fn get_all_samples(&self) -> std::result::Result<Vec<f64>, SymphoniaError> {
         let mut sample_vec: Vec<f64> = Vec::new();
         let mut format_reader = self.get_format_reader();
         let mut decoder = self.get_decoder();

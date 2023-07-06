@@ -22,6 +22,7 @@ use std::mem;
 use chrono::{DateTime, Utc, Duration, Datelike};
 use warp::fs::file;
 
+use crate::flac_reader::FlacMetric;
 use crate::lib_vsri::{VSRI, day_elapsed_seconds, MAX_INDEX_SAMPLES};
 
 struct DateRange(DateTime<Utc>, DateTime<Utc>);
@@ -97,7 +98,7 @@ fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(Fi
     /* Processing logic:
         Case 1 (2+ files):
          The first file, the period if from `start_time` to end of the file (use index),
-         The second until the last file, we need all the data points we can get (read full file).
+         The second until the last file (exclusive), we need all the data points we can get (read full file).
          The last file we need from start until the `end_time` (use index).
         Case 2 (Single file):
          Read the index to locate the start sample and the end sample.
@@ -106,7 +107,7 @@ fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(Fi
     let file_count = file_vec.len();
     let start_ts_i32 = day_elapsed_seconds(start_time);
     let end_ts_i32 = day_elapsed_seconds(end_time);
-    let mut samples = [0, 0];
+    let mut samples = Some([0, 0]);
     for pack in file_vec.into_iter().enumerate() {
         if file_count == 1 {
             // Case 2
@@ -119,7 +120,7 @@ fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(Fi
             }
             // If I can start reading the file, I can get at least one sample, so it is safe to unwrap.
             let end_sample = index.get_this_or_previous(end_ts_i32).unwrap();
-            samples = [start_sample.unwrap(), end_sample];
+            samples = Some([start_sample.unwrap(), end_sample]);
         } else {
         // Case 1
             let index = pack.1.1;
@@ -128,25 +129,28 @@ fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(Fi
                 0 => {
                     let start_sample = index.get_this_or_next(start_ts_i32);
                     if start_sample.is_none() { continue; }
-                    let end_sample = index.get_this_or_previous(end_ts_i32).unwrap();
-                    samples = [start_sample.unwrap(), end_sample];
+                    samples = Some([start_sample.unwrap(), MAX_INDEX_SAMPLES]);
                 },
                 // Last file
                 _ if pack.0 == file_count-1 => {
-                    let end_sample = index.get_this_or_previous(start_ts_i32);
+                    let end_sample = index.get_this_or_previous(end_ts_i32);
                     if end_sample.is_none() { continue; }
-                    let start_sample = index.get_this_or_next(start_ts_i32).unwrap();
-                    samples = [start_sample, end_sample.unwrap()];
+                    samples = Some([0, end_sample.unwrap()]);
                 },
                 // Other files
                 _ => {
                     // Collect the full file
-                    samples = [0, MAX_INDEX_SAMPLES];
+                    samples = None;
                 }
             }
         }
         // Collect the data points
-        
+        let flac_metric = FlacMetric::new(pack.1.0, start_time);
+        if samples.is_none() {
+            flac_metric.get_all_samples();
+        } else {
+            flac_metric.get_samples(Some(samples.unwrap()[0]), Some(samples.unwrap()[1]));
+        }
     }
     data_points
 }

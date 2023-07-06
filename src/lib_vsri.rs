@@ -14,6 +14,13 @@
 /// worst case O(N) (N is the number of segments)
 /// Space usage: 5Bytes for 64k samples. 
 /// Or: 30Bytes for 2^32 Samples
+/// 
+/// Example of content of an index
+///     up_localhost:9090_2023-07-05
+///     55745
+///     59435
+///     15,0,55745,166
+///     15,166,58505,63
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -71,6 +78,7 @@ pub struct VSRI {
     index_file: String,
     min_ts: i32,
     max_ts: i32,
+    // TODO: ENUM here to make it simpler to understand what each point in the array means
     vsri_segments: Vec<[i32; 4]> // [Sample Rate (m), X0, Y0, # of Samples]
 }
 
@@ -231,6 +239,33 @@ impl VSRI {
             }
         }
         None // No matching segment found for the given Y value
+    }
+
+    /// For a given sample position, return the timestamp associated
+    pub fn get_time(&self, x:i32) -> Option<i32> {
+        match x {
+            0 => { return Some(self.min()); },
+            _ if x > self.get_sample_count() => { return None; },
+            _ if x == self.get_sample_count() => { return Some(self.max()); },
+            // it is somewhere in the middle
+            _ => {
+                // Find the segment where X fits
+                for segment in &self.vsri_segments {
+                    if x >= segment[1] && x < (segment[1] + segment[3]) {
+                        // Belongs here! Return Segment TS + the TS interval * x
+                        let y = segment[2] + segment[0]*x;
+                        return Some(y);
+                    }
+                    continue;
+                }
+                None
+            }
+        }
+    }
+
+    fn get_sample_count(&self) -> i32 {
+        let last_segment = self.current_segment();
+        last_segment[3] + last_segment[1]
     }
 
     /// Generates a segment from a point. It uses information stored in the segment
