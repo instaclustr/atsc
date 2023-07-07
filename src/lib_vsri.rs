@@ -44,7 +44,14 @@ pub fn day_elapsed_seconds(timestamp_sec: i64) -> i32 {
     (hour * 3600 + minute * 60 + second) as i32
 }
 
-/// 
+/// Returns the timestamp for the begining of the day given a DateTime object.
+pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
+    let hour= dt.time().hour();
+    let minute = dt.time().minute();
+    let second =  dt.time().second();
+    dt.timestamp() - (hour * 3600 + minute * 60 + second) as i64
+}
+
 /// In this implementation we are writting sample by sample to the WAV file, so
 /// we can't do a proper segment calculation. So there will a special first segment
 /// that will hold the first point so we can calculate the segments from there.
@@ -74,6 +81,7 @@ pub fn day_elapsed_seconds(timestamp_sec: i64) -> i32 {
 ///                [sample_rate (m), initial_point(x,y), # of samples(lenght)]
 /// Each segments describes a line with the form of mX + B that has a lenght 
 /// of # of samples.
+#[derive(Debug)]
 pub struct VSRI {
     index_file: String,
     min_ts: i32,
@@ -214,7 +222,7 @@ impl VSRI {
         b
     }
 
-    /// Returns the most recent calculated segment
+    /// Returns the most recent (the last) calculated segment
     fn current_segment(&self) -> [i32; 4] {
         match self.vsri_segments.len() {
             0 => [0,0,0,0],
@@ -263,7 +271,21 @@ impl VSRI {
         }
     }
 
-    fn get_sample_count(&self) -> i32 {
+    /// Returns a vector will all the timestamps covered by this index
+    pub fn get_all_timestamps(&self) -> Vec<i32> {
+        let mut time_vec = Vec::new();
+        for segment in &self.vsri_segments {
+            let samples = segment[3] - 1;
+            let time_step = segment[0];
+            let initial_ts = segment[2];
+            let time_iter = (0..samples)
+                                        .map(|f| (f * time_step)+initial_ts);
+            time_vec.extend(time_iter);
+        }
+        time_vec
+    }
+
+    pub fn get_sample_count(&self) -> i32 {
         let last_segment = self.current_segment();
         last_segment[3] + last_segment[1]
     }

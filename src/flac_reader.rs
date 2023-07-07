@@ -1,4 +1,5 @@
 use std::fs::{File, self};
+use std::mem;
 use std::time::{SystemTime, Duration};
 
 use symphonia::core::audio::SampleBuffer;
@@ -70,10 +71,11 @@ impl FlacMetric {
     }
 
     fn get_format_reader(&self) -> Box<dyn FormatReader> {
-        let file = &self.file;
-        let file = Box::new(file);
+        // TODO: One more unwrap to deal with
+        let owned_file = self.file.try_clone().unwrap();
+        let file = Box::new(owned_file);
         // Create the media source stream using the boxed media source from above.
-        let mss = MediaSourceStream::new(*file, Default::default());
+        let mss = MediaSourceStream::new(file, Default::default());
         let mut hint_holder = Hint::new();
         let hint = hint_holder.mime_type("FLaC");
         // Use the default options when reading and decoding.

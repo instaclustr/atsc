@@ -1,3 +1,4 @@
+use core::time;
 /// All the utils/code related the to file management
 /// 
 /// ASSUMPTION: EACH DAY HAS 1 FILE!!! If this assumption change, change this file!
@@ -20,10 +21,9 @@
 use std::fs::{self, File};
 use std::mem;
 use chrono::{DateTime, Utc, Duration, Datelike};
-use warp::fs::file;
 
 use crate::flac_reader::FlacMetric;
-use crate::lib_vsri::{VSRI, day_elapsed_seconds, MAX_INDEX_SAMPLES};
+use crate::lib_vsri::{VSRI, day_elapsed_seconds, start_day_ts};
 
 struct DateRange(DateTime<Utc>, DateTime<Utc>);
 
@@ -42,19 +42,29 @@ impl Iterator for DateRange {
 }
 
 #[derive(Debug)]
-struct DataPoint {
-    actual_data: [u16; 4],
+struct PromDataPoint {
+    point: f64,
     time: u64,
 }
 
-/// This will return a data point from a FLAC file for the provided point in time
-fn read_data_point(file: &File) -> DataPoint {
-    let data_point = DataPoint {
-        actual_data: [0; 4],
-        time: 0,
-    };
-    data_point
+impl PromDataPoint {
+    pub fn new(data: f64, timestamp: i64) -> Self {
+        PromDataPoint {
+            point: data,
+            time: timestamp as u64
+        }
+    }
+
+    /// This will return a data point from a FLAC file for the provided point in time
+    pub fn read_data_point(file: &File) -> PromDataPoint {
+        let data_point = PromDataPoint {
+            point: 0.0,
+            time: 0,
+        };
+        data_point
+    }
 }
+
 
 /// Given a metric name and a time interval, returns all the files handles for the files that contain that data
 fn get_file_names(metric_name: &String, start_time: i64, end_time: i64) -> Option<Vec<(File, VSRI)>> {
@@ -93,7 +103,7 @@ fn get_file_names(metric_name: &String, start_time: i64, end_time: i64) -> Optio
 }
 
 /// Retrieves all the available data points in a timerange in the provided Vector of files and indexes
-fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(File, VSRI)>) -> Vec<DataPoint> {
+fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(File, VSRI)>) -> Vec<PromDataPoint> {
     let mut data_points = Vec::new();
     /* Processing logic:
         Case 1 (2+ files):
@@ -104,52 +114,82 @@ fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(Fi
          Read the index to locate the start sample and the end sample.
          Read the file and obtain said samples.
      */
+    // How many files to process
     let file_count = file_vec.len();
+    // Get the baseline timestamps to add to the index timestamps
+    let start_date = DateTime::<Utc>::from_utc(
+        chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
+          Utc,
+                );
+    let end_date = DateTime::<Utc>::from_utc(
+    chrono::NaiveDateTime::from_timestamp_opt((end_time/1000).into(), 0).unwrap(),
+        Utc,
+                );
+    let ts_bases: Vec<i64> = DateRange(start_date, end_date).map(|dt| start_day_ts(dt)).collect();
     let start_ts_i32 = day_elapsed_seconds(start_time);
     let end_ts_i32 = day_elapsed_seconds(end_time);
-    let mut samples = Some([0, 0]);
+    // Where the samples land in the indexes
+    let mut samples_locations = [0, 0];
     for pack in file_vec.into_iter().enumerate() {
+        let iter_index = pack.0;
+        let file = pack.1.0;
+        let vsri = pack.1.1;
         if file_count == 1 {
             // Case 2
-            let index = pack.1.1;
             // get_sample can return None
-            let start_sample = index.get_this_or_next(start_ts_i32);
+            let start_sample = vsri.get_this_or_next(start_ts_i32);
             if start_sample.is_none() {
                 // No sample in the file fits the current requested interval
                 return data_points;
             }
             // If I can start reading the file, I can get at least one sample, so it is safe to unwrap.
-            let end_sample = index.get_this_or_previous(end_ts_i32).unwrap();
-            samples = Some([start_sample.unwrap(), end_sample]);
+            let end_sample = vsri.get_this_or_previous(end_ts_i32).unwrap();
+            samples_locations = [start_sample.unwrap(), end_sample];
         } else {
         // Case 1
-            let index = pack.1.1;
             match pack.0 {
                 // First file
                 0 => {
-                    let start_sample = index.get_this_or_next(start_ts_i32);
+                    let start_sample = vsri.get_this_or_next(start_ts_i32);
                     if start_sample.is_none() { continue; }
-                    samples = Some([start_sample.unwrap(), MAX_INDEX_SAMPLES]);
+                    samples_locations = [start_sample.unwrap(), vsri.get_sample_count()];
                 },
                 // Last file
-                _ if pack.0 == file_count-1 => {
-                    let end_sample = index.get_this_or_previous(end_ts_i32);
+                _ if iter_index == file_count-1 => {
+                    let end_sample = vsri.get_this_or_previous(end_ts_i32);
                     if end_sample.is_none() { continue; }
-                    samples = Some([0, end_sample.unwrap()]);
+                    samples_locations = [0, end_sample.unwrap()];
                 },
                 // Other files
                 _ => {
                     // Collect the full file
-                    samples = None;
+                    samples_locations = [0, vsri.get_sample_count()];
                 }
             }
         }
         // Collect the data points
-        let flac_metric = FlacMetric::new(pack.1.0, start_time);
-        if samples.is_none() {
-            flac_metric.get_all_samples();
+        let flac_metric = FlacMetric::new(file, start_time);
+        let tmp_vec = vsri.get_all_timestamps();
+        let start = samples_locations[0];
+        let end = samples_locations[1];
+        // !@)(#*&!@)# usize and ints...
+        let time_for_samples = &tmp_vec[start as usize..=end as usize];
+        // The time I learned if..else is an expression!
+        let temp_result = if start == 0 && end == vsri.get_sample_count() {
+            flac_metric.get_all_samples()
         } else {
-            flac_metric.get_samples(Some(samples.unwrap()[0]), Some(samples.unwrap()[1]));
+            flac_metric.get_samples(Some(start), Some(end))
+        };
+
+        match temp_result {
+            // Pack this into DataPoints
+            Ok(samples) => {
+                for (v, t) in samples.into_iter().zip(time_for_samples.into_iter()) {
+                    let ts = *t as i64+ts_bases[iter_index];
+                    data_points.push(PromDataPoint::new(v, ts));
+                }
+            },
+            Err(err) => {println!("[DEBUG][READ] Error processing FLaC file {:?}", err); continue;}
         }
     }
     data_points
