@@ -42,16 +42,16 @@ impl Iterator for DateRange {
 }
 
 #[derive(Debug)]
-struct PromDataPoint {
-    point: f64,
-    time: u64,
+pub struct PromDataPoint {
+    pub point: f64,
+    pub time: i64,
 }
 
 impl PromDataPoint {
     pub fn new(data: f64, timestamp: i64) -> Self {
         PromDataPoint {
             point: data,
-            time: timestamp as u64
+            time: timestamp
         }
     }
 
@@ -67,7 +67,7 @@ impl PromDataPoint {
 
 
 /// Given a metric name and a time interval, returns all the files handles for the files that contain that data
-fn get_file_names(metric_name: &String, start_time: i64, end_time: i64) -> Option<Vec<(File, VSRI)>> {
+pub fn get_file_names(metric_name: &str, start_time: i64, end_time: i64) -> Option<Vec<(File, VSRI)>> {
     let mut file_index_vec = Vec::new();
     let start_date = DateTime::<Utc>::from_utc(
                                             chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
@@ -103,7 +103,7 @@ fn get_file_names(metric_name: &String, start_time: i64, end_time: i64) -> Optio
 }
 
 /// Retrieves all the available data points in a timerange in the provided Vector of files and indexes
-fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(File, VSRI)>) -> Vec<PromDataPoint> {
+pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(File, VSRI)>) -> Vec<PromDataPoint> {
     let mut data_points = Vec::new();
     /* Processing logic:
         Case 1 (2+ files):
@@ -194,13 +194,3 @@ fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(Fi
     }
     data_points
 }
-
-/* TODO: I do need to learn how to do proper testing
-fn main() {
-    let start_time = 1655760000000;
-    let end_time = 1655760500000;
-    let data_file_names = get_file_names(start_time, end_time);
-    let data_points = get_data_between_timestamps(start_time, end_time, &data_file_names);
-    println!("{:?}", data_points);
-}
- */

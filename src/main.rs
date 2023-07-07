@@ -1,20 +1,8 @@
-
-/* Starting a changelog here
-
-TODO:
-Write metrics to FLAC files from Prometheus Write
-Return the same metrics to prometheus via the remote read
-Make the code decent, as in, split into different files and those nice things
-
-## 26/05/2023
- - Currently Reading From Flac and serving prometheus via remote write
-
- */
-
 mod wav_writer;
 mod fs_utils;
 mod lib_vsri;
 mod flac_reader;
+use fs_utils::get_data_between_timestamps;
 use wav_writer::WavMetric;
 
 use async_trait::async_trait;
@@ -39,6 +27,8 @@ use symphonia::core::units::{Time, TimeBase};
 use symphonia::core::io::MediaSourceStream;
 
 use chrono::{DateTime, Utc, Timelike};
+
+use crate::fs_utils::get_file_names;
 
 // Data sampling frequency. How many seconds between each sample.
 static DATA_INTERVAL_SEC: u32 = 1;
@@ -204,19 +194,34 @@ fn get_flac_samples(metric: &str, start_time: i64, end_time: i64)-> std::result:
     Ok(buffer)
 }
 
-fn get_flac_samples_to_prom(metric: &str, start_ms: i64, end_ms: i64, step_ms: i64) -> Vec<Sample> {
+fn get_flac_samples_to_prom(metric: &str, source: &str, _job: &str, start_ms: i64, end_ms: i64, step_ms: i64) -> Vec<Sample> {
+    // TODO: Count the number of samples for the given metric! -> Can be done with the Index alone \m/ \m/
+    // TODO: Do not ignore Job!
     if step_ms == 0 {
         return vec![Sample {
             value: 1.0,
             timestamp: start_ms,
         }];
     }
-    let flac_content = get_flac_samples(metric, start_ms, end_ms).unwrap();
+    // Build the metric name
+    let metric_name = format!("{}_{}",metric, source);
+    let files_to_parse = get_file_names(&metric_name, start_ms, end_ms);
+    if files_to_parse.is_none() {
+        return vec![Sample {
+            value: 1.0,
+            timestamp: start_ms,
+            }];
+    }
+    let prom_vec = get_data_between_timestamps(start_ms, end_ms, files_to_parse.unwrap());
+    // Convert into Samples and apply step_ms
+    prom_vec.iter().map(|pdp| Sample{value: pdp.point, timestamp: pdp.time}).collect()
+
+    //let flac_content = get_flac_samples(metric, start_ms, end_ms).unwrap();
     // Flac reader is ignoring step returning way to many samples. So we have to deal with step here
     // Transforming the result into Samples
-    let step_size: usize = (step_ms/DATA_INTERVAL_MSEC).try_into().unwrap();
-    println!("[DEBUG] # of FLaC samples: {} Step size ms: {} Internal step: {}", flac_content.len(), step_ms, step_size);
-    flac_content.iter().step_by(step_size).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
+    //let step_size: usize = (step_ms/DATA_INTERVAL_MSEC).try_into().unwrap();
+    //println!("[DEBUG] # of FLaC samples: {} Step size ms: {} Internal step: {}", flac_content.len(), step_ms, step_size);
+    //flac_content.iter().step_by(step_size).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
 }
 
 fn parse_remote_write_request(timeseries: &TimeSeries, metadata: Option<&MetricMetadata>) -> Result<()> {
@@ -244,7 +249,7 @@ fn parse_remote_write_request(timeseries: &TimeSeries, metadata: Option<&MetricM
         wav_metric.add_bulk_timeseries(mutable_metric_data);
         let _ = wav_metric.flush();
     } else {
-        println!("Missing metric or source");
+        println!("[DEBUG][WRITE] Missing metric or source");
     }
     Ok(())
 }
@@ -279,18 +284,21 @@ impl RemoteStorage for FlacStorage {
     }
 
     async fn process_query(&self, _ctx: &Self::Context, query: Query) -> Result<QueryResult> {
-        println!("flac read, req:{query:?}");
+        println!("[DEBUG][MAIN] flac read, req:{query:?}");
         let metric = &query.matchers[0].value;
+        // TODO: Get these values from somewhere else
+        let job = "flac-remote";
+        let instance = "localhost:9090";
         Ok(QueryResult {
             timeseries: vec![TimeSeries {
                 labels: vec![
                     Label {
                         name: "job".to_string(),
-                        value: "flac-remote".to_string(),
+                        value: job.to_string(),
                     },
                     Label {
                         name: "instance".to_string(),
-                        value: "127.0.0.1:9201".to_string(),
+                        value: instance.to_string(),
                     },
                     Label {
                         name: "__name__".to_string(),
@@ -299,6 +307,8 @@ impl RemoteStorage for FlacStorage {
                 ],
                 samples: get_flac_samples_to_prom(
                     metric,
+                    job,
+                    instance,
                     query.start_timestamp_ms,
                     query.end_timestamp_ms,
                     query

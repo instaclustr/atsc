@@ -28,6 +28,7 @@ pub struct WavMetric {
 impl WavMetric {
     pub fn new(name: String, source: String, job: String) -> WavMetric {
         // Creation time
+        // TODO: Do not ignore JOB!
         let now: DateTime<Utc> = Utc::now();
         WavMetric { metric_name: name,
                     instance: source,
