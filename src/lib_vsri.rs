@@ -120,12 +120,16 @@ impl VSRI {
 
     /// Get the sample for this timestamp or the next one
     pub fn get_this_or_next(&self, y: i32) -> Option<i32> {
-        self.get_sample(y).or(self.get_next_sample(y))
+        let r = self.get_sample(y).or(self.get_next_sample(y));
+        println!("[DEBUG][INDEX]This or next location {:?} for TS {}", r, y);
+        r
     }
 
     /// Get the sample for this timestamp or the previous one
     pub fn get_this_or_previous(&self, y: i32) -> Option<i32> {
-        self.get_sample(y).or(self.get_previous_sample(y))
+        let r = self.get_sample(y).or(self.get_previous_sample(y));
+        println!("[DEBUG][INDEX]This or previous location {:?} for TS {}", r, y);
+        r
     }
 
     /// Returns the next sample for the provided timestamp.
@@ -139,7 +143,7 @@ impl VSRI {
             return None;
         }
         // It wasn't smaller, so let's see if we have a sample that matches
-        for segment in &self.vsri_segments {
+        for segment in self.vsri_segments.clone().into_iter().rev() {
             let first_sample = segment[1];
             let y0 = segment[2];
             if y <= y0 {
@@ -158,13 +162,13 @@ impl VSRI {
             return None;
         } else if y >= self.max() {
             // Return the last segment, # of samples. That is the total # of samples in a file 
-            return Some(self.current_segment()[3]);
+            return Some(self.get_sample_count());
         }
         // Cycle through the segments
         for segment in &self.vsri_segments {
             let first_sample = segment[1];
             let y0 = segment[2];
-            if y <= y0 {
+            if y < y0 {
                 // Return the last sample of the previous segment
                 return Some(first_sample-1);
             }
@@ -275,7 +279,7 @@ impl VSRI {
     pub fn get_all_timestamps(&self) -> Vec<i32> {
         let mut time_vec = Vec::new();
         for segment in &self.vsri_segments {
-            let samples = segment[3] - 1;
+            let samples = segment[3]; // Range is EXCLUSIVE above
             let time_step = segment[0];
             let initial_ts = segment[2];
             let time_iter = (0..samples)

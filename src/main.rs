@@ -307,8 +307,8 @@ impl RemoteStorage for FlacStorage {
                 ],
                 samples: get_flac_samples_to_prom(
                     metric,
-                    job,
                     instance,
+                    job,
                     query.start_timestamp_ms,
                     query.end_timestamp_ms,
                     query

@@ -1,16 +1,15 @@
-use std::fs::{File, self};
-use std::time::{SystemTime, Duration};
+use std::error::Error;
+use std::fs::File;
 
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::codecs::{DecoderOptions, Decoder};
-use symphonia::core::formats::{FormatOptions, SeekMode, SeekTo, FormatReader};
+use symphonia::core::formats::{FormatOptions,FormatReader};
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::{Hint, ProbeResult};
-use symphonia::core::units::{Time, TimeBase};
+use symphonia::core::probe::Hint;
 use symphonia::core::io::MediaSourceStream;
 
-use chrono::{DateTime, Utc, Timelike};
+use chrono::{DateTime, Utc};
 
 use crate::lib_vsri::{VSRI, self};
 
@@ -29,11 +28,68 @@ note: t=point in time, chan = channel, samples are the bytes for each channel.
 +------+------+------+------+------+------+------+------+-----
  */ 
 
-/// Structure that holds the samples for a metric that is in a FLaC file
-/// It would only hold the number of samples needed for the provided interval
-/// if the end of the interval is bigger than what is contained in the file,
-///  the whole file content is returned.
+// Flac metric is giving a ton of issues, trying to get something simpler
+pub struct SimpleFlacReader {
+    file: File, // The File where the metric is
+    interval_start: i64 // To keep compatibility
+}
 
+impl SimpleFlacReader {
+    pub fn new(file: File, start_ts: i64) -> Self {
+        SimpleFlacReader {
+                    file,
+                    interval_start: start_ts,
+                 }
+    }
+
+    pub fn get_samples(&self, start: Option<i32>, end: Option<i32>) -> std::result::Result<Vec<f64>, SymphoniaError> {
+        let mut sample_vec: Vec<f64> = Vec::new();
+        let mut reader = claxon::FlacReader::new(&self.file).unwrap();
+        let channels = reader.streaminfo().channels;
+        let mut sample_count = 0;
+        // TODO: Make this hold up to channel number
+        let mut sample_channel_data: [u16; 4] = [0,0,0,0];
+        let mut frame_reader = reader.blocks();
+        let mut block = claxon::Block::empty();
+        loop {
+            // Read a single frame. Recycle the buffer from the previous frame to
+            // avoid allocations as much as possible.
+            match frame_reader.read_next_or_eof(block.into_buffer()) {
+                Ok(Some(next_block)) => block = next_block,
+                Ok(None) => break, // EOF.
+                Err(error) => panic!("[DEBUG][READ][FLAC] {}", error),
+            }
+            for j in 0..block.len() {
+                if sample_count < start.unwrap_or(0) { continue; }
+                if sample_count > end.unwrap_or(lib_vsri::MAX_INDEX_SAMPLES) { continue; }
+                for i in sample_channel_data {
+                    sample_channel_data[i as usize] = block.sample(i.into(), j) as u16;
+                }
+                sample_vec.push(SimpleFlacReader::join_u16_into_f64(sample_channel_data));
+                sample_count += 1;
+            }
+        }
+        Ok(sample_vec)
+    }
+
+    pub fn get_all_samples(&self) -> std::result::Result<Vec<f64>, SymphoniaError> {
+        self.get_samples(None, None)
+    }
+
+    fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
+        let u64_bits = (bits[0] as u64) |
+                    ((bits[1] as u64) << 16) |
+                    ((bits[2] as u64) << 32) |
+                    ((bits[3] as u64) << 48);
+        
+        let f64_value = f64::from_bits(u64_bits);
+        f64_value
+    }
+
+}
+
+
+ 
  pub struct FlacMetric {
     timeseries_data: Vec<(i64, f64)>, // Sample Data
     file: File,                       // The File where the metric is
@@ -72,16 +128,15 @@ impl FlacMetric {
     fn get_format_reader(&self) -> Box<dyn FormatReader> {
         // TODO: One more unwrap to deal with
         let owned_file = self.file.try_clone().unwrap();
+        println!("[DEBUG][READ][FLAC] Probing file: {:?}",owned_file);
         let file = Box::new(owned_file);
         // Create the media source stream using the boxed media source from above.
         let mss = MediaSourceStream::new(file, Default::default());
-        let mut hint_holder = Hint::new();
-        let hint = hint_holder.mime_type("FLaC");
         // Use the default options when reading and decoding.
         let format_opts: FormatOptions = Default::default();
         let metadata_opts: MetadataOptions = Default::default();
         // Probe the media source stream for a format.
-        let probed = symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts).unwrap();
+        let probed = symphonia::default::get_probe().format(Hint::new().mime_type("FLaC"), mss, &format_opts, &metadata_opts).unwrap();
         // Get the format reader yielded by the probe operation.
         return probed.format;
     }

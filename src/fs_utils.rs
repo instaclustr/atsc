@@ -78,17 +78,14 @@ pub fn get_file_names(metric_name: &str, start_time: i64, end_time: i64) -> Opti
                                             Utc,
                                                     );
     for date in DateRange(start_date, end_date) {
-        let day = date.day();
-        let month = date.month();
-        let year = date.year();
-        let data_file_name = format!("{}_{}_{}_{}",metric_name, day, month, year);
+        let data_file_name = format!("{}_{}",metric_name, date.format("%Y-%m-%d").to_string());
         let vsri = VSRI::load(&data_file_name);
         let file = match  fs::File::open(format!("{}.flac", data_file_name.clone())) {
             Ok(file) => {
                 file
             },
             Err(_err) => {
-                println!("File {} doesn't exist, skipping", data_file_name); 
+                println!("[INFO][READ] File {}.flac doesn't exist, skipping", data_file_name); 
                 continue; 
             }
          };
@@ -97,6 +94,7 @@ pub fn get_file_names(metric_name: &str, start_time: i64, end_time: i64) -> Opti
     }
     // We have at least one file
     if file_index_vec.len() >= 1 {
+        println!("[INFO][READ] Returning Object {:?} ", file_index_vec); 
         return Some(file_index_vec);
     }
     None
@@ -129,12 +127,17 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
     let start_ts_i32 = day_elapsed_seconds(start_time);
     let end_ts_i32 = day_elapsed_seconds(end_time);
     // Where the samples land in the indexes
-    let mut samples_locations = [0, 0];
-    for pack in file_vec.into_iter().enumerate() {
+    let mut samples_locations: [i32; 2];
+    for pack in file_vec.into_iter().enumerate() {        
         let iter_index = pack.0;
         let file = pack.1.0;
         let vsri = pack.1.1;
-        if file_count == 1 {
+        println!("[DEBUG][READ] Locating samples. VSRI {:?} TS: {} - {}",vsri, start_ts_i32, end_ts_i32);
+        // Check if the timestamps intercept the index space
+        if vsri.min() > end_ts_i32 || vsri.max() < start_ts_i32 { 
+            return data_points; 
+        }
+        if file_count == 1 { 
             // Case 2
             // get_sample can return None
             let start_sample = vsri.get_this_or_next(start_ts_i32);
@@ -171,7 +174,8 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
         let flac_metric = FlacMetric::new(file, start_time);
         let tmp_vec = vsri.get_all_timestamps();
         let start = samples_locations[0];
-        let end = samples_locations[1];
+        let end = samples_locations[1]-1;
+        println!("[DEBUG][READ] Samples located! From {} to {}. TS available: {}",start, end, tmp_vec.len());
         // !@)(#*&!@)# usize and ints...
         let time_for_samples = &tmp_vec[start as usize..=end as usize];
         // The time I learned if..else is an expression!
