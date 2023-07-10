@@ -43,6 +43,7 @@ impl SimpleFlacReader {
     }
 
     pub fn get_samples(&self, start: Option<i32>, end: Option<i32>) -> std::result::Result<Vec<f64>, SymphoniaError> {
+        println!("[DEBUG][READ][SimpleFLaC] Getting samples from: {:?}", self.file.metadata());
         let mut sample_vec: Vec<f64> = Vec::new();
         let mut reader = claxon::FlacReader::new(&self.file).unwrap();
         let channels = reader.streaminfo().channels;
@@ -59,16 +60,18 @@ impl SimpleFlacReader {
                 Ok(None) => break, // EOF.
                 Err(error) => panic!("[DEBUG][READ][FLAC] {}", error),
             }
-            for j in 0..block.len() {
-                if sample_count < start.unwrap_or(0) { continue; }
-                if sample_count > end.unwrap_or(lib_vsri::MAX_INDEX_SAMPLES) { continue; }
-                for i in sample_channel_data {
-                    sample_channel_data[i as usize] = block.sample(i.into(), j) as u16;
+            println!("[DEBUG][READ][SimpleFLaC] Processing block... Samples processed: {:?}", sample_count);
+            if sample_count < start.unwrap_or(0) { continue; }
+            if sample_count > end.unwrap_or(lib_vsri::MAX_INDEX_SAMPLES) { continue; }
+            for sample in 0..block.duration() {
+                for channel in 0..channels {
+                    sample_channel_data[channel as usize] = block.sample(channel, sample) as u16;
                 }
                 sample_vec.push(SimpleFlacReader::join_u16_into_f64(sample_channel_data));
                 sample_count += 1;
             }
         }
+        println!("[DEBUG][READ][SimpleFLaC] Returning samples for interval: {} {} Sample count: {:?}", start.unwrap_or(0), end.unwrap_or(0), sample_count);
         Ok(sample_vec)
     }
 

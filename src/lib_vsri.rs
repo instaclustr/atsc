@@ -29,7 +29,7 @@ use chrono::{DateTime, Utc, Timelike};
 // TODO: This should be configurable. Indexes are build for 1 day worth of samples, at 1 sample per second
 pub static MAX_INDEX_SAMPLES: i32 = 86400;
 
-// Helper functions
+// Helper functions, this should be moved somewhere
 /// Returns the number of seconds elapsed for the day provided in the `timestamp_sec`
 pub fn day_elapsed_seconds(timestamp_sec: i64) -> i32 {
     let datetime = DateTime::<Utc>::from_utc(
