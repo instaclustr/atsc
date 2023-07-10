@@ -2,7 +2,7 @@ mod wav_writer;
 mod fs_utils;
 mod lib_vsri;
 mod flac_reader;
-use fs_utils::get_data_between_timestamps;
+use fs_utils::{get_data_between_timestamps, data_locator_into_prom_data_point};
 use wav_writer::WavMetric;
 
 use async_trait::async_trait;
@@ -197,6 +197,9 @@ fn get_flac_samples(metric: &str, start_time: i64, end_time: i64)-> std::result:
 fn get_flac_samples_to_prom(metric: &str, source: &str, _job: &str, start_ms: i64, end_ms: i64, step_ms: i64) -> Vec<Sample> {
     // TODO: Count the number of samples for the given metric! -> Can be done with the Index alone \m/ \m/
     // TODO: Do not ignore Job!
+    // TODO: Do not ignore Step!
+    // Just for today, Step in the files is always 15sec, 15000 ms.
+    let sample_step = (step_ms/15000) as usize;
     if step_ms == 0 {
         return vec![Sample {
             value: 1.0,
@@ -212,10 +215,30 @@ fn get_flac_samples_to_prom(metric: &str, source: &str, _job: &str, start_ms: i6
             timestamp: start_ms,
             }];
     }
-    let prom_vec = get_data_between_timestamps(start_ms, end_ms, files_to_parse.unwrap());
+    //let prom_vec = get_data_between_timestamps(start_ms, end_ms, files_to_parse.unwrap());
+    let prom_vec = data_locator_into_prom_data_point(files_to_parse.unwrap());
+    let prom_len = prom_vec.len();
+    //println!("[DEBUG][MAIN] Prom data points: {:?}", prom_vec);
+    println!("[DEBUG][MAIN] Requested Step: {:?} Proposed Steps: {:?}", step_ms, sample_step);
     // Convert into Samples and apply step_ms
+    //let mut out = Vec::new();
+    //let mut prev_sample_ts: i64 = 0; 
+    /*
+    for (i, pdp) in prom_vec.into_iter().enumerate() {
+        if i == 0 {
+            out.push(Sample{value: pdp.point, timestamp: pdp.time});
+            prev_sample_ts = pdp.time;
+            continue;
+        }
+        if pdp.time < prev_sample_ts + step_ms { continue; }
+        out.push(Sample{value: pdp.point, timestamp: pdp.time});
+        prev_sample_ts = pdp.time;
+    }
+    println!("[DEBUG][MAIN] Requested Step: {:?} Proposed Steps: {:?} Original len {:?} Final len {:?}", step_ms, sample_step, prom_len, out.len());
+    
+    out  */
     prom_vec.iter().map(|pdp| Sample{value: pdp.point, timestamp: pdp.time}).collect()
-
+    //prom_vec.iter().step_by(sample_step).map(|pdp| Sample{value: pdp.point, timestamp: pdp.time}).collect()
     //let flac_content = get_flac_samples(metric, start_ms, end_ms).unwrap();
     // Flac reader is ignoring step returning way to many samples. So we have to deal with step here
     // Transforming the result into Samples

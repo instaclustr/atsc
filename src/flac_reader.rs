@@ -43,7 +43,6 @@ impl SimpleFlacReader {
     }
 
     pub fn get_samples(&self, start: Option<i32>, end: Option<i32>) -> std::result::Result<Vec<f64>, SymphoniaError> {
-        println!("[DEBUG][READ][SimpleFLaC] Getting samples from: {:?}", self.file.metadata());
         let mut sample_vec: Vec<f64> = Vec::new();
         let mut reader = claxon::FlacReader::new(&self.file).unwrap();
         let channels = reader.streaminfo().channels;

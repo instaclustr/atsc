@@ -196,7 +196,7 @@ impl VSRI {
             },
             _ => {
                 // More than 1 segment
-                let mut previous_seg_end: i32;
+                let mut previous_seg_end: i32 = 0;
                 let mut segment_count = 0;
                 for segment in &self.vsri_segments {
                     let sample_rate = segment[0];

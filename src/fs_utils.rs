@@ -86,15 +86,20 @@ impl FileTimeRange {
 pub struct DataLocator {
     file: File,
     index: VSRI,
-    time_range: FileTimeRange
+    time_range: FileTimeRange,
+    date: DateTime<Utc>
 }
 
 impl DataLocator {
-    fn new(file: File, index: VSRI, time_range: FileTimeRange) -> Self {
+    /// Creates a new DataLocator, includes the File, Index and the Time Range for the data it is expected to return.
+    /// This is a lazy, doesn't check for the intersection between the time range and data owned until the data is 
+    /// requested.
+    fn new(file: File, index: VSRI, time_range: FileTimeRange, date: DateTime<Utc> ) -> Self {
         DataLocator {
             file,
             index,
-            time_range
+            time_range,
+            date
         }
     }
 
@@ -107,6 +112,61 @@ impl DataLocator {
         }
         // index function checks for no ownership, this function checks for ownership, invert the result
         !self.index.is_empty([self.time_range.start, self.time_range.end])
+    }
+
+    fn get_samples_from_range(&self) -> Option<[i32; 2]>{
+        // By default, get all the samples
+        let mut sample_range: [i32;2] = [0, MAX_INDEX_SAMPLES];
+        if !self.do_intersect() {
+            return None;
+        }
+        match self.time_range.start {
+            0 => { sample_range[0] = 0;},
+            _ => {
+                // There is intersection, it can unwrap safely
+                sample_range[0] = self.index.get_this_or_next(self.time_range.start).unwrap();
+            },
+        }
+        match self.time_range.end {
+            // Match cannot shadow statics and whatever
+            _ if self.time_range.end == MAX_INDEX_SAMPLES => { sample_range[1] = self.index.get_sample_count();},
+            _ => {
+                // There is intersection, it can unwrap safely
+                sample_range[1] = self.index.get_this_or_previous(self.time_range.start).unwrap();
+            },
+        }
+        Some(sample_range)
+    }
+
+    /// Consumes the DataLocator to return a Vec of PromDataPoints
+    pub fn into_prom_data_point(self) -> Vec<PromDataPoint>{
+        let mut prom_data = Vec::new();
+        let samples_locations = self.get_samples_from_range();
+        let flac_metric = SimpleFlacReader::new(self.file, self.time_range.start as i64);
+        let tmp_vec = self.index.get_all_timestamps();
+        // There goes an empty arry
+        if samples_locations.is_none() { return prom_data; }
+        let start = samples_locations.unwrap()[0];
+        let end = samples_locations.unwrap()[1]-1;
+        println!("[DEBUG][READ] Samples located! From {} to {}. TS available: {}",start, end, tmp_vec.len());
+        let time_for_samples = &tmp_vec[start as usize..=end as usize];
+        // The time I learned if..else is an expression!
+        let temp_result = if start == 0 && end == self.index.get_sample_count() {
+            flac_metric.get_all_samples()
+        } else {
+            flac_metric.get_samples(Some(start), Some(end))
+        };
+        match temp_result {
+            // Pack this into DataPoints
+            Ok(samples) => {
+                for (v, t) in samples.into_iter().zip(time_for_samples.into_iter()) {
+                    let ts = *t as i64+start_day_ts(self.date);
+                    prom_data.push(PromDataPoint::new(v, ts*1000));
+                }
+            },
+            Err(err) => {println!("[DEBUG][READ] Error processing FLaC file {:?}", err); return prom_data;}
+        }
+        prom_data
     }
 
     /// Given a metric name and a time interval, returns all the files handles for the files that *might* contain that data (No data range intersection is done here)
@@ -124,10 +184,11 @@ impl DataLocator {
         let file_time_intervals = time_intervals(start_time, end_time);
         println!("[INFO][READ] Time intervals for the range {:?} ", file_time_intervals);
         let mut range_count = 0;
-        for date in DateRange(start_date, end_date) {
-            range_count += 1;
-            let data_file_name = format!("{}_{}",metric_name, date.format("%Y-%m-%d").to_string());
+        for date in DateRange(start_date, end_date).enumerate() {
+            let data_file_name = format!("{}_{}",metric_name, date.1.format("%Y-%m-%d").to_string());
+            println!("[INFO][READ] Time intervals for file {}: {:?} ", data_file_name, file_time_intervals[range_count]);
             let vsri = VSRI::load(&data_file_name);
+            range_count += 1;
             let file = match  fs::File::open(format!("{}.flac", data_file_name.clone())) {
                 Ok(file) => {
                     file
@@ -138,7 +199,7 @@ impl DataLocator {
                 }
             };
             // If I got here, I should be able to unwrap VSRI safely.
-            file_index_vec.push((file, vsri.unwrap()));
+            file_index_vec.push((file, vsri.unwrap(), date));
         }
         // Creating the Time Range array
         let start_ts_i32 = day_elapsed_seconds(start_time);
@@ -162,8 +223,7 @@ impl DataLocator {
         // We have at least one file create the Object
         if file_index_vec.len() >= 1 {
             data_locator_vec = file_index_vec.into_iter()
-                                             .zip(time_intervals)
-                                             .map(|item| DataLocator::new(item.0.0, item.0.1, item.1))
+                                             .map(|item| DataLocator::new(item.0, item.1, time_intervals[item.2.0], item.2.1))
                                              .collect();
             println!("[INFO][READ] Returning Object {:?} ", data_locator_vec); 
             return Some(data_locator_vec);
@@ -204,9 +264,11 @@ fn time_intervals(start_time: i64, end_time: i64) -> Vec<[i32; 2]> {
 }
 
 /// Given a metric name and a time interval, returns all the files handles for the files that contain that data
-pub fn get_file_index_time(metric_name: &str, start_time: i64, end_time: i64) -> Option<Vec<(File, VSRI, [i32;2])>> {
-    let mut file_index_vec = Vec::new();
-    let start_date = DateTime::<Utc>::from_utc(
+pub fn get_file_index_time(metric_name: &str, start_time: i64, end_time: i64) -> Option<Vec<DataLocator>> {
+    DataLocator::get_locators_for_range(metric_name, start_time, end_time)
+   /*
+   let mut file_index_vec = Vec::new(); 
+   let start_date = DateTime::<Utc>::from_utc(
                                             chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
                                               Utc,
                                                     );
@@ -235,9 +297,21 @@ pub fn get_file_index_time(metric_name: &str, start_time: i64, end_time: i64) ->
     if file_index_vec.len() >= 1 {
         println!("[INFO][READ] Returning Object {:?} ", file_index_vec); 
         return Some(file_index_vec);
-    }
+    } 
     None
+    */
 }
+
+pub fn data_locator_into_prom_data_point(data: Vec<DataLocator>) -> Vec<PromDataPoint> {
+    println!("[DEBUG][READ] Locators: {:?}", data);
+    let mut data_points = Vec::new();
+    for dl in data {
+        let mut proms = dl.into_prom_data_point();
+        if proms.len() > 0 { data_points.append(&mut proms); }
+    }
+    data_points
+}
+
 
 /// Retrieves all the available data points in a timerange in the provided Vector of files and indexes
 pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(File, VSRI)>) -> Vec<PromDataPoint> {
@@ -337,7 +411,8 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
             Ok(samples) => {
                 for (v, t) in samples.into_iter().zip(time_for_samples.into_iter()) {
                     let ts = *t as i64+ts_bases[iter_index];
-                    data_points.push(PromDataPoint::new(v, ts));
+                    // Convert time to timestamp with miliseconds
+                    data_points.push(PromDataPoint::new(v, ts*1000));
                 }
             },
             Err(err) => {println!("[DEBUG][READ] Error processing FLaC file {:?}", err); continue;}
