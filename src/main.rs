@@ -28,7 +28,7 @@ use symphonia::core::io::MediaSourceStream;
 
 use chrono::{DateTime, Utc, Timelike};
 
-use crate::fs_utils::get_file_names;
+use crate::fs_utils::get_file_index_time;
 
 // Data sampling frequency. How many seconds between each sample.
 static DATA_INTERVAL_SEC: u32 = 1;
@@ -205,7 +205,7 @@ fn get_flac_samples_to_prom(metric: &str, source: &str, _job: &str, start_ms: i6
     }
     // Build the metric name
     let metric_name = format!("{}_{}",metric, source);
-    let files_to_parse = get_file_names(&metric_name, start_ms, end_ms);
+    let files_to_parse = get_file_index_time(&metric_name, start_ms, end_ms);
     if files_to_parse.is_none() {
         return vec![Sample {
             value: 1.0,

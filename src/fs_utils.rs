@@ -41,7 +41,7 @@ impl Iterator for DateRange {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct PromDataPoint {
     pub point: f64,
     pub time: i64,
@@ -62,6 +62,39 @@ impl PromDataPoint {
             time: 0,
         };
         data_point
+    }
+}
+/// Holds a time range for the file and index
+#[derive(Debug, Clone, Copy)]
+struct FileTimeRange {
+    start: i32,
+    end: i32
+}
+
+impl FileTimeRange {
+    fn new(start: i32, end: i32) -> Self {
+        FileTimeRange {
+            start,
+            end
+        }
+    }
+}
+
+/// A struct that allows the precise location of data inside the file is in it
+#[derive(Debug)]
+pub struct DataLocator {
+    file: File,
+    index: VSRI,
+    time_range: FileTimeRange
+}
+
+impl DataLocator {
+    fn new(file: File, index: VSRI, time_range: FileTimeRange) -> Self {
+        DataLocator {
+            file,
+            index,
+            time_range
+        }
     }
 }
 
@@ -97,7 +130,7 @@ fn time_intervals(start_time: i64, end_time: i64) -> Vec<[i32; 2]> {
 }
 
 /// Given a metric name and a time interval, returns all the files handles for the files that contain that data
-pub fn get_file_names(metric_name: &str, start_time: i64, end_time: i64) -> Option<Vec<(File, VSRI)>> {
+pub fn get_file_index_time(metric_name: &str, start_time: i64, end_time: i64) -> Option<Vec<(File, VSRI, [i32;2])>> {
     let mut file_index_vec = Vec::new();
     let start_date = DateTime::<Utc>::from_utc(
                                             chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
@@ -107,6 +140,8 @@ pub fn get_file_names(metric_name: &str, start_time: i64, end_time: i64) -> Opti
                                           chrono::NaiveDateTime::from_timestamp_opt((end_time/1000).into(), 0).unwrap(),
                                             Utc,
                                                     );
+    let file_time_intervals = time_intervals(start_time, end_time);
+    println!("[INFO][READ] Time intervals for the range {:?} ", file_time_intervals); 
     for date in DateRange(start_date, end_date) {
         let data_file_name = format!("{}_{}",metric_name, date.format("%Y-%m-%d").to_string());
         let vsri = VSRI::load(&data_file_name);
@@ -114,8 +149,8 @@ pub fn get_file_names(metric_name: &str, start_time: i64, end_time: i64) -> Opti
             Ok(file) => {
                 file
             },
-            Err(_err) => {
-                println!("[INFO][READ] File {}.flac doesn't exist, skipping", data_file_name); 
+            Err(err) => {
+                println!("[INFO][READ] Error processing {}.flac. Error: {}. Skipping file.", data_file_name, err); 
                 continue; 
             }
          };
