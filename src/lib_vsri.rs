@@ -176,6 +176,58 @@ impl VSRI {
         None
     }
 
+    /// Checks if the time segment provided falls in an empty space (Between 2 segments)
+    /// This is useful to check intersections. If this function returns false the provided
+    /// time segment does overlap with the existing time segments in the file
+    pub fn is_empty(&self, time_segment: [i32; 2]) -> bool {
+        // I could simple try to get 2 samples and if one of the returns, it is not empty
+        // but I would walk segments twice instead of once
+        match &self.vsri_segments.len() {
+            1 => {
+                // It starts or ends inside the segment (might be a single sample)
+                if (time_segment[0] >= self.min() && time_segment[0] <= self.max()) ||
+                   (time_segment[1] <= self.max() && time_segment[1] >= self.min()) {
+                    return false;
+                }
+                // Or it contains the whole segment
+                if time_segment[0] < self.min() && time_segment[1] > self.max() {
+                    return false;
+                }
+            },
+            _ => {
+                // More than 1 segment
+                let mut previous_seg_end: i32;
+                let mut segment_count = 0;
+                for segment in &self.vsri_segments {
+                    let sample_rate = segment[0];
+                    let y0 = segment[2];
+                    let num_samples = segment[3];
+                    let segment_end_y = y0 + (sample_rate * (num_samples - 1));
+                    // If we are in the 2+ segment, lets test if the time falls in the middle
+                    if segment_count >= 1 && 
+                        (time_segment[0] > previous_seg_end && time_segment[1] < y0) {
+                            return true;
+                        }
+                    // Could this be simplified with Karnaugh map? I'll dig my books later
+                    // It starts or ends inside the segment
+                    if (time_segment[0] >= y0 && time_segment[0] < segment_end_y) ||
+                       (time_segment[1] < segment_end_y && time_segment[1] >= y0) {
+                        return false;
+                    }
+                    // Or it contains the whole segment
+                    if time_segment[0] < y0 && time_segment[1] > segment_end_y {
+                        return false;
+                    }
+                    // At this point, time segments doesn't touch this segment.
+                    previous_seg_end = segment_end_y;
+                    segment_count += 1;
+                }
+            }
+        }
+        // Didn't find any intersection, or left in the middle, it is empty
+        true
+    }
+
     /// Update the index for the provided point
     /// y - time in seconds
     /// TODO: Change PANIC for proper error control

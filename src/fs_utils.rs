@@ -81,6 +81,7 @@ impl FileTimeRange {
 }
 
 /// A struct that allows the precise location of data inside the file is in it
+/// TODO: Make FILE a FlacReader
 #[derive(Debug)]
 pub struct DataLocator {
     file: File,
@@ -95,6 +96,79 @@ impl DataLocator {
             index,
             time_range
         }
+    }
+
+    /// Checks if the Locator time_range intersects with the Index data
+    fn do_intersect(&self) -> bool {
+        // If the data start after the end of the range or the data ends before the beggining of the range
+        if self.index.min() > self.time_range.end || 
+            self.index.max() < self.time_range.start { 
+            return false;
+        }
+        // index function checks for no ownership, this function checks for ownership, invert the result
+        !self.index.is_empty([self.time_range.start, self.time_range.end])
+    }
+
+    /// Given a metric name and a time interval, returns all the files handles for the files that *might* contain that data (No data range intersection is done here)
+    pub fn get_locators_for_range(metric_name: &str, start_time: i64, end_time: i64) -> Option<Vec<DataLocator>> {
+        let mut file_index_vec = Vec::new();
+        let mut data_locator_vec = Vec::new();
+        let start_date = DateTime::<Utc>::from_utc(
+                                                chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
+                                                Utc,
+                                                        );
+        let end_date = DateTime::<Utc>::from_utc(
+                                            chrono::NaiveDateTime::from_timestamp_opt((end_time/1000).into(), 0).unwrap(),
+                                                Utc,
+                                                        );
+        let file_time_intervals = time_intervals(start_time, end_time);
+        println!("[INFO][READ] Time intervals for the range {:?} ", file_time_intervals);
+        let mut range_count = 0;
+        for date in DateRange(start_date, end_date) {
+            range_count += 1;
+            let data_file_name = format!("{}_{}",metric_name, date.format("%Y-%m-%d").to_string());
+            let vsri = VSRI::load(&data_file_name);
+            let file = match  fs::File::open(format!("{}.flac", data_file_name.clone())) {
+                Ok(file) => {
+                    file
+                },
+                Err(err) => {
+                    println!("[INFO][READ] Error processing {}.flac. Error: {}. Skipping file.", data_file_name, err); 
+                    continue; 
+                }
+            };
+            // If I got here, I should be able to unwrap VSRI safely.
+            file_index_vec.push((file, vsri.unwrap()));
+        }
+        // Creating the Time Range array
+        let start_ts_i32 = day_elapsed_seconds(start_time);
+        let end_ts_i32 = day_elapsed_seconds(end_time);
+        let mut time_intervals = Vec::new();
+        match range_count {
+            1 => { time_intervals.push(FileTimeRange::new(start_ts_i32, end_ts_i32));},
+            2 => {
+                time_intervals.push(FileTimeRange::new(start_ts_i32, MAX_INDEX_SAMPLES));
+                time_intervals.push(FileTimeRange::new(0, end_ts_i32));
+            },
+            _ => {
+                time_intervals.push(FileTimeRange::new(start_ts_i32, MAX_INDEX_SAMPLES));
+                for _i in 2..range_count {   
+                    time_intervals.push(FileTimeRange::new(0, MAX_INDEX_SAMPLES));
+                }
+                time_intervals.push(FileTimeRange::new(0, end_ts_i32));
+            }
+        }
+
+        // We have at least one file create the Object
+        if file_index_vec.len() >= 1 {
+            data_locator_vec = file_index_vec.into_iter()
+                                             .zip(time_intervals)
+                                             .map(|item| DataLocator::new(item.0.0, item.0.1, item.1))
+                                             .collect();
+            println!("[INFO][READ] Returning Object {:?} ", data_locator_vec); 
+            return Some(data_locator_vec);
+        }
+        None
     }
 }
 
