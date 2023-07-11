@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs::File;
 
 use symphonia::core::audio::SampleBuffer;
@@ -11,7 +10,7 @@ use symphonia::core::io::MediaSourceStream;
 
 use chrono::{DateTime, Utc};
 
-use crate::lib_vsri::{VSRI, self};
+use crate::lib_vsri;
 
 // --- Flac Reader
 // Remote Reader Spec: ?
@@ -59,7 +58,7 @@ impl SimpleFlacReader {
                 Ok(None) => break, // EOF.
                 Err(error) => panic!("[DEBUG][READ][FLAC] {}", error),
             }
-            println!("[DEBUG][READ][SimpleFLaC] Processing block... Samples processed: {:?}", sample_count);
+            debug!("[READ][SimpleFLaC] Processing block... Samples processed: {:?}", sample_count);
             if sample_count < start.unwrap_or(0) { continue; }
             if sample_count > end.unwrap_or(lib_vsri::MAX_INDEX_SAMPLES) { continue; }
             for sample in 0..block.duration() {
@@ -70,7 +69,7 @@ impl SimpleFlacReader {
                 sample_count += 1;
             }
         }
-        println!("[DEBUG][READ][SimpleFLaC] Returning samples for interval: {} {} Sample count: {:?}", start.unwrap_or(0), end.unwrap_or(0), sample_count);
+        debug!("[READ][SimpleFLaC] Returning samples for interval: {} {} Sample count: {:?}", start.unwrap_or(0), end.unwrap_or(0), sample_count);
         Ok(sample_vec)
     }
 
@@ -130,7 +129,7 @@ impl FlacMetric {
     fn get_format_reader(&self) -> Box<dyn FormatReader> {
         // TODO: One more unwrap to deal with
         let owned_file = self.file.try_clone().unwrap();
-        println!("[DEBUG][READ][FLAC] Probing file: {:?}",owned_file);
+        debug!("[READ][FLAC] Probing file: {:?}",owned_file);
         let file = Box::new(owned_file);
         // Create the media source stream using the boxed media source from above.
         let mss = MediaSourceStream::new(file, Default::default());
@@ -168,7 +167,7 @@ impl FlacMetric {
         loop {
             let packet = match format_reader.next_packet() {
                 Ok(packet) => packet,
-                Err(err) => break println!("[DEBUG][READ]Reader error: {}", err),
+                Err(err) => break error!("[READ]Reader error: {}", err),
             };
             // How many frames inside the packet
             let dur = packet.dur() as i32;
@@ -207,8 +206,8 @@ impl FlacMetric {
                         }
                     }
                 },
-                Err(SymphoniaError::DecodeError(err)) => println!("[DEBUG][READ]Decode error: {}", err),
-                Err(err) => break println!("[DEBUG][READ]Unexpeted Decode error: {}", err),
+                Err(SymphoniaError::DecodeError(err)) => error!("[READ]Decode error: {}", err),
+                Err(err) => break error!("[READ]Unexpeted Decode error: {}", err),
             }
         };
         Ok(sample_vec)
@@ -225,7 +224,7 @@ impl FlacMetric {
         loop {
             let packet = match format_reader.next_packet() {
                 Ok(packet) => packet,
-                Err(err) => break println!("[DEBUG][READ]Reader error: {}", err),
+                Err(err) => break debug!("[READ]Reader error: {}", err),
             };
             // Decode the packet into audio samples.
             match decoder.decode(&packet) {
@@ -253,8 +252,8 @@ impl FlacMetric {
                         }
                     }
                 },
-                Err(SymphoniaError::DecodeError(err)) => println!("[DEBUG][READ]Decode error: {}", err),
-                Err(err) => break println!("[DEBUG][READ]Unexpeted Decode error: {}", err),
+                Err(SymphoniaError::DecodeError(err)) => error!("[READ]Decode error: {}", err),
+                Err(err) => break error!("[READ]Unexpeted Decode error: {}", err),
             }
         };
         // Just to make it compile

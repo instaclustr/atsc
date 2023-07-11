@@ -95,7 +95,7 @@ impl VSRI {
     /// Creates the index, it doesn't create the file in the disk
     /// flush needs to be called for that
     pub fn new(filename: &String) -> Self {
-        println!("[DEBUG][INDEX] Creating new index!");
+        debug!("[INDEX] Creating new index!");
         let segments: Vec<[i32; 4]> = Vec::new();
         VSRI {
             index_file: filename.to_string(),
@@ -121,14 +121,14 @@ impl VSRI {
     /// Get the sample for this timestamp or the next one
     pub fn get_this_or_next(&self, y: i32) -> Option<i32> {
         let r = self.get_sample(y).or(self.get_next_sample(y));
-        println!("[DEBUG][INDEX]This or next location {:?} for TS {}", r, y);
+        debug!("[INDEX] This or next location {:?} for TS {}", r, y);
         r
     }
 
     /// Get the sample for this timestamp or the previous one
     pub fn get_this_or_previous(&self, y: i32) -> Option<i32> {
         let r = self.get_sample(y).or(self.get_previous_sample(y));
-        println!("[DEBUG][INDEX]This or previous location {:?} for TS {}", r, y);
+        debug!("[INDEX] This or previous location {:?} for TS {}", r, y);
         r
     }
 
@@ -235,7 +235,8 @@ impl VSRI {
         // Y needs to be bigger that the current max_ts, otherwise we are appending a point in the past
         // TODO: Quantiles sends several metrics for the same time, how to handle it?
         if y < self.max_ts {
-            panic!("[DEBUG][INDEX] Trying to index a point in the past: {}, provided point: {}",self.max_ts, y );
+            error!("[INDEX] Trying to index a point in the past: {}, provided point: {}",self.max_ts, y);
+            panic!("[INDEX] Trying to index a point in the past: {}, provided point: {}",self.max_ts, y);
         }
         self.max_ts = y;
         let segment_count = self.vsri_segments.len();
@@ -253,7 +254,7 @@ impl VSRI {
             // Check ownership by the current segment
             if self.fits_segment(y) {
                 // It fits, increase the sample count and it's done
-                println!("[DEBUG][INDEX] Same segment, updating. TS: {}", y);
+                debug!("[INDEX] Same segment, updating. TS: {}", y);
                 self.vsri_segments[segment_count-1][3] += 1;
                 return
             }
@@ -371,7 +372,7 @@ impl VSRI {
     /// x is the previous segment sample number
     /// We only have the first y0 point, nothing else
     fn create_fake_segment(&self, y:i32) -> [i32; 4] {
-        println!("[DEBUG][INDEX] New segment, creating for point: {}", y);
+        debug!("[INDEX] New segment, creating for point: {}", y);
         let segment = self.current_segment();
         // First point of the new segment: Prior starting point + Number of samples
         let x = segment[1] + segment[3];
@@ -394,7 +395,7 @@ impl VSRI {
         // x = (y - b)/ m
         // TODO: Can return float, watch out
         let x_value = (y-b)/last_segment[0];
-        println!("[DEBUG][INDEX] Fit Calculation (Segment {:?}). b: {},  x: {}, calculated x: {}",last_segment,b,(last_segment[3] + last_segment[1]),x_value);
+        debug!("[INDEX] Fit Calculation (Segment {:?}). b: {},  x: {}, calculated x: {}",last_segment,b,(last_segment[3] + last_segment[1]),x_value);
         x_value == last_segment[3] + last_segment[1]
     }
 
@@ -426,7 +427,7 @@ impl VSRI {
     /// Reads an index file and loads the content into the structure
     /// TODO: Add error control (Unwrap hell)
     pub fn load(filename: &String) -> Result<Self, std::io::Error> {
-        println!("[DEBUG][INDEX] Load existing index");
+        debug!("[INDEX] Load existing index");
         let file = File::open(format!("{}.vsri", &filename))?;
         let reader = BufReader::new(file);
         let mut min_ts = 0;
@@ -436,7 +437,7 @@ impl VSRI {
         for line in reader.lines() {
             let line = line?;
             match i {
-                1 => {println!("[DEBUG][INDEX] Processing index file: {}", line)}
+                1 => {debug!("[INDEX] Processing index file: {}", line)}
                 2 => {min_ts = line.trim().parse::<i32>().unwrap();}
                 3 => {max_ts = line.trim().parse::<i32>().unwrap();}
                 _ => {

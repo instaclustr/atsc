@@ -38,10 +38,10 @@ impl WavMetric {
                     last_file_created: None }
     }
     /// Flushes the metric to a WAV file
-    /// TODO: Unwrap hell in here. Fix it later
-    /// Too many assumptions on correct behavior of all the code. Assumption is the mother of all... Needs to be fixed
+    // TODO: Unwrap hell in here. Need better error control
+    // Too many assumptions on correct behavior of all the code. Assumption is the mother of all... Needs to be fixed
     pub fn flush(mut self) -> Result<(), ()> {
-        let mut vsri: Option<VSRI> = None;
+        let vsri: Option<VSRI>;
         if self.timeseries_data.is_empty() {
             // Can't flush empty data
             return Err(());
@@ -63,7 +63,6 @@ impl WavMetric {
             
         };
         // TODO: Check if the timestamp is one day ahead, if so, create another file, and pack the previous one as FLAC
-        // TODO: Deal with results too
         let vsri_unwrapped = &mut vsri.unwrap();
         for (ts, sample ) in self.timeseries_data.drain(..) {
             let short_ts = ts / 1000;
@@ -71,12 +70,23 @@ impl WavMetric {
             let channel_data = WavMetric::split_f64_into_i16s(sample);
             // Write the samples interleaved
             for sample in channel_data {
-                wav_writer.write_sample(sample);
+                let ww = wav_writer.write_sample(sample);
+                if ww.is_err() {
+                    error!("[WAVWRITER] Unable to write sample {:?} in file {:?}!",sample, self.metric_name);
+                    return Err(());
+                }
             }
         }
-        // TODO: Take care of the results
-        vsri_unwrapped.flush();
-        wav_writer.finalize();
+        let r = vsri_unwrapped.flush();
+        if r.is_err() {
+            error!("[WAVWRITER] Unable to flush VSRI for {:?}!", self.metric_name);
+            panic!("[WAVWRITER] Failed flushing index. Lost information. {}", r.unwrap_err())
+        }
+        let r2 = wav_writer.finalize();
+        if r2.is_err() {
+            error!("[WAVWRITER] Unable to flush WAV file {:?}!", self.metric_name);
+            panic!("[WAVWRITER] Failed flushing file. Lost information. {}", r.unwrap_err())
+        }
         Ok(())
     }
 

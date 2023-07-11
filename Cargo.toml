@@ -16,3 +16,12 @@ futures="*"
 symphonia= { version = "*", features = ["flac"] } 
 prom-remote-api = { version = "0.2.2", features=["warp"]}
 async-trait = "*"
+env_logger = "0.10.0"
+log = "0.4.0"
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3
+codegen-units = 1

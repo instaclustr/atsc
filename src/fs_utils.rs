@@ -1,4 +1,3 @@
-use core::time;
 /// All the utils/code related the to file management
 /// 
 /// ASSUMPTION: EACH DAY HAS 1 FILE!!! If this assumption change, change this file!
@@ -20,9 +19,9 @@ use core::time;
 
 use std::fs::{self, File};
 use std::mem;
-use chrono::{DateTime, Utc, Duration, Datelike};
+use chrono::{DateTime, Utc, Duration};
 
-use crate::flac_reader::{FlacMetric, SimpleFlacReader};
+use crate::flac_reader::SimpleFlacReader;
 use crate::lib_vsri::{VSRI, day_elapsed_seconds, start_day_ts, MAX_INDEX_SAMPLES};
 
 struct DateRange(DateTime<Utc>, DateTime<Utc>);
@@ -148,7 +147,7 @@ impl DataLocator {
         if samples_locations.is_none() { return prom_data; }
         let start = samples_locations.unwrap()[0];
         let end = samples_locations.unwrap()[1]-1;
-        println!("[DEBUG][READ] Samples located! From {} to {}. TS available: {}",start, end, tmp_vec.len());
+        debug!("[READ] Samples located! From {} to {}. TS available: {}",start, end, tmp_vec.len());
         let time_for_samples = &tmp_vec[start as usize..=end as usize];
         // The time I learned if..else is an expression!
         let temp_result = if start == 0 && end == self.index.get_sample_count() {
@@ -164,7 +163,7 @@ impl DataLocator {
                     prom_data.push(PromDataPoint::new(v, ts*1000));
                 }
             },
-            Err(err) => {println!("[DEBUG][READ] Error processing FLaC file {:?}", err); return prom_data;}
+            Err(err) => {error!("[READ] Error processing FLaC file {:?}", err); return prom_data;}
         }
         prom_data
     }
@@ -172,7 +171,7 @@ impl DataLocator {
     /// Given a metric name and a time interval, returns all the files handles for the files that *might* contain that data (No data range intersection is done here)
     pub fn get_locators_for_range(metric_name: &str, start_time: i64, end_time: i64) -> Option<Vec<DataLocator>> {
         let mut file_index_vec = Vec::new();
-        let mut data_locator_vec = Vec::new();
+        let data_locator_vec: Vec<DataLocator>;
         let start_date = DateTime::<Utc>::from_utc(
                                                 chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
                                                 Utc,
@@ -182,11 +181,11 @@ impl DataLocator {
                                                 Utc,
                                                         );
         let file_time_intervals = time_intervals(start_time, end_time);
-        println!("[INFO][READ] Time intervals for the range {:?} ", file_time_intervals);
+        debug!("[READ] Time intervals for the range {:?} ", file_time_intervals);
         let mut range_count = 0;
         for date in DateRange(start_date, end_date).enumerate() {
             let data_file_name = format!("{}_{}",metric_name, date.1.format("%Y-%m-%d").to_string());
-            println!("[INFO][READ] Time intervals for file {}: {:?} ", data_file_name, file_time_intervals[range_count]);
+            debug!("[READ] Time intervals for file {}: {:?} ", data_file_name, file_time_intervals[range_count]);
             let vsri = VSRI::load(&data_file_name);
             range_count += 1;
             let file = match  fs::File::open(format!("{}.flac", data_file_name.clone())) {
@@ -194,7 +193,7 @@ impl DataLocator {
                     file
                 },
                 Err(err) => {
-                    println!("[INFO][READ] Error processing {}.flac. Error: {}. Skipping file.", data_file_name, err); 
+                    warn!("[READ] Error processing {}.flac. Error: {}. Skipping file.", data_file_name, err); 
                     continue; 
                 }
             };
@@ -225,7 +224,7 @@ impl DataLocator {
             data_locator_vec = file_index_vec.into_iter()
                                              .map(|item| DataLocator::new(item.0, item.1, time_intervals[item.2.0], item.2.1))
                                              .collect();
-            println!("[INFO][READ] Returning Object {:?} ", data_locator_vec); 
+            debug!("[READ] Returning Object {:?} ", data_locator_vec); 
             return Some(data_locator_vec);
         }
         None
@@ -266,44 +265,10 @@ fn time_intervals(start_time: i64, end_time: i64) -> Vec<[i32; 2]> {
 /// Given a metric name and a time interval, returns all the files handles for the files that contain that data
 pub fn get_file_index_time(metric_name: &str, start_time: i64, end_time: i64) -> Option<Vec<DataLocator>> {
     DataLocator::get_locators_for_range(metric_name, start_time, end_time)
-   /*
-   let mut file_index_vec = Vec::new(); 
-   let start_date = DateTime::<Utc>::from_utc(
-                                            chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
-                                              Utc,
-                                                    );
-    let end_date = DateTime::<Utc>::from_utc(
-                                          chrono::NaiveDateTime::from_timestamp_opt((end_time/1000).into(), 0).unwrap(),
-                                            Utc,
-                                                    );
-    let file_time_intervals = time_intervals(start_time, end_time);
-    println!("[INFO][READ] Time intervals for the range {:?} ", file_time_intervals); 
-    for date in DateRange(start_date, end_date) {
-        let data_file_name = format!("{}_{}",metric_name, date.format("%Y-%m-%d").to_string());
-        let vsri = VSRI::load(&data_file_name);
-        let file = match  fs::File::open(format!("{}.flac", data_file_name.clone())) {
-            Ok(file) => {
-                file
-            },
-            Err(err) => {
-                println!("[INFO][READ] Error processing {}.flac. Error: {}. Skipping file.", data_file_name, err); 
-                continue; 
-            }
-         };
-         // If I got here, I should be able to unwrap VSRI safely.
-         file_index_vec.push((file, vsri.unwrap()));
-    }
-    // We have at least one file
-    if file_index_vec.len() >= 1 {
-        println!("[INFO][READ] Returning Object {:?} ", file_index_vec); 
-        return Some(file_index_vec);
-    } 
-    None
-    */
 }
 
 pub fn data_locator_into_prom_data_point(data: Vec<DataLocator>) -> Vec<PromDataPoint> {
-    println!("[DEBUG][READ] Locators: {:?}", data);
+    debug!("[READ] Locators: {:?}", data);
     let mut data_points = Vec::new();
     for dl in data {
         let mut proms = dl.into_prom_data_point();
@@ -349,20 +314,20 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
         let iter_index = pack.0;
         let file = pack.1.0;
         let vsri = pack.1.1;
-        println!("[DEBUG][READ] Locating samples. VSRI {:?} TS: {} - {}",vsri, start_ts_i32, end_ts_i32);
+        debug!("[READ] Locating samples. VSRI {:?} TS: {} - {}",vsri, start_ts_i32, end_ts_i32);
         // Check if the timestamps intercept the index space
         if file_count == 1 { 
-            println!("[DEBUG][READ] Processing single file...");
+            debug!("[READ] Processing single file...");
             // Case 2
             // get_sample can return None
             if vsri.min() > end_ts_i32 || vsri.max() < start_ts_i32 { 
-                println!("[DEBUG][READ] No intersection. Returning.");
+                debug!("[READ] No intersection. Returning.");
                 return data_points; 
             }
             let start_sample = vsri.get_this_or_next(start_ts_i32);
             if start_sample.is_none() {
                 // No sample in the file fits the current requested interval
-                println!("[DEBUG][READ] No intersection (Part2). Returning.");
+                debug!("[READ] No intersection (Part2). Returning.");
                 return data_points;
             }
             // If I can start reading the file, I can get at least one sample, so it is safe to unwrap.
@@ -370,7 +335,7 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
             samples_locations = [start_sample.unwrap(), end_sample];
         } else {
         // Case 1
-            println!("[DEBUG][READ] Processing multiple files...");
+            debug!("[READ] Processing multiple files...");
             match pack.0 {
                 // First file
                 0 => {
@@ -396,7 +361,7 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
         let tmp_vec = vsri.get_all_timestamps();
         let start = samples_locations[0];
         let end = samples_locations[1]-1;
-        println!("[DEBUG][READ] Samples located! From {} to {}. TS available: {}",start, end, tmp_vec.len());
+        debug!("[READ] Samples located! From {} to {}. TS available: {}",start, end, tmp_vec.len());
         // !@)(#*&!@)# usize and ints...
         let time_for_samples = &tmp_vec[start as usize..=end as usize];
         // The time I learned if..else is an expression!
@@ -415,9 +380,9 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
                     data_points.push(PromDataPoint::new(v, ts*1000));
                 }
             },
-            Err(err) => {println!("[DEBUG][READ] Error processing FLaC file {:?}", err); continue;}
+            Err(err) => {error!("[READ] Error processing FLaC file {:?}", err); continue;}
         }
     }
-    println!("[DEBUG][READ] Returning datapoints: {:?}", data_points);
+    debug!("[READ] Returning datapoints: {:?}", data_points);
     data_points
 }

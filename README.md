@@ -1,4 +1,6 @@
-# Work in Progress!!
+## Version: 0.1 Released: 11/07/2023
+
+Check Github issues for open... issues.
 
 ## Description
 
