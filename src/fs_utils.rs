@@ -47,20 +47,13 @@ pub struct PromDataPoint {
 }
 
 impl PromDataPoint {
+    /// Creates a new Prometheus Data Point. It assumes a timestamp with seconds since EPOCH, and converts internally to
+    /// miliseconds since EPOCH.
     pub fn new(data: f64, timestamp: i64) -> Self {
         PromDataPoint {
             point: data,
-            time: timestamp
+            time: timestamp*1000
         }
-    }
-
-    /// This will return a data point from a FLAC file for the provided point in time
-    pub fn read_data_point(file: &File) -> PromDataPoint {
-        let data_point = PromDataPoint {
-            point: 0.0,
-            time: 0,
-        };
-        data_point
     }
 }
 /// Holds a time range for the file and index
@@ -376,8 +369,7 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
             Ok(samples) => {
                 for (v, t) in samples.into_iter().zip(time_for_samples.into_iter()) {
                     let ts = *t as i64+ts_bases[iter_index];
-                    // Convert time to timestamp with miliseconds
-                    data_points.push(PromDataPoint::new(v, ts*1000));
+                    data_points.push(PromDataPoint::new(v, ts));
                 }
             },
             Err(err) => {error!("[READ] Error processing FLaC file {:?}", err); continue;}

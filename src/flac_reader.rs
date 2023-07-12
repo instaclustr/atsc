@@ -26,18 +26,16 @@ note: t=point in time, chan = channel, samples are the bytes for each channel.
 | byte | byte | byte | byte | byte | byte | byte | byte |  etc
 +------+------+------+------+------+------+------+------+-----
  */ 
-
+// TODO: Read from WAV file
 // Flac metric is giving a ton of issues, trying to get something simpler
 pub struct SimpleFlacReader {
     file: File, // The File where the metric is
-    interval_start: i64 // To keep compatibility
 }
 
 impl SimpleFlacReader {
-    pub fn new(file: File, start_ts: i64) -> Self {
+    pub fn new(file: File, _start_ts: i64) -> Self {
         SimpleFlacReader {
                     file,
-                    interval_start: start_ts,
                  }
     }
 
