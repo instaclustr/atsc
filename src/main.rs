@@ -24,12 +24,12 @@ extern crate log;
 use crate::fs_utils::get_file_index_time;
 
 // Data sampling frequency. How many seconds between each sample.
-static VERSION: &'static str = "0.1.0";
+static VERSION: &'static str = "0.1.1";
 
 fn get_flac_samples_to_prom(metric: &str, source: &str, _job: &str, start_ms: i64, end_ms: i64, step_ms: i64) -> Vec<Sample> {
-    // TODO: Count the number of samples for the given metric! -> Can be done with the Index alone \m/ \m/
-    // TODO: Do not ignore Job!
-    // TODO: Do not ignore Step!
+    // TODO: #6 Count the number of samples for the given metric! -> Can be done with the Index alone \m/ \m/
+    // TODO: #1 Do not ignore Job!
+    // TODO: #2 Do not ignore Step!
     // Just for today, Step in the files is always 15sec, 15000 ms.
     let sample_step = (step_ms/15000) as usize;
     if step_ms == 0 {
@@ -99,11 +99,25 @@ fn parse_remote_write_request(timeseries: &TimeSeries, _metadata: Option<&Metric
     
     if let (Some(metric), Some(source), Some(job)) = (metric, source, job) {
         // Not going to share state, flush it once you're done.
-        let mut wav_metric = WavMetric::new(metric.to_string(), source.to_string(), job.to_string());
-        let mut metric_data = timeseries.samples.iter().map(|x| (x.timestamp, x.value)).collect();
+        // TODO: #3 Improve write performance (?)
+        let mut metric_data: Vec<(i64, f64)> = timeseries.samples.iter().map(|x| (x.timestamp, x.value)).collect();
+        if timeseries.samples.len() < 1 {
+            error!("[WRITE][MAIN] Empty samples: {:?}", timeseries.samples);
+            return Ok(());
+        }
+        let mut wav_metric = WavMetric::new(metric.to_string(),
+                                                        source.to_string(),
+                                                        job.to_string(),
+                                                        metric_data[0].0);
         let mutable_metric_data = &mut metric_data;
         wav_metric.add_bulk_timeseries(mutable_metric_data);
-        let _ = wav_metric.flush();
+        match  wav_metric.flush() {
+            Ok(_) => return Ok(()),
+            Err(_samples) => {
+                // TODO: Improve this situation... (Retry?)
+                return Ok(());
+            }
+        }
     } else {
         warn!("[WRITE] Missing metric or source");
     }

@@ -16,7 +16,6 @@
 /// Or: 30Bytes for 2^32 Samples
 /// 
 /// Example of content of an index
-///     up_localhost:9090_2023-07-05
 ///     55745
 ///     59435
 ///     15,0,55745,166
@@ -230,13 +229,13 @@ impl VSRI {
 
     /// Update the index for the provided point
     /// y - time in seconds
-    /// TODO: Change PANIC for proper error control
-    pub fn update_for_point(&mut self, y: i32) {
+    pub fn update_for_point(&mut self, y: i32) -> Result<(),()> {
         // Y needs to be bigger that the current max_ts, otherwise we are appending a point in the past
-        // TODO: Quantiles sends several metrics for the same time, how to handle it?
+        // TODO: #11 Quantiles sends several metrics for the same time, how to handle it?
         if y < self.max_ts {
-            error!("[INDEX] Trying to index a point in the past: {}, provided point: {}",self.max_ts, y);
-            panic!("[INDEX] Trying to index a point in the past: {}, provided point: {}",self.max_ts, y);
+            // Is this always a period (day) change? Assuming so
+            warn!("[INDEX] Trying to index a point in the past: {}, provided point: {}",self.max_ts, y);
+            return Err(());
         }
         self.max_ts = y;
         let segment_count = self.vsri_segments.len();
@@ -244,7 +243,7 @@ impl VSRI {
         if segment_count == 0 {
             self.min_ts = y;
             self.vsri_segments.push(self.create_fake_segment(y));
-            return
+            return Ok(());
         }
         if self.is_fake_segment() {
             // In the presence of a fake segment (where m is 0), and a new point, we are now
@@ -256,11 +255,12 @@ impl VSRI {
                 // It fits, increase the sample count and it's done
                 debug!("[INDEX] Same segment, updating. TS: {}", y);
                 self.vsri_segments[segment_count-1][3] += 1;
-                return
+                return Ok(());
             }
             // If it doesn't fit, create a new fake segment
             self.vsri_segments.push(self.create_fake_segment(y));
         }
+        return Ok(());
     }
 
     /// Minimum time stamp
@@ -431,13 +431,12 @@ impl VSRI {
         let mut min_ts = 0;
         let mut max_ts = 0;
         let mut segments: Vec<[i32; 4]> = Vec::new();
-        let mut i = 1; // Line 1,2 and 3 are not segments.
+        let mut i = 1; // Line 1,2 are not segments.
         for line in reader.lines() {
             let line = line?;
             match i {
-                1 => {debug!("[INDEX] Processing index file: {}", line)}
-                2 => {min_ts = line.trim().parse::<i32>().unwrap();}
-                3 => {max_ts = line.trim().parse::<i32>().unwrap();}
+                1 => {min_ts = line.trim().parse::<i32>().unwrap();}
+                2 => {max_ts = line.trim().parse::<i32>().unwrap();}
                 _ => {
                     let values = line.split(',').map(|value| value.trim().parse::<i32>()).collect::<Result<Vec<i32>, _>>().unwrap();
                     segments.push([values[0],values[1],values[2],values[3]]);
