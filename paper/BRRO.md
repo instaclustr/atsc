@@ -10,8 +10,7 @@ The relevance of time as an axis makes time series data distinct from other type
 In this document we propose a novel approach to timeseries compression, instead of relying on compression based on the properties of the samples [2] [3] or in the small segments of the sequence [4].
 We propose an approach each timeseries as a digital signal and apply a set of techniques that already exist in other domains, namely in Audio compression.
 
-One important factor in our approach is that although we rely mostly on Function Approximation (FA), and that is frequently used in Timeseries as a lossy compression, we approach this problem from
-a lossless prespective. (INTERNAL COMMENT: Lossy might be very interesting too!)
+One important factor in our approach is that although we rely mostly on Function Approximation (FA), and that is frequently used in Timeseries as a lossy compression, we approach this problem from a lossless prespective. (INTERNAL COMMENT: Lossy might be very interesting too!)
 
 ## State of the art
 
@@ -19,15 +18,45 @@ The state of the art in Timeseries compression can be found here [5] and here [6
 
 ## Introduction
 
+Computer systems monitoring, not general timeseries monitoring, is a process that is normally
+characterized by very low frequency sampling of processes (1/20Hz to 1~2Hz). 
+(INTERNAL COMMENT: Does very low frequency creates the problem for FFTs, etc or is the tools that aren't expecting such low frequencies?)
+Another aspect is that in most cases, the signals don't exibith any peridicity or any harmonic components. As such, they are treated mostly as isolated samples or a short sequence of samples (delta-delta encoding).
+
+
 ## Background
+
+Why are we doing this
 
 ## BRRO
 
+What is BRRO really doing
+
 ### VSRI (Very Small Rolo Index)
+
+This is an index technique used to address a sequential data file.
 
 ## Results
 
+### Testing methodology
+
+The way we test is by setting our `BRRO-server` as a backend (both read and write) for a prometheus instance. Prometheus is connected to a Instaclustr 3 node cassandra cluster
+with prometheus endpoint enabled.
+After the test runs for a given period of time (indicated in the results), we compare the space usage of Prometheus data directory vs the space usage of `BRRO-server` data directory.
+A note on the result of the *BRRO single*. *BRRO single* is the expected output on a server that as run for a very long time. No headers, and a lot of data that can be efficiently compressed. It is not a realistic measure, but a *best case* for the current test.
+All the data from every file is pushed into a single file that is then compressed. 
+
+### BRRO-server 0.1.1 - 12/07/2023
+- Signal Optimizations: None
+- Metric Count: 565
+- Running Time: ~14h
+- Prometheus data size: 7.8 MB
+- BRRO data size: 4.6 MB (69% less)
+- BRRO single: 2.9 MB (268% less)
+
 ## Conclusion
+
+BRRO is the best that you can ever have!
 
 
 ## References
