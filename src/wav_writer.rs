@@ -26,25 +26,30 @@ pub struct WavMetric {
 // We are choosing option B!
 
 impl WavMetric {
-    pub fn new(name: String, source: String, job: String) -> WavMetric {
-        // Creation time
+    /// Create a new WavMetric struct. `start_sample_ts` *must be* timestamp with miliseconds!
+    pub fn new(name: String, source: String, job: String, start_sample_ts: i64) -> WavMetric {
+        // Sample needs to fall within the file that the TS refers too, not the calendar day
+        let start_date = DateTime::<Utc>::from_utc(
+            chrono::NaiveDateTime::from_timestamp_opt((start_sample_ts/1000).into(), 0).unwrap(),
+            Utc,);
         // TODO: Do not ignore JOB!
-        let now: DateTime<Utc> = Utc::now();
         WavMetric { metric_name: name,
                     instance: source,
                     job,
                     timeseries_data: Vec::new(),
-                    creation_time: now.format("%Y-%m-%d").to_string(),
+                    creation_time: start_date.format("%Y-%m-%d").to_string(),
                     last_file_created: None }
     }
     /// Flushes the metric to a WAV file
     // TODO: Unwrap hell in here. Need better error control
     // Too many assumptions on correct behavior of all the code. Assumption is the mother of all... Needs to be fixed
-    pub fn flush(mut self) -> Result<(), ()> {
+    pub fn flush(mut self) -> Result<(), i32> {
+        let mut processed_samples: i32 = 0;
         let vsri: Option<VSRI>;
         if self.timeseries_data.is_empty() {
             // Can't flush empty data
-            return Err(());
+            error!("[WRITE][WAV] Call flush on empty data");
+            return Err(processed_samples);
         }
         // Append if file exists, otherwise create spec and flush a new file
         let mut wav_writer = match self.last_file_created.is_none() {
@@ -62,21 +67,31 @@ impl WavMetric {
             }
             
         };
-        // TODO: Check if the timestamp is one day ahead, if so, create another file, and pack the previous one as FLAC
+        // TODO: #12 Check if the timestamp is one day ahead, if so, create another file, and pack the previous one as FLAC
         let vsri_unwrapped = &mut vsri.unwrap();
-        for (ts, sample ) in self.timeseries_data.drain(..) {
+        let mut int_r: Result<(), i32> = Ok(());
+        for (ts, sample ) in self.timeseries_data {
             let short_ts = ts / 1000;
-            vsri_unwrapped.update_for_point(day_elapsed_seconds(short_ts));
+            let r = vsri_unwrapped.update_for_point(day_elapsed_seconds(short_ts));
+            if r.is_err() {
+                // Period changed (default: day)
+                warn!("[WRITE][WAV] Detected a day change while processing samples. Wrote {} before error.", processed_samples);
+                int_r = Err(processed_samples);
+                break;
+            }
             let channel_data = WavMetric::split_f64_into_i16s(sample);
             // Write the samples interleaved
             for sample in channel_data {
                 let ww = wav_writer.write_sample(sample);
                 if ww.is_err() {
                     error!("[WAVWRITER] Unable to write sample {:?} in file {:?}!",sample, self.metric_name);
-                    return Err(());
+                    return Err(processed_samples);
                 }
             }
+            processed_samples += 1;
         }
+        debug!("[WRITE][WAV] Wrote {} samples", processed_samples);
+        // TODO: Process there errors too, create different errors here
         let r = vsri_unwrapped.flush();
         if r.is_err() {
             error!("[WAVWRITER] Unable to flush VSRI for {:?}!", self.metric_name);
@@ -87,7 +102,7 @@ impl WavMetric {
             error!("[WAVWRITER] Unable to flush WAV file {:?}!", self.metric_name);
             panic!("[WAVWRITER] Failed flushing file. Lost information. {}", r.unwrap_err())
         }
-        Ok(())
+        int_r
     }
 
     /// Create a file accordingly to the day of the year, the metric and the instance that generated the metric
