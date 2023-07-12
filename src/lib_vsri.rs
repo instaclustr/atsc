@@ -402,16 +402,14 @@ impl VSRI {
     /// Writes the index to the disk
     /// File format
     /// line | content
-    /// 1    | index name (should match file name). eg: cpu_index
-    /// 2    | minimum timestamp on this file. eg: 10
-    /// 3    | maximum timestamp on this file. eg: 34510 
-    /// 4..N | Segments. 4 fields separated by commas. ex: 0,1,2,3
+    /// 1    | minimum timestamp on this file. eg: 10
+    /// 2    | maximum timestamp on this file. eg: 34510 
+    /// 3..N | Segments. 4 fields separated by commas. ex: 0,1,2,3
     pub fn flush(&self) -> Result<(), std::io::Error> {
         let file = File::create(format!("{}.vsri", &self.index_file))?;
         let mut writer = BufWriter::new(file);
     
         // Write index_file, min_ts, max_ts on the first three lines
-        writeln!(writer, "{}", self.index_file)?;
         writeln!(writer, "{}", self.min_ts)?;
         writeln!(writer, "{}", self.max_ts)?;
     
