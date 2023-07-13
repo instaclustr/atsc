@@ -1,6 +1,6 @@
 /// Very Small Rolo Index
 /// This is an index made for detection of gaps in continuous data with the same sampling rate.
-/// Each continous segment of data will be mapped to a line using the formula y = mx + B plus
+/// Each continuous segment of data will be mapped to a line using the formula y = mx + B plus
 /// the number of points in the data series.
 /// m - Sampling rate
 /// b - Series initial point in time in [x,y]
@@ -10,7 +10,7 @@
 /// This way, discovering the segment number is solving the above equation for X if the 
 /// time provided is bigger than the initial point.
 /// 
-/// best case for sample retrival O(1)
+/// best case for sample retrieval O(1)
 /// worst case O(N) (N is the number of segments)
 /// Space usage: 5Bytes for 64k samples. 
 /// Or: 30Bytes for 2^32 Samples
@@ -43,7 +43,7 @@ pub fn day_elapsed_seconds(timestamp_sec: i64) -> i32 {
     (hour * 3600 + minute * 60 + second) as i32
 }
 
-/// Returns the timestamp for the begining of the day given a DateTime object.
+/// Returns the timestamp for the beginning of the day given a DateTime object.
 pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
     let hour= dt.time().hour();
     let minute = dt.time().minute();
@@ -51,7 +51,7 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
     dt.timestamp() - (hour * 3600 + minute * 60 + second) as i64
 }
 
-/// In this implementation we are writting sample by sample to the WAV file, so
+/// In this implementation we are writing sample by sample to the WAV file, so
 /// we can't do a proper segment calculation. So there will a special first segment
 /// that will hold the first point so we can calculate the segments from there.
 /// 
@@ -77,7 +77,7 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 /// min_ts: the minimum TS available in this file
 /// max_ts: the highest TS available in this file
 /// vsri_segments: Description of each segment
-///                [sample_rate (m), initial_point(x,y), # of samples(lenght)]
+///                [sample_rate (m), initial_point(x,y), # of samples(length)]
 /// Each segments describes a line with the form of mX + B that has a lenght 
 /// of # of samples.
 #[derive(Debug)]

@@ -80,9 +80,10 @@ fn get_flac_samples_to_prom(metric: &str, source: &str, _job: &str, start_ms: i6
     //flac_content.iter().step_by(step_size).enumerate().map(|(i, sample)| Sample{value: *sample as f64, timestamp: (start_ms + (i as i64)*step_ms) as i64}).collect()
 }
 
-fn parse_remote_write_request(timeseries: &TimeSeries, _metadata: Option<&MetricMetadata>) -> Result<()> {
+fn parse_remote_write_request(timeseries: &TimeSeries, metadata: Option<&MetricMetadata>) -> Result<()> {
     debug!("[WRITE] samples: {:?}", timeseries.samples);
     debug!("[WRITE] labels: {:?}", timeseries.labels);
+    debug!("[WRITE] metadata: {:?}", metadata);
     
     let mut metric: Option<&str> = None;
     let mut source: Option<&str> = None;
@@ -139,7 +140,7 @@ impl RemoteStorage for FlacStorage {
     type Context = u64;
     // TODO: Figure out why the empty Results
     async fn write(&self, _ctx: Self::Context, req: WriteRequest) -> Result<()> {
-        //println!("flac write, req:{req:?}");
+        trace!("[MAIN][WRITE] req:{req:?}");
         if req.metadata.is_empty() {
             for timeseries in req.timeseries {
                 let _ = parse_remote_write_request(&timeseries, None);
