@@ -1,6 +1,7 @@
-use std::env::args;
-
+use std::{env::args, io::{self, Read, BufRead}};
 use hound::{WavSpec, WavWriter};
+use clap::{Parser, command, arg};
+
 /*
 Reads a WAV file, checks the channels and the information contained there. From that
 information takes a decision on the best channel, block size and bitrate for the BRRO
@@ -9,7 +10,11 @@ encoders.
 
 /* Read a WAV file,  */
 fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
-    let mut reader = hound::WavReader::open(filename).unwrap();
+    let r_reader = hound::WavReader::open(filename);
+    let mut reader = match r_reader {
+        Ok(reader) => reader,
+        Err(_err) => { return Vec::new();}
+    };
     let num_channels = reader.spec().channels as usize;
 
     let mut raw_data: Vec<f64> = Vec::new();
@@ -28,10 +33,11 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
     return raw_data;
 }
 
-fn generate_wav_header(channels: Option<i32>, bitdepth: u16) -> WavSpec {
+fn generate_wav_header(channels: Option<i32>, bitdepth: u16, samplerate: u32) -> WavSpec {
     let spec = hound::WavSpec {
         channels: channels.unwrap_or(4) as u16,
-        sample_rate: 8000,
+        // TODO: Sample rate adaptations
+        sample_rate: samplerate,
         bits_per_sample: bitdepth,
         sample_format: hound::SampleFormat::Int
     };
@@ -40,9 +46,11 @@ fn generate_wav_header(channels: Option<i32>, bitdepth: u16) -> WavSpec {
 
 /// Write a WAV file with the outputs of data analysis
 fn write_optimal_wav(filename: &str, data: Vec<f64>, bitdepth: i32, channels: i32) {
-    let header = generate_wav_header(Some(channels), bitdepth as u16);
-    let file_path = format!("opt_{}", filename);
-    let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(&file_path).unwrap();
+    let header: WavSpec = generate_wav_header(Some(channels), bitdepth as u16, 8000);
+    let mut file_path = format!("{}", filename);
+    file_path.truncate(file_path.len() - 4);
+    file_path = format!("{}_OPT.wav", file_path);
+    let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(file_path).unwrap();
     let mut wav_writer = WavWriter::new(file, header).unwrap();
     for sample in data {
         let _ = match bitdepth {
@@ -120,6 +128,16 @@ fn get_max(a: i32, b: i32) -> i32 {
     if a >= b { a } else { b }
 }
 
+/// Converts a float via multiplication and truncation 
+fn to_multiply_and_truncate(number: f64, mul: i32) -> i64 {
+    (number*mul as f64) as i64
+}
+
+/// Check if this is a CPU Metric, it is identified in the name
+fn is_cpu(filename: &str) -> bool {
+    false
+}
+
 /// Go through the data, check min and max values, spectral analysis (later)
 /// Check if data fits in 8,16,24,32 bits. If so reduce it to a single channel with
 /// those bit depths.
@@ -158,26 +176,71 @@ fn analyze_data(data: &Vec<f64>) -> (i32, bool) {
 
     let recommended_bitdepth = get_max(bitdepth, bitdepth_signed);
     if !fractional {
-        print!(" Recommended Bitdepth: {} ", recommended_bitdepth);
+        println!(" Recommended Bitdepth: {} ", recommended_bitdepth);
     } else {
-        print!(" Fractional, Recommended Bitdepth: {}, Fractions max: {} min: {}", recommended_bitdepth, max_frac, min_frac);
+        println!(" Fractional, Recommended Bitdepth: {}, Fractions max: {} min: {}", recommended_bitdepth, max_frac, min_frac);
     }
     (recommended_bitdepth, fractional)
 }
 
-fn main() {
-
-    let arguments: Vec<String> = args().collect();
-    // Read file from arg
-    print!("\nFile: {},", arguments[1]);
-    let wav_data = read_metrics_from_wav(&arguments[1]);
+fn process_args(filename: &str, optimize: bool) {
+    print!("\nFile: {} ,", filename);
+    let wav_data = read_metrics_from_wav(filename);
     let (bitdepth, fractional) = analyze_data(&wav_data);
     if bitdepth == 64 || fractional { 
         //println!("No optimization, exiting");
         std::process::exit(0); 
+    } else if optimize {
+        println!("\nWriting optimal file!");
+        write_optimal_wav(filename, wav_data, bitdepth, 1);
     }
-    if arguments.len() > 2 {
-        print!("\nWriting optimal file!");
-        write_optimal_wav(&arguments[1], wav_data, bitdepth, 1);
+}
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// input file
+    #[arg(short, long)]
+    input: String,
+
+    /// Write a new file with optimized settings
+    #[arg(short)]
+    write: bool,
+
+    /// Samplerate to generate the optimized file
+    #[arg(short, long, default_value_t = 8000)]
+    samplerate: u32,
+}
+
+fn main() {
+    // How to break the float part???
+    let arguments: Vec<String> = args().collect();
+    let mut writeout: bool = false;
+    match arguments.len() {
+        1 => {},
+        2 => { if arguments[1].as_str() == "-w" {
+                        writeout=true; 
+                } else {
+                    process_args(arguments[1].as_str(), writeout);
+                    std::process::exit(0); 
+                }
+            },
+        3 => { if arguments[1].as_str() == "-w" {
+                    process_args(arguments[2].as_str(), true);
+                    std::process::exit(0); 
+                } else {
+                    println!("Wrong arguments!");
+                    std::process::exit(1); 
+                }
+            },
+        _  => { println!("Too many arguments!");
+               std::process::exit(1); 
+            }
+    }
+        
+    // Read STDIN
+    let stdin = io::stdin();
+    for line in stdin.lock().lines() {
+        let line = line.expect("Could not read line from standard in");
+        process_args(line.trim(), writeout);
     }
 }
