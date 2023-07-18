@@ -1,6 +1,8 @@
 # BRRO - A Novel Approach to Monitoring TimeSeries Compression
 
-(BR from Bromhead RO from Rolo, BRRO sounds cool (?). Ok, ok, we can get a new name!)
+(BR from Bromhead RO from Rolo, BRRO sounds cool (?). Ok, ok, we can get a new name.)
+
+> INTERNAL COMMENT: There is a very generic (expired too) patent on compression [11].
 
 ## Abstract
 
@@ -8,12 +10,14 @@ Time series data is a collection of observations (behavior) for a single subject
 For example: Max Temperature, Humidity and Wind (all three behaviors) in New York City (single entity) collected on First day of every year (multiple intervals of time)
 The relevance of time as an axis makes time series data distinct from other types of data. [1]
 
-In this document we propose a novel approach to timeseries compression, instead of relying on compression based on the properties of the samples [2] [3] or in the small segments of the sequence [4].
+In this document we propose a novel approach to Monitoring timeseries compression, instead of relying on compression based on the properties of the samples [2] [3] or in the small segments of the sequence [4].
 We propose an approach each timeseries as a digital signal and apply a set of techniques that already exist in other domains, namely in Audio compression.
 
 One important factor in our approach is that although we rely mostly on Function Approximation (FA), and that is frequently used in Timeseries as a lossy compression, we approach this problem from a lossless perspective. 
 
 > INTERNAL COMMENT: Lossy might be very interesting too!
+> INTERNAL COMMENT 2: Lossy might be the only way of getting decent float compression besides changing the FA
+> INTERNAL COMMENT 3: Floats are 100% understood. No compression, no loss. Everything can be a counter! Let's go!
 
 ## Prior art and State of the art
 
@@ -45,7 +49,7 @@ Why are we doing this:
 - Storage costs are high
 - Egress costs are high
 - Given the amount of data, techniques like averaging are used to drop points. This reduces information available.
-- Techniques like the above consume a lot of Compute to walk over the points.
+    - Techniques like the above consume a lot of Compute to walk over the points.
 
 ## BRRO
 
@@ -63,7 +67,7 @@ What is BRRO really doing:
 5. Once a decent number of samples, apply audio compatible **open source licensed**, **non-patented** compression techniques. This might include:
     1. Channel splitting. By dividing data into several channels we can use existing channel correlation techniques to reduce the channels sizes,
     2. Blocking, divide the signal samples in blocks,
-    3. Apply a modeling technique to each block that best suits the signal, eg: LPC, Polynomial Prediction, Fast Fourier Transforms, Wavelets.
+    3. Apply a modeling technique to each block that best suits the signal, eg: LPC, Polynomial Prediction, ~~Fast Fourier Transforms, Wavelets~~ (signals we work don't exhibit a decent behavior for Wavelets and/or FFT analysis).
 6. Generate the final compressed file
 
 While from point 4 onwards it is very much a normal audio compression process with fairly well known and document processes, steps 1. to 4. are unique to BRRO and allows us to follow up with step 5 and benefit from all the existing processes.
@@ -130,3 +134,4 @@ BRRO is the best that you can ever have!
 8. https://www.microsemi.com/document-portal/doc_view/129825-ac376-smartfusion-csoc-implementation-of-flac-player-using-hardware-and-software-partitioning-app-note
 9. https://en.wikipedia.org/wiki/List_of_hardware_and_software_that_supports_FLAC
 10. https://cassandra.apache.org/doc/latest/cassandra/operating/metrics.html
+11. https://www.freepatentsonline.com/5839100.html

@@ -1,6 +1,29 @@
 use std::{env::args, io::{self, Read, BufRead}};
 use hound::{WavSpec, WavWriter};
 use clap::{Parser, command, arg};
+use regex::Regex;
+
+enum MetricTag {
+    Percent(i32),
+    Duration(i32),
+    Other
+}
+
+impl MetricTag {
+    fn from_float(&self, x: f64) -> i64 {
+        match self {
+            MetricTag::Other => {
+                0
+            }
+            MetricTag::Percent(y) => {
+                to_multiply_and_truncate(x, *y)
+            }
+            MetricTag::Duration(y) => {
+                to_multiply_and_truncate(x, *y)
+            }
+        }
+    }
+}
 
 /*
 Reads a WAV file, checks the channels and the information contained there. From that
@@ -44,7 +67,7 @@ fn generate_wav_header(channels: Option<i32>, bitdepth: u16, samplerate: u32) ->
     return spec;
 }
 
-/// Write a WAV file with the outputs of data analysis
+/// Write a WAV file with the outputs of data analysis for float data
 fn write_optimal_wav(filename: &str, data: Vec<f64>, bitdepth: i32, channels: i32) {
     let header: WavSpec = generate_wav_header(Some(channels), bitdepth as u16, 8000);
     let mut file_path = format!("{}", filename);
@@ -57,6 +80,22 @@ fn write_optimal_wav(filename: &str, data: Vec<f64>, bitdepth: i32, channels: i3
             8 =>  wav_writer.write_sample(as_i8(sample)),
             16 => wav_writer.write_sample(as_i16(sample)),
             _ => wav_writer.write_sample(as_i32(sample))
+        };
+    }
+}
+
+fn write_optimal_int_wav(filename: &str, data: Vec<i64>, bitdepth: i32, channels: i32) {
+    let header: WavSpec = generate_wav_header(Some(channels), bitdepth as u16, 8000);
+    let mut file_path = format!("{}", filename);
+    file_path.truncate(file_path.len() - 4);
+    file_path = format!("{}_OPT.wav", file_path);
+    let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(file_path).unwrap();
+    let mut wav_writer = WavWriter::new(file, header).unwrap();
+    for sample in data {
+        let _ = match bitdepth {
+            8 =>  wav_writer.write_sample(sample as i8),
+            16 => wav_writer.write_sample(sample as i16),
+            _ => wav_writer.write_sample(sample as i32)
         };
     }
 }
@@ -134,8 +173,20 @@ fn to_multiply_and_truncate(number: f64, mul: i32) -> i64 {
 }
 
 /// Check if this is a CPU Metric, it is identified in the name
-fn is_cpu(filename: &str) -> bool {
-    false
+fn tag_metric(filename: &str) -> MetricTag {
+    // If it says percent_
+    let mut regex = Regex::new(r"(?m)percent_").unwrap();
+    if regex.captures(filename).is_some() {
+        // 2 significant digits resolution (Linux resolution)
+        return MetricTag::Percent(100);
+    }
+    // if it says _seconds
+    regex = Regex::new(r"(?m)_seconds").unwrap();
+    if regex.captures(filename).is_some() {
+        // 1 micro second resolution
+        return MetricTag::Duration(1_000_000);
+    }
+    MetricTag::Other
 }
 
 /// Go through the data, check min and max values, spectral analysis (later)
@@ -157,8 +208,31 @@ fn analyze_data(data: &Vec<f64>) -> (i32, bool) {
 
     // If fractional is it relevant?
     let max_frac = split_n(max).1;
-    let min_frac = split_n(min).1;
 
+    let recommended_bitdepth = find_bitdepth(max_int, min_int);
+    if !fractional {
+        println!(" Recommended Bitdepth: {} ", recommended_bitdepth);
+    } else {
+        println!(" Fractional, Recommended Bitdepth: {}, Fractions max: {}", recommended_bitdepth, max_frac);
+    }
+    (recommended_bitdepth, fractional)
+}
+
+fn analyze_int_data(data: &Vec<i64>) -> i32 {
+    let mut min: i64 = 0;
+    let mut max: i64 = 0;
+    for value in data {
+        let t_value = *value;
+        if t_value > max { max = t_value};
+        if t_value < min { min = t_value};
+    }
+
+    let recommended_bitdepth = find_bitdepth(max, min);
+    println!(" Recommended Bitdepth: {} ", recommended_bitdepth);
+    recommended_bitdepth
+}
+
+fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
     // Check where those ints fall into
     let bitdepth = match max_int {
         _ if max_int <= u8::MAX.into() => 8,
@@ -175,24 +249,40 @@ fn analyze_data(data: &Vec<f64>) -> (i32, bool) {
     };
 
     let recommended_bitdepth = get_max(bitdepth, bitdepth_signed);
-    if !fractional {
-        println!(" Recommended Bitdepth: {} ", recommended_bitdepth);
-    } else {
-        println!(" Fractional, Recommended Bitdepth: {}, Fractions max: {} min: {}", recommended_bitdepth, max_frac, min_frac);
-    }
-    (recommended_bitdepth, fractional)
+    recommended_bitdepth
 }
 
 fn process_args(filename: &str, optimize: bool) {
     print!("\nFile: {} ,", filename);
+    let mut bitdepth = 64;
+    let mut fractional = true;
     let wav_data = read_metrics_from_wav(filename);
-    let (bitdepth, fractional) = analyze_data(&wav_data);
+    // Depending on Metric Tag, apply a transformation
+    let tag = tag_metric(filename);
+    let iwav_data =  match tag {
+        MetricTag::Other => Vec::new(),
+        _ => { wav_data
+            .iter()
+            .map(|x| tag.from_float(*x))
+            .collect()
+            }      
+    };
+    // We split the code here
+    if iwav_data.len() > 0 {
+        fractional = false;
+        bitdepth = analyze_int_data(&iwav_data);
+    } else {
+        (bitdepth, fractional) = analyze_data(&wav_data);
+    }
     if bitdepth == 64 || fractional { 
         //println!("No optimization, exiting");
         std::process::exit(0); 
     } else if optimize {
         println!("\nWriting optimal file!");
-        write_optimal_wav(filename, wav_data, bitdepth, 1);
+        match iwav_data.len() {
+            0 => write_optimal_wav(filename, wav_data, bitdepth, 1),
+            _ => write_optimal_int_wav(filename, iwav_data, bitdepth, 1)
+        }
     }
 }
 #[derive(Parser, Debug)]
@@ -212,7 +302,8 @@ struct Args {
 }
 
 fn main() {
-    // How to break the float part???
+    // How to break the float part??? --> THERE ARE NO FLOATS!
+    // https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/deployment_guide/s2-proc-stat
     let arguments: Vec<String> = args().collect();
     let mut writeout: bool = false;
     match arguments.len() {
