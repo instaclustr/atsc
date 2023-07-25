@@ -118,6 +118,13 @@ All the data from every file is pushed into a single file that is then compresse
 - BRRO data size: 4.6 MB (69% less)
 - BRRO single: 2.9 MB (268% less)
 
+## Further work
+
+Explore:
+
+- Mutual information (transinformation)
+- Kullback–Leibler divergence (information gain)
+
 ## Conclusion
 
 BRRO is the best that you can ever have!

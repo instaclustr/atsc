@@ -2,11 +2,15 @@ use std::{env::args, io::{self, BufRead}};
 use hound::{WavSpec, WavWriter};
 use clap::{Parser, command, arg};
 use regex::Regex;
+use median::Filter;
 
+#[derive(Debug)]
 enum MetricTag {
     Percent(i32), // If it is a percent reduce significant digits to 2
     Duration(i32), // if it is a duration reduce precision to 1 microsecond
     NotFloat, // A metric that has a float representation but shouldn't (Eg. Precision is not needed)
+    QuasiRandom, // A metric that exhibits a quasi random sample behavior. (E.g. Network deltas, heap memory)
+    Bytes(i32), // Data that is in bytes... Make it MB, or KB
     Other // Everything else
 }
 
@@ -16,7 +20,7 @@ impl MetricTag {
             MetricTag::Other => {
                 0
             }
-            MetricTag::NotFloat => {
+            MetricTag::NotFloat | MetricTag::QuasiRandom => {
                 x as i64
             }
             MetricTag::Percent(y) => {
@@ -24,6 +28,9 @@ impl MetricTag {
             }
             MetricTag::Duration(y) => {
                 to_multiply_and_truncate(x, *y)
+            },
+            MetricTag::Bytes(y) => {
+                (x as i64)/(*y as i64)
             }
         }
     }
@@ -178,15 +185,28 @@ fn to_multiply_and_truncate(number: f64, mul: i32) -> i64 {
     (number*mul as f64) as i64
 }
 
+fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
+    let mut filtered = Vec::with_capacity(data.len());
+    // 10minutes of data
+    let mut filter = Filter::new(50);
+    for point in data {
+        let point_int = MetricTag::QuasiRandom.from_float(*point);
+        let median = filter.consume(point_int);
+        filtered.push(median)
+    }
+    filtered
+}
+
 /// Check the type of metric and tag it
 fn tag_metric(filename: &str) -> MetricTag {
+    /// Should sort this by the probability of each tag, so the ones that are more common are dealt first
     // If it says percent_ or _utilization
     let mut regex = Regex::new(r"(?m)percent_|_utilization").unwrap();
     if regex.captures(filename).is_some() {
         // 2 significant digits resolution (Linux resolution)
         return MetricTag::Percent(100);
     }
-    // if it says _seconds
+    // if it says _client_request
     regex = Regex::new(r"(?m)_client_request").unwrap();
     if regex.captures(filename).is_some() {
         // Fractional requests are nothing but an averaging artifact
@@ -197,6 +217,11 @@ fn tag_metric(filename: &str) -> MetricTag {
     if regex.captures(filename).is_some() {
         // 1 micro second resolution
         return MetricTag::Duration(1_000_000);
+    }
+    // if it says _seconds
+    regex = Regex::new(r"(?m)_networkindelta|_networkoutdelta|_heapmemoryused_").unwrap();
+    if regex.captures(filename).is_some() {
+        return MetricTag::QuasiRandom;
     }
     MetricTag::Other
 }
@@ -276,8 +301,10 @@ fn process_args(filename: &str, optimize: bool) {
     println!("Original Data: {:?}", wav_data);
     // Depending on Metric Tag, apply a transformation
     let tag = tag_metric(filename);
+    println!("Tag: {:?}", tag);
     let iwav_data =  match tag {
         MetricTag::Other => Vec::new(),
+        MetricTag::QuasiRandom => to_median_filter(&wav_data),
         _ => { wav_data
             .iter()
             .map(|x| tag.from_float(*x))
