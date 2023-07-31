@@ -199,7 +199,7 @@ fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
 
 /// Check the type of metric and tag it
 fn tag_metric(filename: &str) -> MetricTag {
-    /// Should sort this by the probability of each tag, so the ones that are more common are dealt first
+    // Should sort this by the probability of each tag, so the ones that are more common are dealt first
     // If it says percent_ or _utilization
     let mut regex = Regex::new(r"(?m)percent_|_utilization").unwrap();
     if regex.captures(filename).is_some() {
@@ -298,7 +298,7 @@ fn process_args(filename: &str, optimize: bool) {
     let mut dc_component: i64 = 0;
     let mut fractional = true;
     let wav_data = read_metrics_from_wav(filename);
-    println!("Original Data: {:?}", wav_data);
+    println!("\nOriginal={:?};", wav_data);
     // Depending on Metric Tag, apply a transformation
     let tag = tag_metric(filename);
     println!("Tag: {:?}", tag);
@@ -314,7 +314,7 @@ fn process_args(filename: &str, optimize: bool) {
     // We split the code here
     if iwav_data.len() > 0 {
         fractional = false;
-        println!("int Data: {:?}", iwav_data);
+        println!("intData={:?};", iwav_data);
         (bitdepth, dc_component) = analyze_int_data(&iwav_data);
     } else {
         (bitdepth, dc_component, fractional) = analyze_data(&wav_data);
