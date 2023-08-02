@@ -42,7 +42,9 @@ struct Arguments {
     /// Second wav file
     file_two: String,
     /// Distance
-    distance: usize
+    distance: usize,
+    /// Block size
+    block: usize
 }
 
 fn main() {
@@ -51,8 +53,8 @@ fn main() {
 
     let binding_a: Vec<f64> = read_metrics_from_wav(&args.file_one);
     let binding_b: Vec<f64> = read_metrics_from_wav(&args.file_two);
-    let vec_slices_a: Vec<&[f64]> = binding_a.chunks(4096).collect();
-    let vec_slices_b: Vec<&[f64]> = binding_b.chunks(4096).collect();
+    let vec_slices_a: Vec<&[f64]> = binding_a.chunks(args.block).collect();
+    let vec_slices_b: Vec<&[f64]> = binding_b.chunks(args.block).collect();
     let data_a = vec_slices_a[0];
     let data_b = vec_slices_b[0];
 

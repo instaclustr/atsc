@@ -330,57 +330,39 @@ fn process_args(filename: &str, optimize: bool) {
         }
     }
 }
-#[derive(Parser, Debug)]
+#[derive(Parser, Default, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// input file
-    #[arg(short, long)]
     input: String,
 
-    /// Write a new file with optimized settings
+    /// Write a new file with optimized settings, named filename_OPT.wav
     #[arg(short)]
     write: bool,
 
     /// Samplerate to generate the optimized file
-    #[arg(short, long, default_value_t = 8000)]
-    samplerate: u32,
+    #[arg(short, long)]
+    samplerate: Option<u32>,
 
-    // Write samples to a file
-    #[arg(short)]
-    save_raw: bool,
+    /// Write raw (original) samples to a file, named as raw.out
+    #[arg(long, action)]
+    dump_raw: bool,
+
+    /// Write optimized samples to a file, named as optimized.out
+    #[arg(long, action)]
+    dump_optimized: bool,
 }
 
 fn main() {
     // How to break the float part??? --> THERE ARE NO FLOATS!
     // https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/deployment_guide/s2-proc-stat
-    let arguments: Vec<String> = args().collect();
-    let mut writeout: bool = false;
-    match arguments.len() {
-        1 => {},
-        2 => { if arguments[1].as_str() == "-w" {
-                        writeout=true; 
-                } else {
-                    process_args(arguments[1].as_str(), writeout);
-                    std::process::exit(0); 
-                }
-            },
-        3 => { if arguments[1].as_str() == "-w" {
-                    process_args(arguments[2].as_str(), true);
-                    std::process::exit(0); 
-                } else {
-                    println!("Wrong arguments!");
-                    std::process::exit(1); 
-                }
-            },
-        _  => { println!("Too many arguments!");
-               std::process::exit(1); 
-            }
-    }
-        
+    let arguments = Args::parse();
+    println!("{:?}", arguments);
+    process_args(&arguments.input, arguments.write);
     // Read STDIN
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
         let line = line.expect("Could not read line from standard in");
-        process_args(line.trim(), writeout);
+        process_args(line.trim(), arguments.write);
     }
 }
