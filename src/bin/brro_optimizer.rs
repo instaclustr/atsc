@@ -1,8 +1,9 @@
-use std::{env::args, io::{self, BufRead}};
+use std::io::{self, BufRead};
 use hound::{WavSpec, WavWriter};
 use clap::{Parser, command, arg};
 use regex::Regex;
 use median::Filter;
+use log::{debug, error, info, warn};
 
 #[derive(Debug)]
 enum MetricTag {
@@ -95,6 +96,7 @@ fn write_optimal_wav(filename: &str, data: Vec<f64>, bitdepth: i32, dc: i64, cha
             _ => wav_writer.write_sample(as_i32(sample-fdc))
         };
     }
+    let _ = wav_writer.finalize();
 }
 
 fn write_optimal_int_wav(filename: &str, data: Vec<i64>, bitdepth: i32, dc: i64, channels: i32) {
@@ -111,6 +113,7 @@ fn write_optimal_int_wav(filename: &str, data: Vec<i64>, bitdepth: i32, dc: i64,
             _ => wav_writer.write_sample((sample-dc) as i32)
         };
     }
+    let _ = wav_writer.finalize();
 }
 
 fn as_i8(value: f64) -> i8 {
@@ -251,9 +254,9 @@ fn analyze_data(data: &Vec<f64>) -> (i32, i64, bool) {
     // Finding the bitdepth without the DC component
     let recommended_bitdepth = find_bitdepth(max_int-min_int, min_int);
     if !fractional {
-        println!(" Recommended Bitdepth: {} ", recommended_bitdepth);
+        info!(" Recommended Bitdepth: {} ", recommended_bitdepth);
     } else {
-        println!(" Fractional, Recommended Bitdepth: {}, Fractions max: {}", recommended_bitdepth, max_frac);
+        info!(" Fractional, Recommended Bitdepth: {}, Fractions max: {}", recommended_bitdepth, max_frac);
     }
     (recommended_bitdepth, min_int, fractional)
 }
@@ -268,7 +271,7 @@ fn analyze_int_data(data: &Vec<i64>) -> (i32, i64) {
     }
 
     let recommended_bitdepth = find_bitdepth(max-min, min);
-    println!(" Recommended Bitdepth: {} ", recommended_bitdepth);
+    info!(" Recommended Bitdepth: {} ", recommended_bitdepth);
     (recommended_bitdepth, min)
 }
 
@@ -292,16 +295,16 @@ fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
     recommended_bitdepth
 }
 
-fn process_args(filename: &str, optimize: bool) {
-    print!("\nFile: {} ,", filename);
+fn process_args(filename: &str, arguments: &Args) {
+    debug!("File: {} ,", filename);
     let mut bitdepth = 64;
     let mut dc_component: i64 = 0;
     let mut fractional = true;
     let wav_data = read_metrics_from_wav(filename);
-    println!("\nOriginal={:?};", wav_data);
+    if arguments.dump_raw { println!("Original={:?};", wav_data); }
     // Depending on Metric Tag, apply a transformation
     let tag = tag_metric(filename);
-    println!("Tag: {:?}", tag);
+    debug!("Tag: {:?}", tag);
     let iwav_data =  match tag {
         MetricTag::Other => Vec::new(),
         MetricTag::QuasiRandom => to_median_filter(&wav_data),
@@ -314,16 +317,16 @@ fn process_args(filename: &str, optimize: bool) {
     // We split the code here
     if iwav_data.len() > 0 {
         fractional = false;
-        println!("intData={:?};", iwav_data);
+        if arguments.dump_optimized { println!("intData={:?};", iwav_data); }
         (bitdepth, dc_component) = analyze_int_data(&iwav_data);
     } else {
         (bitdepth, dc_component, fractional) = analyze_data(&wav_data);
     }
     if bitdepth == 64 || fractional { 
-        //println!("No optimization, exiting");
+        debug!("No optimization, exiting");
         std::process::exit(0); 
-    } else if optimize {
-        println!("\nWriting optimal file!");
+    } else if arguments.write {
+        debug!("Writing optimal file!");
         match iwav_data.len() {
             0 => write_optimal_wav(filename, wav_data, bitdepth, dc_component, 1),
             _ => write_optimal_int_wav(filename, iwav_data, bitdepth, dc_component, 1)
@@ -356,13 +359,8 @@ struct Args {
 fn main() {
     // How to break the float part??? --> THERE ARE NO FLOATS!
     // https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/deployment_guide/s2-proc-stat
+    env_logger::init();
     let arguments = Args::parse();
-    println!("{:?}", arguments);
-    process_args(&arguments.input, arguments.write);
-    // Read STDIN
-    let stdin = io::stdin();
-    for line in stdin.lock().lines() {
-        let line = line.expect("Could not read line from standard in");
-        process_args(line.trim(), arguments.write);
-    }
+    debug!("{:?}", arguments);
+    process_args(&arguments.input, &arguments);
 }
