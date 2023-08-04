@@ -11,7 +11,7 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
 
     let mut raw_data: Vec<f64> = Vec::new();
     let mut u64_holder: [u16; 4] = [0,0,0,0]; 
-    
+
     // Iterate over the samples and channels and push each sample to the vector
     let mut current_channel: usize = 0;
     for sample in reader.samples::<i16>() {
@@ -30,7 +30,7 @@ fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
                 ((bits[1] as u64) << 16) |
                 ((bits[2] as u64) << 32) |
                 ((bits[3] as u64) << 48);
-    
+
     let f64_value = f64::from_bits(u64_bits);
     f64_value
 }
