@@ -8,21 +8,31 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
         Err(_err) => { return Vec::new();}
     };
     let num_channels = reader.spec().channels as usize;
+    let bit_depth = reader.spec().bits_per_sample;
 
     let mut raw_data: Vec<f64> = Vec::new();
-    let mut u64_holder: [u16; 4] = [0,0,0,0]; 
 
-    // Iterate over the samples and channels and push each sample to the vector
-    let mut current_channel: usize = 0;
-    for sample in reader.samples::<i16>() {
-        u64_holder[current_channel] = sample.unwrap() as u16;
-        current_channel += 1;
-        if current_channel == num_channels {
-            raw_data.push(join_u16_into_f64(u64_holder));
-            current_channel = 0;
+    // This is a very special case where the wav file holds a 64bit float spread over 4 16bit channels
+    if num_channels == 4 && bit_depth == 16 {
+        // Iterate over the samples and channels and push each sample to the vector
+        let mut u64_holder: [u16; 4] = [0,0,0,0]; 
+        let mut current_channel: usize = 0;
+
+        for sample in reader.samples::<i16>() {
+            u64_holder[current_channel] = sample.unwrap() as u16;
+            current_channel += 1;
+            if current_channel == num_channels {
+                raw_data.push(join_u16_into_f64(u64_holder));
+                current_channel = 0;
+            }
+        }
+    } else {
+        for sample in reader.samples::<i16>() {
+            raw_data.push(sample.unwrap() as f64);
         }
     }
-    return raw_data;
+
+    raw_data
 }
 
 fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
@@ -42,7 +52,7 @@ fn write_optimal_int_wav(filename: &str, data: Vec<i16>, bitdepth: i32, channels
     let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(file_path).unwrap();
     let mut wav_writer = WavWriter::new(file, header).unwrap();
     for sample in data {
-        let _ = wav_writer.write_sample(sample);
+        let _ = wav_writer.write_sample(sample as i8);
     }
     let _ = wav_writer.finalize();
 }
@@ -50,7 +60,6 @@ fn write_optimal_int_wav(filename: &str, data: Vec<i16>, bitdepth: i32, channels
 fn generate_wav_header(channels: Option<i32>, bitdepth: u16, samplerate: u32) -> WavSpec {
     let spec = hound::WavSpec {
         channels: channels.unwrap_or(4) as u16,
-        // TODO: Sample rate adaptations
         sample_rate: samplerate,
         bits_per_sample: bitdepth,
         sample_format: hound::SampleFormat::Int
@@ -80,6 +89,9 @@ struct Arguments {
     /// reverse the process, picks the first file, writes in the second
     #[arg(long, action)]
     reverse: bool,
+    /// Don't write a file, just dump the calculated contents
+    #[arg(long, action)]
+    dump: bool,
 }
 
 fn main() {
@@ -89,6 +101,11 @@ fn main() {
     let binding_a: Vec<f64> = read_metrics_from_wav(&args.file_one);
     let binding_b: Vec<f64> = read_metrics_from_wav(&args.file_two);
     let (mid, sides) = calculate_mid_channel(binding_a, binding_b);
-    write_optimal_int_wav("mid", mid, 16, 1);
-    write_optimal_int_wav("side", sides, 16, 1);
+    if args.dump {
+        println!("Mid: {:?}", mid);
+        println!("Sides: {:?}", sides);
+    } else {
+        write_optimal_int_wav("mid", mid, 16, 1);
+        write_optimal_int_wav("side", sides, 8, 1);
+    }
 }
