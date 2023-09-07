@@ -1,14 +1,12 @@
-function x = process_ts(ts, w, freq_n, n_hold)
+function [dc, ac, composed, fft_data] = process_ts(ts, w, freq_n, n_hold)
 % ts: timeseries
 % w: window size
 % freq_n: Number of frequencies to find
-
-% To hold FFT data and reuse it
+tic
 if nargin<4
   n_hold = 0;
 endif
 
-% Remove NaN from the data
 nanIDX = find(isnan(ts));
 while(~isempty(nanIDX))
   ts(nanIDX) = ts(nanIDX+1);
@@ -16,13 +14,18 @@ while(~isempty(nanIDX))
 end
 
 % Split the signal in DC and AC parts
-dc = movmean(ts, w, 'omitnan');
-ac = ts-dc;
+%dc = movmean(ts, w);
+ac = center(ts);
+%ac = ts-dc;
+dc = ts-ac;
+
+%hold on;plot(dc);plot(ac);
 
 window_n = ceil(length(ts)/w);
 data_rebuild = [];
 fft_store = [];
-
+fft_data = [];
+window_err = [];
 % Process the whole signal
 for i=1:window_n
   window_s = (i-1)*w + 1;
@@ -55,7 +58,7 @@ for i=1:window_n
       tmp_f(ix) = 0;
       out_fft(ix) = mx;
     end
-
+    fft_data = [fft_data out_fft];
     %disp("Window Frequencies: ")
     %disp(sort(window_freqs))
     out_ift = ifft(out_fft);
@@ -69,17 +72,39 @@ for i=1:window_n
 
   % Process DC data
   yi = polyfit(1:window_size,data_dc,1);
-  disp("DC points: ")
-  disp(yi)
+  %disp("DC points: ")
+  %disp(yi)
   % Rebuild the sinal for the window
   yii = polyval(yi,1:window_size);
-  data_rebuild = [data_rebuild real(out_ift)+yii];
+  % Build the dataset for the window
+  window_rebuild = real(out_ift)+yii;
 
+  % Calculate the error
+  pererr = abs(data_window-window_rebuild)./data_window*100;
+  mean(pererr)
+  window_err = [window_err pererr];
+  data_rebuild = [data_rebuild window_rebuild];
+
+
+  %plot(abs(out_fft))
 end
+toc
+composed = data_rebuild;
+nnz(fft_data)
+figure;
+plot(window_err);
 
-x = data_rebuild;
+figure;
+subplot(2,2,1);
+plot(data_rebuild);
+title('Rebuild');
+subplot(2,2,2);
+plot(ts, 'r');
+title('Original');
+subplot(2,2,[3,4]);
+plot(ts,'r',data_rebuild,'b');
+title('Both');
 
-plot(data_rebuild)
 
 %{
 wdw = ac(1:w);
