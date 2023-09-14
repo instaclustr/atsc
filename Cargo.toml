@@ -16,6 +16,10 @@ prom-remote-api = { version = "0.3.0", features = ["warp"] }
 async-trait = "0.1.71"
 env_logger = "0.10.0"
 log = "0.4.0"
+clap = {version = "4.3.14", features = ["derive"] }
+regex = "1.9.1"
+median = "0.3.2"
+dtw_rs = "0.9.5"
 
 [profile.dev]
 opt-level = 0
