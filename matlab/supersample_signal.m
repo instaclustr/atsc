@@ -1,4 +1,7 @@
 function [x, y] = supersample_signal(ts, ts_sampling_rate, polinomial)
+% This function adds data samples interpolation the original data samples
+% Why? FFTs like more data, so this is a way to add more data to smooth
+% out the FFTs
   warning ('off', 'all') ;
   tic
   x = (1:ts_sampling_rate:ts_sampling_rate*length(ts));
