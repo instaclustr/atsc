@@ -1,0 +1,19 @@
+[package]
+name = "optimizer"
+version = "0.1.0"
+authors = ["Carlos Rolo <carlos.rolo@netapp.com>"]
+edition = "2021"
+license = "Apache-2.0"
+description = "Optimizer stage for the compressor."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+sysinfo = "0.29.0"
+hound = "3.5"
+chrono = "0.4.26"
+claxon = "0.4.3"
+env_logger = "0.10.0"
+log = "0.4.0"
+clap = {version = "4.3.14", features = ["derive"] }
+regex = "1.9.1"
+median = "0.3.2"
