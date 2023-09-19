@@ -2,8 +2,10 @@ use std::fs::File;
 use std::io::Write;
 use std::fs;
 use std::io::{self, BufRead};
+use std::path::Path;
 use hound::{WavSpec, WavWriter};
 use clap::{Parser, command, arg};
+use clap::builder::Str;
 use regex::Regex;
 use median::Filter;
 use log::{debug, error, info, warn};
@@ -299,47 +301,52 @@ fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
 }
 
 fn process_args(directory_path: &str, arguments: &Args) {
-    match fs::read_dir(directory_path) {
-        Ok(entries) => {
-            for entry in entries {
-                match entry {
-                    Ok(entry) => {
-                        let path = entry.path();
-                        if path.is_file() {
-                            match path.file_name().and_then(|s| s.to_str()) {
-                                Some(filename) => process_file(directory_path, filename, path.to_str().unwrap_or(""), arguments),
-                                None => eprintln!("Failed to convert path to string: {:?}", path),
-                            }
+    let new_directory = format!("new_{}", directory_path);
 
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Error reading directory entry: {}", e);
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("Error reading directory: {}. Error: {}", directory_path, e);
-        }
-    }
-}
-
-fn process_file(directory: &str, file_name: &str, full_path: &str, arguments: &Args) {
-    let new_directory = format!("new_{}", directory);
-    if let Err(e) = fs::create_dir_all(&new_directory) {
-        eprintln!("Unable to create directory: {}. Error: {}", new_directory, e);
+    if fs::create_dir_all(&new_directory).is_err() {
+        eprintln!("Unable to create directory: {}", new_directory);
         return;
     }
 
-    let mut file = File::create(format!("{}/new_{}", new_directory, file_name)).expect("Unable to create file");
+    if let Ok(entries) = fs::read_dir(directory_path) {
+        entries.for_each(|entry_result| {
+            if let Ok(entry) = entry_result {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                        let file_stem = Path::new(filename)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or(filename);
+
+                        process_file(
+                            &new_directory,
+                            file_stem,
+                            path.to_str().unwrap_or(""),
+                            arguments
+                        );
+                    } else {
+                        eprintln!("Failed to convert path to string: {:?}", path);
+                    }
+                }
+            } else if let Err(e) = entry_result {
+                eprintln!("Error reading directory entry: {}", e);
+            }
+        });
+    } else {
+        eprintln!("Error reading directory: {}", directory_path);
+    }
+}
+
+fn process_file(new_directory: &str, file_name: &str, full_path: &str, arguments: &Args) {
+    let mut file = File::create(format!("{}/new_{}.txt", new_directory, file_name)).expect("Unable to create file");
 
     debug!("File: {} ,", full_path);
     let mut bitdepth = 64;
     let mut dc_component: i64 = 0;
     let mut fractional = true;
     let wav_data = read_metrics_from_wav(full_path);
-    if arguments.dump_raw { writeln!(file, "Original={:?};", wav_data).expect("Unable to write to file"); }
+    if arguments.dump_raw { writeln!(file, "{:?}", wav_data).expect("Unable to write to file"); }
     // Depending on Metric Tag, apply a transformation
     let tag = tag_metric(full_path);
     debug!("Tag: {:?}", tag);
@@ -356,7 +363,7 @@ fn process_file(directory: &str, file_name: &str, full_path: &str, arguments: &A
     // We split the code here
     if iwav_data.len() > 0 {
         fractional = false;
-        if arguments.dump_optimized { writeln!(file, "intData={:?};", iwav_data).expect("Unable to write to file"); }
+        if arguments.dump_optimized { writeln!(file, "{:?}", iwav_data).expect("Unable to write to file"); }
         (bitdepth, dc_component) = analyze_int_data(&iwav_data);
     } else {
         (bitdepth, dc_component, fractional) = analyze_data(&wav_data);
