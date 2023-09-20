@@ -386,6 +386,9 @@ struct Args {
     #[arg(short)]
     write: bool,
 
+    #[arg(short, action)]
+    directory: bool,
+
     /// Samplerate to generate the optimized file
     #[arg(short, long)]
     samplerate: Option<u32>,
