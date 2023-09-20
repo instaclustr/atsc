@@ -7,6 +7,12 @@ pub enum Compressor {
     Static,
 }
 
-pub struct Compressor {
-    
+impl Compressor {
+    pub fn compress(self) {
+
+    }
+
+    pub fn decompress(self) {
+        
+    }
 }
