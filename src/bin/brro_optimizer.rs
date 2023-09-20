@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Write;
 use std::fs;
 use std::io::{self, BufRead};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use hound::{WavSpec, WavWriter};
 use clap::{Parser, command, arg};
 use clap::builder::Str;
@@ -313,21 +313,8 @@ fn process_args(directory_path: &str, arguments: &Args) {
             if let Ok(entry) = entry_result {
                 let path = entry.path();
                 if path.is_file() {
-                    if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-                        let file_stem = Path::new(filename)
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or(filename);
+                    process_file(&new_directory, path, arguments);
 
-                        process_file(
-                            &new_directory,
-                            file_stem,
-                            path.to_str().unwrap_or(""),
-                            arguments
-                        );
-                    } else {
-                        eprintln!("Failed to convert path to string: {:?}", path);
-                    }
                 }
             } else if let Err(e) = entry_result {
                 eprintln!("Error reading directory entry: {}", e);
@@ -338,44 +325,54 @@ fn process_args(directory_path: &str, arguments: &Args) {
     }
 }
 
-fn process_file(new_directory: &str, file_name: &str, full_path: &str, arguments: &Args) {
-    let mut file = File::create(format!("{}/new_{}.txt", new_directory, file_name)).expect("Unable to create file");
+fn process_file(new_directory: &str, full_path: PathBuf, arguments: &Args) {
 
-    debug!("File: {} ,", full_path);
-    let mut bitdepth = 64;
-    let mut dc_component: i64 = 0;
-    let mut fractional = true;
-    let wav_data = read_metrics_from_wav(full_path);
-    if arguments.dump_raw { writeln!(file, "{:?}", wav_data).expect("Unable to write to file"); }
-    // Depending on Metric Tag, apply a transformation
-    let tag = tag_metric(full_path);
-    debug!("Tag: {:?}", tag);
-    let iwav_data = match tag {
-        MetricTag::Other => Vec::new(),
-        MetricTag::QuasiRandom => to_median_filter(&wav_data),
-        _ => {
-            wav_data
-                .iter()
-                .map(|x| tag.from_float(*x))
-                .collect()
+    let full_path_str = full_path.to_str().unwrap_or("");
+    if let Some(filename) = full_path.file_name().and_then(|s| s.to_str()) {
+        let file_stem = Path::new(filename)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(filename);
+
+
+        let mut file = File::create(format!("{}/new_{}.txt", new_directory, file_stem)).expect("Unable to create file");
+
+        debug!("File: {} ,", full_path_str);
+        let mut bitdepth = 64;
+        let mut dc_component: i64 = 0;
+        let mut fractional = true;
+        let wav_data = read_metrics_from_wav(full_path_str);
+        if arguments.dump_raw { writeln!(file, "{:?}", wav_data).expect("Unable to write to file"); }
+        // Depending on Metric Tag, apply a transformation
+        let tag = tag_metric(full_path_str);
+        debug!("Tag: {:?}", tag);
+        let iwav_data = match tag {
+            MetricTag::Other => Vec::new(),
+            MetricTag::QuasiRandom => to_median_filter(&wav_data),
+            _ => {
+                wav_data
+                    .iter()
+                    .map(|x| tag.from_float(*x))
+                    .collect()
+            }
+        };
+        // We split the code here
+        if iwav_data.len() > 0 {
+            fractional = false;
+            if arguments.dump_optimized { writeln!(file, "{:?}", iwav_data).expect("Unable to write to file"); }
+            (bitdepth, dc_component) = analyze_int_data(&iwav_data);
+        } else {
+            (bitdepth, dc_component, fractional) = analyze_data(&wav_data);
         }
-    };
-    // We split the code here
-    if iwav_data.len() > 0 {
-        fractional = false;
-        if arguments.dump_optimized { writeln!(file, "{:?}", iwav_data).expect("Unable to write to file"); }
-        (bitdepth, dc_component) = analyze_int_data(&iwav_data);
-    } else {
-        (bitdepth, dc_component, fractional) = analyze_data(&wav_data);
-    }
-    if bitdepth == 64 || fractional {
-        debug!("No optimization, exiting");
-        std::process::exit(0);
-    } else if arguments.write {
-        debug!("Writing optimal file!");
-        match iwav_data.len() {
-            0 => write_optimal_wav(full_path, wav_data, bitdepth, dc_component, 1),
-            _ => write_optimal_int_wav(full_path, iwav_data, bitdepth, dc_component, 1)
+        if bitdepth == 64 || fractional {
+            debug!("No optimization, exiting");
+            std::process::exit(0);
+        } else if arguments.write {
+            debug!("Writing optimal file!");
+            match iwav_data.len() {
+                0 => write_optimal_wav(full_path_str, wav_data, bitdepth, dc_component, 1),
+                _ => write_optimal_int_wav(full_path_str, iwav_data, bitdepth, dc_component, 1)
+            }
         }
     }
 }
