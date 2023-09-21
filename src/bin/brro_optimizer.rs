@@ -1,6 +1,11 @@
+use std::fs::File;
+use std::io::Write;
+use std::fs;
 use std::io::{self, BufRead};
+use std::path::{Path, PathBuf};
 use hound::{WavSpec, WavWriter};
 use clap::{Parser, command, arg};
+use clap::builder::Str;
 use regex::Regex;
 use median::Filter;
 use log::{debug, error, info, warn};
@@ -53,8 +58,8 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
     let num_channels = reader.spec().channels as usize;
 
     let mut raw_data: Vec<f64> = Vec::new();
-    let mut u64_holder: [u16; 4] = [0,0,0,0]; 
-    
+    let mut u64_holder: [u16; 4] = [0,0,0,0];
+
     // Iterate over the samples and channels and push each sample to the vector
     let mut current_channel: usize = 0;
     for sample in reader.samples::<i16>() {
@@ -171,10 +176,10 @@ fn split_n(x: f64) -> (i64, f64) {
 
 fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
     let u64_bits = (bits[0] as u64) |
-                ((bits[1] as u64) << 16) |
-                ((bits[2] as u64) << 32) |
-                ((bits[3] as u64) << 48);
-    
+        ((bits[1] as u64) << 16) |
+        ((bits[2] as u64) << 32) |
+        ((bits[3] as u64) << 48);
+
     let f64_value = f64::from_bits(u64_bits);
     f64_value
 }
@@ -183,7 +188,7 @@ fn get_max(a: i32, b: i32) -> i32 {
     a.max(b)
 }
 
-/// Converts a float via multiplication and truncation 
+/// Converts a float via multiplication and truncation
 fn to_multiply_and_truncate(number: f64, mul: i32) -> i64 {
     (number*mul as f64) as i64
 }
@@ -295,41 +300,79 @@ fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
     recommended_bitdepth
 }
 
-fn process_args(filename: &str, arguments: &Args) {
-    debug!("File: {} ,", filename);
-    let mut bitdepth = 64;
-    let mut dc_component: i64 = 0;
-    let mut fractional = true;
-    let wav_data = read_metrics_from_wav(filename);
-    if arguments.dump_raw { println!("Original={:?};", wav_data); }
-    // Depending on Metric Tag, apply a transformation
-    let tag = tag_metric(filename);
-    debug!("Tag: {:?}", tag);
-    let iwav_data =  match tag {
-        MetricTag::Other => Vec::new(),
-        MetricTag::QuasiRandom => to_median_filter(&wav_data),
-        _ => { wav_data
-            .iter()
-            .map(|x| tag.from_float(*x))
-            .collect()
-            }      
-    };
-    // We split the code here
-    if iwav_data.len() > 0 {
-        fractional = false;
-        if arguments.dump_optimized { println!("intData={:?};", iwav_data); }
-        (bitdepth, dc_component) = analyze_int_data(&iwav_data);
-    } else {
-        (bitdepth, dc_component, fractional) = analyze_data(&wav_data);
+fn process_args(directory_path: &str, arguments: &Args) {
+    let new_directory = format!("new_{}", directory_path);
+
+    if fs::create_dir_all(&new_directory).is_err() {
+        eprintln!("Unable to create directory: {}", new_directory);
+        return;
     }
-    if bitdepth == 64 || fractional { 
-        debug!("No optimization, exiting");
-        std::process::exit(0); 
-    } else if arguments.write {
-        debug!("Writing optimal file!");
-        match iwav_data.len() {
-            0 => write_optimal_wav(filename, wav_data, bitdepth, dc_component, 1),
-            _ => write_optimal_int_wav(filename, iwav_data, bitdepth, dc_component, 1)
+
+    if let Ok(entries) = fs::read_dir(directory_path) {
+        entries.for_each(|entry_result| {
+            if let Ok(entry) = entry_result {
+                let path = entry.path();
+                if path.is_file() {
+                    process_file(&new_directory, path, arguments);
+
+                }
+            } else if let Err(e) = entry_result {
+                eprintln!("Error reading directory entry: {}", e);
+            }
+        });
+    } else {
+        eprintln!("Error reading directory: {}", directory_path);
+    }
+}
+
+fn process_file(new_directory: &str, full_path: PathBuf, arguments: &Args) {
+
+    let full_path_str = full_path.to_str().unwrap_or("");
+    if let Some(filename) = full_path.file_name().and_then(|s| s.to_str()) {
+        let file_stem = Path::new(filename)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(filename);
+
+
+        let mut file = File::create(format!("{}/new_{}.txt", new_directory, file_stem)).expect("Unable to create file");
+
+        debug!("File: {} ,", full_path_str);
+        let mut bitdepth = 64;
+        let mut dc_component: i64 = 0;
+        let mut fractional = true;
+        let wav_data = read_metrics_from_wav(full_path_str);
+        if arguments.dump_raw { writeln!(file, "{:?}", wav_data).expect("Unable to write to file"); }
+        // Depending on Metric Tag, apply a transformation
+        let tag = tag_metric(full_path_str);
+        debug!("Tag: {:?}", tag);
+        let iwav_data = match tag {
+            MetricTag::Other => Vec::new(),
+            MetricTag::QuasiRandom => to_median_filter(&wav_data),
+            _ => {
+                wav_data
+                    .iter()
+                    .map(|x| tag.from_float(*x))
+                    .collect()
+            }
+        };
+        // We split the code here
+        if iwav_data.len() > 0 {
+            fractional = false;
+            if arguments.dump_optimized { writeln!(file, "{:?}", iwav_data).expect("Unable to write to file"); }
+            (bitdepth, dc_component) = analyze_int_data(&iwav_data);
+        } else {
+            (bitdepth, dc_component, fractional) = analyze_data(&wav_data);
+        }
+        if bitdepth == 64 || fractional {
+            debug!("No optimization, exiting");
+            std::process::exit(0);
+        } else if arguments.write {
+            debug!("Writing optimal file!");
+            match iwav_data.len() {
+                0 => write_optimal_wav(full_path_str, wav_data, bitdepth, dc_component, 1),
+                _ => write_optimal_int_wav(full_path_str, iwav_data, bitdepth, dc_component, 1)
+            }
         }
     }
 }
