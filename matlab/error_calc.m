@@ -1,14 +1,26 @@
-function pererr = error_calc(s1, s2, sampling)
-  % Calculates the error between 2 timeseries
-
-  % Most of the times the size of the signals don't match, matlab makes a fuss
-  % about it, so I adjust the size. We can probably ignore this in RUST
-  s1_trimmed = s1(1:sampling:end-1);
-  % A visualization of the 2 timeseries
-  plot(s1_trimmed, 'b', s2, 'r')
-  % Calculation of the percentage of error.
-  % Point by point we subtract from the original the calculated one
-  % make the absolute and divide over 100
-  pererr = abs(s2-s1_trimmed)./100;
-  % Output the median of the error
-  median(pererr)
+function median_percentage_error = calculate_error(input_signal, output_signal, sampling)
+    % Calculate the median percentage error between two time series signals.
+    % Input:
+    %   input_signal: Input time series signal.
+    %   output_signal: Output time series signal.
+    %   sampling: Sampling factor for trimming input_signal.
+    
+    % Input validation
+    if ~isnumeric(input_signal) || ~isnumeric(output_signal)
+        error('Input and output signals must be numeric arrays.');
+    end
+    
+    if ~isscalar(sampling) || sampling <= 0
+        error('Sampling must be a positive scalar.');
+    end
+    
+    % Trim input_signal to match the size of output_signal
+    input_trimmed = input_signal(1:sampling:end-1);
+    
+    % Calculate the percentage error
+    scaling_factor = 100; % You can adjust this as needed
+    percentage_error = abs(output_signal - input_trimmed) / scaling_factor;
+    
+    % Calculate and return the median percentage error
+    median_percentage_error = median(percentage_error);
+end
