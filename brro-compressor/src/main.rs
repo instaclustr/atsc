@@ -21,4 +21,9 @@ fn main() {
     let arguments = Args::parse();
     debug!("{:?}", arguments);
     info!("Start!");
+    // The baseline work should be: streaming read -> compress -> streaming write
+    // 1st Stage: Create a streaming reader
+    // 2nd Stage: Create a streaming writer
+    // The system should be able to read a stream and write it within the defined architecture
+    
 }
