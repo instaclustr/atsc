@@ -6,6 +6,7 @@ pub enum Compressor {
     Wavelet,
     Static,
     Polynomial,
+    TopBottom,
 }
 
 pub struct CompressedBlock {
