@@ -5,14 +5,10 @@ pub enum Compressor {
     FFT,
     Wavelet,
     Static,
+    Polynomial,
+    TopBottom,
 }
 
-impl Compressor {
-    pub fn compress(self) {
-
-    }
-
-    pub fn decompress(self) {
-        
-    }
+pub struct CompressedBlock {
+    
 }

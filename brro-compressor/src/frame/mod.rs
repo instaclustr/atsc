@@ -11,3 +11,10 @@ pub struct CompressorFrame{
     /// The compressor used in the current frame
     compressor: Compressor,
 }
+
+impl CompressorFrame {
+    /// For testing
+    pub fn new() -> Self {
+        CompressorFrame { frame_size: 0, max_value: 0, min_value: 0, compressor: Compressor::Noop }
+    }
+}
