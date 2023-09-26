@@ -17,9 +17,9 @@ pub struct CompressedBlock {
 }
 
 impl Compressor {
-    fn compress(&self, data: &[f64] ) -> Vec<f64> {
+    fn compress(&self, data: &[f64] ) -> Vec<u8> {
         match self {
-            Compressor::Noop => data.to_vec(),
+            Compressor::Noop => todo!(),
             Compressor::FFT => todo!(),
             Compressor::Constant => constant(data),
             _ => todo!(),
