@@ -59,10 +59,11 @@ impl Constant {
                 hit_count = v;
             }
         }
-        seen_values.remove(&constant);
         self.set_constant(constant);
         // Drain the map and set the residuals
         for (k, v) in seen_values.drain() {
+            // Skip the constant value
+            if k.eq(&constant) { continue; }
             // TODO: THIS IS WRONG! It needs a position!
             self.add_residual(v, *k);
         }

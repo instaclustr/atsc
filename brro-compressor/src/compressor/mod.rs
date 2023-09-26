@@ -12,10 +12,6 @@ pub enum Compressor {
     TopBottom,
 }
 
-pub struct CompressedBlock {
-    
-}
-
 impl Compressor {
     fn compress(&self, data: &[f64] ) -> Vec<u8> {
         match self {

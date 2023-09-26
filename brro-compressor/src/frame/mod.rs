@@ -10,11 +10,18 @@ pub struct CompressorFrame{
     min_value: i64,  
     /// The compressor used in the current frame
     compressor: Compressor,
+    /// Output from the compressor
+    data: Vec<u8>,
 }
 
 impl CompressorFrame {
     /// For testing
     pub fn new() -> Self {
-        CompressorFrame { frame_size: 0, max_value: 0, min_value: 0, compressor: Compressor::Noop }
+        CompressorFrame { 
+            frame_size: 0,
+            max_value: 0,
+            min_value: 0,
+            compressor: Compressor::Noop,
+            data: Vec::new() }
     }
 }
