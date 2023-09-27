@@ -1,26 +1,27 @@
-/// This compressor is for static values, it allows some level of non static (1%)
+/// This compressor is for static values, it allows some level of non-static (1%)
 use std::collections::HashMap;
 use log::{info, debug};
 
-const CONSTANT_COMPRESSOR_ID:u8 = 0;
+const CONSTANT_COMPRESSOR_ID: u8 = 0;
 
 /// This is a temporary implementation, other implementations (FFT, Polynomial) might provide the same result
-/// as going throught the data anyway.
+/// as going through the data anyway.
 pub struct Constant {
     pub id: u8,
     pub constant: i64,
     pub error: f64,
-    pub residuals: Vec<(i32,i64)>,
+    pub residuals: Vec<(i32, i64)>,
 }
 
 impl Constant {
     pub fn new() -> Self {
         debug!("Constant compressor");
-        Constant { 
-             id: CONSTANT_COMPRESSOR_ID,
-             constant: 0,
-             error: 0.0,
-             residuals: Vec::new() }
+        Constant {
+            id: CONSTANT_COMPRESSOR_ID,
+            constant: 0,
+            error: 0.0,
+            residuals: Vec::new(),
+        }
     }
 
     /// This compressor is about having a single constant for the whole segment
@@ -43,34 +44,36 @@ impl Constant {
     }
 
     /// Compresses the data. Walks the data array and sets one value as the constant.
-    /// TODO: VERY INNEFICIENT, we walk the data, and then the resulting map 2x. Find opportunities to improve
+    /// TODO: VERY INEFFICIENT, we walk the data, and then the resulting map 2x. Find opportunities to improve
     pub fn compress(&mut self, data: &[i64]) {
-        // Map all the entries, the one with most hits, is the constant, the remaining, are residuals
+        // Count occurrences of each value in the data
         let mut seen_values = HashMap::new();
-        for val in data {
-            seen_values.entry(val).and_modify(|e| {*e += 1}).or_insert(1);
+        for &val in data {
+            *seen_values.entry(val).or_insert(0) += 1;
         }
-        // Walk the map and pick the highest value as the constant, the others as residuals
+
+        // Find the constant and residuals in a single iteration
         let mut constant = 0;
         let mut hit_count = 0;
-        for (k,v) in seen_values {
-            if v > hit_count { 
-                constant = *k;
-                hit_count = v;
+        let mut residuals = Vec::new();
+
+        for (&val, &count) in &seen_values {
+            if count > hit_count {
+                constant = val;
+                hit_count = count;
+            } else {
+                // Push residuals as (sample_number, value) pairs
+                for _ in 0..count {
+                    residuals.push((0, val)); // Sample number is set to 0 for now
+                }
             }
         }
-        self.set_constant(constant);
-        // Drain the map and set the residuals
-        for (k, v) in seen_values.drain() {
-            // Skip the constant value
-            if k.eq(&constant) { continue; }
-            // TODO: THIS IS WRONG! It needs a position!
-            self.add_residual(v, *k);
-        }
 
+        self.set_constant(constant);
+        self.residuals = residuals;
     }
 
-    /// This function transforms the structure in a Binary stream to be appended to the frame
+    /// This function transforms the structure into a Binary stream to be appended to the frame
     pub fn to_bytes(self) -> Vec<u8> {
         // Use Bincode and flate2-rs?
         Vec::new()
@@ -79,4 +82,4 @@ impl Constant {
 
 pub fn constant(data: &[f64]) -> Vec<u8> {
     Vec::new()
- }
+}
