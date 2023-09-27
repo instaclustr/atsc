@@ -1,6 +1,6 @@
 use log::{info, debug};
 
-const CONSTANT_COMPRESSOR_ID:u8 = 256;
+const NOOP_COMPRESSOR_ID:u8 = 256;
 
 pub struct Noop {
     pub id: u8,
@@ -9,7 +9,7 @@ pub struct Noop {
 impl Noop {
     pub fn new() -> Self {
         debug!("Noop compressor");
-        Noop { id: CONSTANT_COMPRESSOR_ID }
+        Noop { id: NOOP_COMPRESSOR_ID }
     }
 
     /// This function transforms the structure in a Binary stream to be appended to the frame
