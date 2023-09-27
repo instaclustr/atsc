@@ -312,7 +312,7 @@ fn handle_directory(input_path: &str, arguments: &Args){
     let new_directory = format!("new_{}", input_path);
 
     if fs::create_dir_all(&new_directory).is_err() {
-        eprintln!("Unable to create directory: {}", new_directory);
+        error!("Unable to create directory: {}", new_directory);
         return;
     }
 
@@ -322,12 +322,12 @@ fn handle_directory(input_path: &str, arguments: &Args){
                 Ok(entry) if entry.path().is_file() => {
                     process_file(entry.path(), arguments, Some(&new_directory), );
                 }
-                Err(e) => eprintln!("Error reading directory entry: {}", e),
+                Err(e) => error!("Error reading directory entry: {}", e),
                 _ => {}
             }
         }
     } else {
-        eprintln!("Error reading directory: {}", input_path);
+        error!("Error reading directory: {}", input_path);
     }
 }
 fn process_file(full_path: PathBuf, arguments: &Args, new_directory: Option<&str>) {
@@ -336,7 +336,7 @@ fn process_file(full_path: PathBuf, arguments: &Args, new_directory: Option<&str
         let mut file = match File::create(&output_path) {
             Ok(file) => file,
             Err(_) => {
-                eprintln!("Unable to create file: {}", output_path);
+                error!("Unable to create file: {}", output_path);
                 return;
             }
         };
