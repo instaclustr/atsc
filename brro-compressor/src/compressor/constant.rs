@@ -1,11 +1,14 @@
 /// This compressor is for static values, it allows some level of non-static (1%)
 use std::collections::HashMap;
+use bincode::{Decode, Encode};
+use super::BinConfig;
 use log::{info, debug};
 
 const CONSTANT_COMPRESSOR_ID: u8 = 0;
 
 /// This is a temporary implementation, other implementations (FFT, Polynomial) might provide the same result
 /// as going through the data anyway.
+#[derive(Encode, Decode, PartialEq, Debug)]
 pub struct Constant {
     pub id: u8,
     pub constant: i64,
@@ -38,19 +41,24 @@ impl Constant {
 
     /// Sets the error value
     fn set_error(&mut self, data_lenght: usize){
-        self.error = (self.residuals.len()/data_lenght) as f32;
+        let residuals_count = self.residuals.len();
+        if residuals_count == 0 { self.error = 0.0 }
+        else { self.error = (residuals_count/data_lenght) as f32; }
     }
 
     /// Currently the data is provided in f64, this compressor needs i64. So the optimizer needs
     /// to get this out for the compressor
+    /// TODO: Make this work decently, right now is only doing a cast (And maybe that is it?)
     pub fn optimize(data: &[f64]) -> Vec<i64> {
-        let out_vec = Vec::with_capacity(data.len());
+        let mut out_vec = Vec::with_capacity(data.len());
+        for element in data {
+            out_vec.push(*element as i64);
+        }
         out_vec
     }
 
     /// Compresses the data. Walks the data array and sets one value as the constant.
-    /// TODO: VERY INEFFICIENT, we walk the data, and then the resulting map 2x. Find opportunities to improve
-    /// TODO2: Fix residuals positions
+    /// TODO: Fix residuals positions
     pub fn compress(&mut self, data: &[i64]) {
         // Count occurrences of each value in the data
         let mut seen_values = HashMap::new();
@@ -83,7 +91,8 @@ impl Constant {
     /// This function transforms the structure into a Binary stream to be appended to the frame
     pub fn to_bytes(self) -> Vec<u8> {
         // Use Bincode and flate2-rs? Do this at the Stream Level?
-        Vec::new()
+        let config = BinConfig::get();
+        bincode::encode_to_vec(&self, config).unwrap()
     }
 }
 
@@ -96,4 +105,14 @@ pub fn constant(data: &[f64]) -> Vec<u8> {
     // Convert to bytes
     c.to_bytes()
 }
-// TODO: WRITE A TESTTTTTTTTTT!!!!!!!!!!!!!!
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_constant() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
+        assert_eq!(constant(&vector1), [0, 2, 0, 0, 0, 0, 0]);
+    }
+}

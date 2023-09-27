@@ -1,3 +1,4 @@
+use bincode::config::{self, Configuration};
 use crate::compressor::constant::{constant};
 
 pub mod noop;
@@ -20,5 +21,15 @@ impl Compressor {
             Compressor::Constant => constant(data),
             _ => todo!(),
         }
+    }
+}
+
+pub struct BinConfig {
+    config: Configuration,
+ }
+
+impl BinConfig {
+    pub fn get() -> Configuration {
+        config::standard()
     }
 }
