@@ -1,6 +1,6 @@
 use log::{info, debug};
 
-const CONSTANT_COMPRESSOR_ID:u8 = 0;
+const CONSTANT_COMPRESSOR_ID:u8 = 256;
 
 pub struct Noop {
     pub id: u8,
