@@ -12,8 +12,6 @@ const CONSTANT_COMPRESSOR_ID: u8 = 0;
 pub struct Constant {
     pub id: u8,
     pub constant: i64,
-    // Lets make the error, the number of residuals/frame lenght
-    pub error: f32,
     pub residuals: Vec<(i32, i64)>,
 }
 
@@ -24,7 +22,6 @@ impl Constant {
         Constant {
             id: CONSTANT_COMPRESSOR_ID,
             constant: 0,
-            error: 0.0,
             residuals: Vec::with_capacity(frame_size),
         }
     }
@@ -40,10 +37,8 @@ impl Constant {
     }
 
     /// Sets the error value
-    fn set_error(&mut self, data_lenght: usize){
-        let residuals_count = self.residuals.len();
-        if residuals_count == 0 { self.error = 0.0 }
-        else { self.error = (residuals_count/data_lenght) as f32; }
+    pub fn get_error(self){
+        self.residuals.len();
     }
 
     /// Currently the data is provided in f64, this compressor needs i64. So the optimizer needs
@@ -85,7 +80,6 @@ impl Constant {
 
         self.set_constant(constant);
         self.residuals = residuals;
-        self.set_error(data.len());
     }
 
     /// This function transforms the structure into a Binary stream to be appended to the frame
