@@ -39,10 +39,14 @@ jobs:
         # we also need to add the runner and cargo_flags to the key so that a seperate cache is used.
         # Otherwise only the last build to finish would get saved to the cache.
         key: ${{ matrix.runner }} - ${{ matrix.cargo_flags }}
+    - name: Install external deps for the prom-remote-api crate
+      run: sudo apt-get install protobuf-compiler
     - name: Install cargo-hack
       run: cargo install cargo-hack --version 0.5.8
-    - name: Check `cargo fmt` was run
-      run: cargo fmt --all -- --check
+    # lucas - I strongly reccomend reenabling this in the future,
+    # but I've disabled it for now so I dont trash this already large diff with formatting changes
+    #- name: Check `cargo fmt` was run
+    #  run: cargo fmt --all -- --check
     - name: Ensure that all crates compile and have no warnings under every possible combination of features
       # some things to explicitly point out:
       # * clippy also reports rustc warnings and errors

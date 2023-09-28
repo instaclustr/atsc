@@ -1,5 +1,5 @@
 use bincode::config::{self, Configuration};
-use crate::compressor::constant::{constant};
+use crate::compressor::constant::constant;
 
 pub mod noop;
 pub mod constant;

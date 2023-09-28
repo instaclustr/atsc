@@ -2,8 +2,8 @@ use std::fs::File;
 use std::io::{BufReader, Read, Result, Take, Error, ErrorKind};
 
 enum FileType {
-    WAV,
-    RAW,
+    Wav,
+    Raw,
 }
 
 fn is_wav(reader: &mut Take<BufReader<File>>) -> Result<bool> {
@@ -21,8 +21,8 @@ fn detect_file_type(filename: &str) -> Result<FileType> {
     }
 
     if is_wav(&mut BufReader::new(file).take(12))? {
-        Ok(FileType::WAV)
+        Ok(FileType::Wav)
     } else {
-        Ok(FileType::RAW)
+        Ok(FileType::Raw)
     }
 }

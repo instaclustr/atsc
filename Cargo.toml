@@ -5,6 +5,7 @@ members = [
     "prometheus-remote",
     "tools",
 ]
+resolver = "2"
 
 [profile.dev]
 opt-level = 0

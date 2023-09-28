@@ -41,14 +41,12 @@ fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
                 ((bits[2] as u64) << 32) |
                 ((bits[3] as u64) << 48);
 
-    let f64_value = f64::from_bits(u64_bits);
-    f64_value
+    f64::from_bits(u64_bits)
 }
 
 fn write_optimal_int_wav(filename: &str, data: Vec<i16>, bitdepth: i32, channels: i32) {
     let header: WavSpec = generate_wav_header(Some(channels), bitdepth as u16, 8000);
-    let mut file_path = format!("{}", filename);
-    file_path = format!("{}.wav", file_path);
+    let file_path = format!("{filename}.wav");
     let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(file_path).unwrap();
     let mut wav_writer = WavWriter::new(file, header).unwrap();
     for sample in data {
@@ -58,13 +56,13 @@ fn write_optimal_int_wav(filename: &str, data: Vec<i16>, bitdepth: i32, channels
 }
 
 fn generate_wav_header(channels: Option<i32>, bitdepth: u16, samplerate: u32) -> WavSpec {
-    let spec = hound::WavSpec {
+    
+    hound::WavSpec {
         channels: channels.unwrap_or(4) as u16,
         sample_rate: samplerate,
         bits_per_sample: bitdepth,
         sample_format: hound::SampleFormat::Int
-    };
-    return spec;
+    }
 }
 
 fn calculate_mid_channel(left: Vec<f64>, right: Vec<f64>) -> (Vec<i16>, Vec<i16>) {

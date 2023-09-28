@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use hound::{WavWriter, WavSpec};
 use std::process::Command;
 
-use crate::lib_vsri::{VSRI, day_elapsed_seconds};
+use crate::lib_vsri::{Vsri, day_elapsed_seconds};
 
 // --- Write layer
 // Remote write spec: https://prometheus.io/docs/concepts/remote_write_spec/
@@ -30,7 +30,7 @@ impl WavMetric {
     pub fn new(name: String, source: String, job: String, start_sample_ts: i64) -> WavMetric {
         // Sample needs to fall within the file that the TS refers too, not the calendar day
         let start_date = DateTime::<Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt((start_sample_ts/1000).into(), 0).unwrap(),
+            chrono::NaiveDateTime::from_timestamp_opt(start_sample_ts/1000, 0).unwrap(),
             Utc,);
         // TODO: Do not ignore JOB!
         WavMetric { metric_name: name,
@@ -45,7 +45,7 @@ impl WavMetric {
     // Too many assumptions on correct behavior of all the code. Assumption is the mother of all... Needs to be fixed
     pub fn flush(mut self) -> Result<(), i32> {
         let mut processed_samples: i32 = 0;
-        let vsri: Option<VSRI>;
+        let vsri: Option<Vsri>;
         if self.timeseries_data.is_empty() {
             // Can't flush empty data
             error!("[WRITE][WAV] Call flush on empty data");
@@ -62,7 +62,7 @@ impl WavMetric {
                 let file = OpenOptions::new().write(true).read(true).open(self.last_file_created.unwrap()).unwrap();
                 // Load the index file
                 // TODO: one more unwrap to work on later
-                vsri = Some(VSRI::load(&self.metric_name).unwrap());
+                vsri = Some(Vsri::load(&self.metric_name).unwrap());
                 WavWriter::new_append(file).unwrap()
             }
             
@@ -107,7 +107,7 @@ impl WavMetric {
 
     /// Create a file accordingly to the day of the year, the metric and the instance that generated the metric
     /// TODO: Create file shouldn't open a file for append. Should only create. Fix this (or rename)
-    fn create_file(&mut self) -> Result<(WavWriter<File>, VSRI), hound::Error> {
+    fn create_file(&mut self) -> Result<(WavWriter<File>, Vsri), hound::Error> {
         let spec = WavMetric::generate_wav_header(None);
         let file_name = format!("{}_{}_{}", self.metric_name,self.instance, self.creation_time);
         let file_path = format!("./{}.wav", file_name);
@@ -116,25 +116,25 @@ impl WavMetric {
             if meta.is_file() {
                 let file = OpenOptions::new().write(true).read(true).open(&file_path)?;
                 let wav_writer = WavWriter::new_append(file)?;
-                return Ok((wav_writer,VSRI::load(&file_name).unwrap()));
+                return Ok((wav_writer,Vsri::load(&file_name).unwrap()));
             }
         }
         let file = OpenOptions::new().write(true).create(true).read(true).open(&file_path)?;
         let wav_writer = WavWriter::new(file, spec)?;
         self.last_file_created = Some(file_path);
         // TODO: Y can't be 0. Needs to be TS
-        Ok((wav_writer, VSRI::new(&file_name)))
+        Ok((wav_writer, Vsri::new(&file_name)))
     }
 
     /// Generate the WAV file header.
     fn generate_wav_header(channels: Option<i32>) -> WavSpec {
-        let spec = hound::WavSpec {
+        
+        hound::WavSpec {
             channels: channels.unwrap_or(4) as u16,
             sample_rate: 8000,
             bits_per_sample: 16,
             sample_format: hound::SampleFormat::Int
-        };
-        return spec;
+        }
     }
 
     /// Add a single metric value to the structure
@@ -151,14 +151,12 @@ impl WavMetric {
     pub fn get_range(self, ts_start: i64, ts_end: i64) -> Vec<(i64, f64)>{
         let mut i = 0;
         let mut j = 0;
-        let mut count = 0;
-        for (ts, _) in self.timeseries_data.iter() {
+        for (count, (ts, _)) in self.timeseries_data.iter().enumerate() {
             if *ts < ts_start {i = count}
             if *ts < ts_end {j = count; break}
-            count += 1;
         }
         if i > 0 { return self.timeseries_data[i-1..j].to_vec();}
-        return self.timeseries_data[..j].to_vec();
+        self.timeseries_data[..j].to_vec()
     }
 
     /// Instead of chasing data types and converting stuff, let's just unpack the f64 and 
@@ -181,9 +179,9 @@ impl WavMetric {
                     ((bits[2] as u64) << 32) |
                     ((bits[3] as u64) << 48);
         
-        let f64_value = f64::from_bits(u64_bits);
         
-        f64_value
+        
+        f64::from_bits(u64_bits)
     }
 
     /// Rotate the wav file after the interval and save it as a FLaC file
@@ -198,7 +196,7 @@ impl WavMetric {
     }
 
     /// Check if the current timestamp is within the file period
-    fn is_ts_valid(ts: i64) -> bool {
+    fn is_ts_valid(_ts: i64) -> bool {
         true
     }
 }
