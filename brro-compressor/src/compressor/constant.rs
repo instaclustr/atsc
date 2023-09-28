@@ -32,11 +32,11 @@ impl Constant {
     }
 
     /// Adds a residual
-    pub fn add_residual(&mut self, error_sample: i32, error_value: i64) {
-        self.residuals.push((error_sample, error_value));
+    pub fn add_residual(&mut self, sample_number: i32, value: i64) {
+        self.residuals.push((sample_number, value));
     }
 
-    /// Sets the error value
+    /// returns the error value
     pub fn get_error(self){
         self.residuals.len();
     }
@@ -54,6 +54,7 @@ impl Constant {
 
     /// Compresses the data. Walks the data array and sets one value as the constant.
     /// TODO: Fix residuals positions
+    /// Performance consideration, we do O(3*n) in the worst case, best case is O(n). 
     pub fn compress(&mut self, data: &[i64]) {
         // Count occurrences of each value in the data
         let mut seen_values = HashMap::new();
@@ -64,22 +65,20 @@ impl Constant {
         // Find the constant and residuals in a single iteration
         let mut constant = 0;
         let mut hit_count = 0;
-        let mut residuals = Vec::new();
 
         for (&val, &count) in &seen_values {
+            // This count is bigger than the previous, so, until now, it is the biggest count (and the constant)
             if count > hit_count {
                 constant = val;
                 hit_count = count;
-            } else {
-                // Push residuals as (sample_number, value) pairs
-                for _ in 0..count {
-                    residuals.push((0, val)); // Sample number is set to 0 for now
-                }
             }
         }
-
         self.set_constant(constant);
-        self.residuals = residuals;
+        // Now we walk the initial array (again) and push anything not matching the constant to the residuals
+        self.residuals = data.iter().enumerate()
+                        .filter(|&(_,v)| *v != constant)
+                        .map(|(k,v)| (k.try_into().unwrap(), *v))
+                        .collect();
     }
 
     /// This function transforms the structure into a Binary stream to be appended to the frame
@@ -107,6 +106,25 @@ mod tests {
     #[test]
     fn test_constant() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
-        assert_eq!(constant(&vector1), [0, 2, 0, 0, 0, 0, 0]);
+        assert_eq!(constant(&vector1), [0, 2, 0]);
+    }
+
+    #[test]
+    fn test_define_constant() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
+        let mut c = Constant::new(vector1.len());
+        c.compress(&Constant::optimize(&vector1));
+
+        assert!(c.constant == 1);
+    }
+
+    #[test]
+    fn test_define_residuals() {
+        let vector1 = vec![1.0, 2.0, 1.0, 1.0, 3.0];
+        let mut c = Constant::new(vector1.len());
+        c.compress(&Constant::optimize(&vector1));
+
+        assert!(c.constant == 1);
+        assert_eq!(c.residuals, vec![(1,2),(4,3)]);
     }
 }
