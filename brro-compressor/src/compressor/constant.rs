@@ -1,4 +1,3 @@
-/// This compressor is for static values, it allows some level of non-static (1%)
 use std::collections::HashMap;
 use bincode::{Decode, Encode};
 use super::BinConfig;
@@ -74,11 +73,14 @@ impl Constant {
             }
         }
         self.set_constant(constant);
-        // Now we walk the initial array (again) and push anything not matching the constant to the residuals
-        self.residuals = data.iter().enumerate()
-                        .filter(|&(_,v)| *v != constant)
-                        .map(|(k,v)| (k.try_into().unwrap(), *v))
-                        .collect();
+        // if there is more than 1 element in the map, we have to walk the initial array
+        if seen_values.len() > 1 {
+            // Walk the initial array (again) and push anything not matching the constant to the residuals
+            self.residuals = data.iter().enumerate()
+                            .filter(|&(_,v)| *v != constant)
+                            .map(|(k,v)| (k.try_into().unwrap(), *v))
+                            .collect();
+        }
     }
 
     /// This function transforms the structure into a Binary stream to be appended to the frame

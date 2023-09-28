@@ -4,6 +4,7 @@ use self::noop::noop;
 
 pub mod noop;
 pub mod constant;
+pub mod fft;
 
 pub enum Compressor {
     Noop,
