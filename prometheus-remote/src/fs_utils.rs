@@ -22,7 +22,7 @@ use std::mem;
 use chrono::{DateTime, Utc, Duration};
 
 use crate::flac_reader::SimpleFlacReader;
-use crate::lib_vsri::{VSRI, day_elapsed_seconds, start_day_ts, MAX_INDEX_SAMPLES};
+use crate::lib_vsri::{Vsri, day_elapsed_seconds, start_day_ts, MAX_INDEX_SAMPLES};
 
 struct DateRange(DateTime<Utc>, DateTime<Utc>);
 
@@ -77,7 +77,7 @@ impl FileTimeRange {
 #[derive(Debug)]
 pub struct DataLocator {
     file: File,
-    index: VSRI,
+    index: Vsri,
     time_range: FileTimeRange,
     date: DateTime<Utc>
 }
@@ -86,7 +86,7 @@ impl DataLocator {
     /// Creates a new DataLocator, includes the File, Index and the Time Range for the data it is expected to return.
     /// This is a lazy, doesn't check for the intersection between the time range and data owned until the data is 
     /// requested.
-    fn new(file: File, index: VSRI, time_range: FileTimeRange, date: DateTime<Utc> ) -> Self {
+    fn new(file: File, index: Vsri, time_range: FileTimeRange, date: DateTime<Utc> ) -> Self {
         DataLocator {
             file,
             index,
@@ -151,7 +151,7 @@ impl DataLocator {
         match temp_result {
             // Pack this into DataPoints
             Ok(samples) => {
-                for (v, t) in samples.into_iter().zip(time_for_samples.into_iter()) {
+                for (v, t) in samples.into_iter().zip(time_for_samples.iter()) {
                     let ts = *t as i64+start_day_ts(self.date);
                     prom_data.push(PromDataPoint::new(v, ts*1000));
                 }
@@ -166,20 +166,20 @@ impl DataLocator {
         let mut file_index_vec = Vec::new();
         let data_locator_vec: Vec<DataLocator>;
         let start_date = DateTime::<Utc>::from_utc(
-                                                chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
+                                                chrono::NaiveDateTime::from_timestamp_opt(start_time/1000, 0).unwrap(),
                                                 Utc,
                                                         );
         let end_date = DateTime::<Utc>::from_utc(
-                                            chrono::NaiveDateTime::from_timestamp_opt((end_time/1000).into(), 0).unwrap(),
+                                            chrono::NaiveDateTime::from_timestamp_opt(end_time/1000, 0).unwrap(),
                                                 Utc,
                                                         );
         let file_time_intervals = time_intervals(start_time, end_time);
         debug!("[READ] Time intervals for the range {:?} ", file_time_intervals);
         let mut range_count = 0;
         for date in DateRange(start_date, end_date).enumerate() {
-            let data_file_name = format!("{}_{}",metric_name, date.1.format("%Y-%m-%d").to_string());
+            let data_file_name = format!("{}_{}",metric_name, date.1.format("%Y-%m-%d"));
             debug!("[READ] Time intervals for file {}: {:?} ", data_file_name, file_time_intervals[range_count]);
-            let vsri = VSRI::load(&data_file_name);
+            let vsri = Vsri::load(&data_file_name);
             range_count += 1;
             let file = match  fs::File::open(format!("{}.flac", data_file_name.clone())) {
                 Ok(file) => {
@@ -190,7 +190,7 @@ impl DataLocator {
                     continue; 
                 }
             };
-            // If I got here, I should be able to unwrap VSRI safely.
+            // If I got here, I should be able to unwrap Vsri safely.
             file_index_vec.push((file, vsri.unwrap(), date));
         }
         // Creating the Time Range array
@@ -213,7 +213,7 @@ impl DataLocator {
         }
 
         // We have at least one file create the Object
-        if file_index_vec.len() >= 1 {
+        if !file_index_vec.is_empty() {
             data_locator_vec = file_index_vec.into_iter()
                                              .map(|item| DataLocator::new(item.0, item.1, time_intervals[item.2.0], item.2.1))
                                              .collect();
@@ -228,16 +228,16 @@ impl DataLocator {
 fn time_intervals(start_time: i64, end_time: i64) -> Vec<[i32; 2]> {
     let mut time_intervals = Vec::new();
     let start_date = DateTime::<Utc>::from_utc(
-                                            chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
+                                            chrono::NaiveDateTime::from_timestamp_opt(start_time/1000, 0).unwrap(),
                                               Utc,
                                                     );
     let end_date = DateTime::<Utc>::from_utc(
-                                          chrono::NaiveDateTime::from_timestamp_opt((end_time/1000).into(), 0).unwrap(),
+                                          chrono::NaiveDateTime::from_timestamp_opt(end_time/1000, 0).unwrap(),
                                             Utc,
                                                     );
     let start_ts_i32 = day_elapsed_seconds(start_time);
     let end_ts_i32 = day_elapsed_seconds(end_time);
-    let date_spread_size = DateRange(start_date, end_date).into_iter().count();
+    let date_spread_size = DateRange(start_date, end_date).count();
     match date_spread_size {
         1 => { time_intervals.push([start_ts_i32, end_ts_i32]);},
         2 => {
@@ -265,14 +265,14 @@ pub fn data_locator_into_prom_data_point(data: Vec<DataLocator>) -> Vec<PromData
     let mut data_points = Vec::new();
     for dl in data {
         let mut proms = dl.into_prom_data_point();
-        if proms.len() > 0 { data_points.append(&mut proms); }
+        if !proms.is_empty() { data_points.append(&mut proms); }
     }
     data_points
 }
 
 
 /// Retrieves all the available data points in a timerange in the provided Vector of files and indexes
-pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(File, VSRI)>) -> Vec<PromDataPoint> {
+pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec<(File, Vsri)>) -> Vec<PromDataPoint> {
     let mut data_points = Vec::new();
     /* Processing logic:
         Case 1 (2+ files):
@@ -287,14 +287,14 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
     let file_count = file_vec.len();
     // Get the baseline timestamps to add to the index timestamps
     let start_date = DateTime::<Utc>::from_utc(
-        chrono::NaiveDateTime::from_timestamp_opt((start_time/1000).into(), 0).unwrap(),
+        chrono::NaiveDateTime::from_timestamp_opt(start_time/1000, 0).unwrap(),
           Utc,
                 );
     let end_date = DateTime::<Utc>::from_utc(
-    chrono::NaiveDateTime::from_timestamp_opt((end_time/1000).into(), 0).unwrap(),
+    chrono::NaiveDateTime::from_timestamp_opt(end_time/1000, 0).unwrap(),
         Utc,
                 );
-    let ts_bases: Vec<i64> = DateRange(start_date, end_date).map(|dt| start_day_ts(dt)).collect();
+    let ts_bases: Vec<i64> = DateRange(start_date, end_date).map(start_day_ts).collect();
     let start_ts_i32 = day_elapsed_seconds(start_time);
     let end_ts_i32 = day_elapsed_seconds(end_time);
     // Files might not match the intervals of time, a time array of time intervals need to be done.
@@ -367,7 +367,7 @@ pub fn get_data_between_timestamps(start_time: i64, end_time: i64, file_vec: Vec
         match temp_result {
             // Pack this into DataPoints
             Ok(samples) => {
-                for (v, t) in samples.into_iter().zip(time_for_samples.into_iter()) {
+                for (v, t) in samples.into_iter().zip(time_for_samples.iter()) {
                     let ts = *t as i64+ts_bases[iter_index];
                     data_points.push(PromDataPoint::new(v, ts));
                 }

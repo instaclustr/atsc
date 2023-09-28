@@ -24,9 +24,3 @@ regex = "1.9.1"
 median = "0.3.2"
 dtw_rs = "0.9.5"
 
-[profile.dev]
-opt-level = 0
-
-[profile.release]
-opt-level = 3
-codegen-units = 1

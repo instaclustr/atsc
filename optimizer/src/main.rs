@@ -1,14 +1,15 @@
-use std::fs::File;
+// Lucas - Once the project is far enough along I strongly reccomend reenabling dead code checks
+#![allow(dead_code)]
+
+use std::{fs::File, path::Path};
 use std::io::Write;
 use std::fs;
-use std::io::{self, BufRead};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use hound::{WavSpec, WavWriter};
 use clap::{Parser, command, arg};
-use clap::builder::Str;
 use regex::Regex;
 use median::Filter;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 
 #[derive(Debug)]
 enum MetricTag {
@@ -21,6 +22,7 @@ enum MetricTag {
 }
 
 impl MetricTag {
+    #[allow(clippy::wrong_self_convention)]
     fn from_float(&self, x: f64) -> i64 {
         match self {
             MetricTag::Other => {
@@ -70,18 +72,18 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
             current_channel = 0;
         }
     }
-    return raw_data;
+    raw_data
 }
 
 fn generate_wav_header(channels: Option<i32>, bitdepth: u16, samplerate: u32) -> WavSpec {
-    let spec = hound::WavSpec {
+    
+    hound::WavSpec {
         channels: channels.unwrap_or(4) as u16,
         // TODO: Sample rate adaptations
         sample_rate: samplerate,
         bits_per_sample: bitdepth,
         sample_format: hound::SampleFormat::Int
-    };
-    return spec;
+    }
 }
 
 /// Write a WAV file with the outputs of data analysis for float data
@@ -89,7 +91,7 @@ fn write_optimal_wav(filename: &str, data: Vec<f64>, bitdepth: i32, dc: i64, cha
     // Make DC a float for operations
     let fdc = dc as f64;
     let header: WavSpec = generate_wav_header(Some(channels), bitdepth as u16, 8000);
-    let mut file_path = format!("{}", filename);
+    let mut file_path = filename.to_string();
     file_path.truncate(file_path.len() - 4);
     file_path = format!("{}_OPT.wav", file_path);
     let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(file_path).unwrap();
@@ -106,7 +108,7 @@ fn write_optimal_wav(filename: &str, data: Vec<f64>, bitdepth: i32, dc: i64, cha
 
 fn write_optimal_int_wav(filename: &str, data: Vec<i64>, bitdepth: i32, dc: i64, channels: i32) {
     let header: WavSpec = generate_wav_header(Some(channels), bitdepth as u16, 8000);
-    let mut file_path = format!("{}", filename);
+    let mut file_path = filename.to_string();
     file_path.truncate(file_path.len() - 4);
     file_path = format!("{}_OPT.wav", file_path);
     let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(file_path).unwrap();
@@ -122,15 +124,15 @@ fn write_optimal_int_wav(filename: &str, data: Vec<i64>, bitdepth: i32, dc: i64,
 }
 
 fn as_i8(value: f64) -> i8 {
-    return split_n(value).0 as i8;
+    split_n(value).0 as i8
 }
 
 fn as_i16(value: f64) -> i16 {
-    return split_n(value).0 as i16;
+    split_n(value).0 as i16
 }
 
 fn as_i32(value: f64) -> i32 {
-    return split_n(value).0 as i32;
+    split_n(value).0 as i32
 }
 
 // Split a float into an integer
@@ -160,17 +162,16 @@ fn split_n(x: f64) -> (i64, f64) {
         } else { // x >> 64..
             (0, 0.0)
         }
-    } else {
-        if shl < 64 { // x << 1..64
-            let int = mantissa >> (64 - shl);
-            let fraction = ((mantissa as u64) << shl) as f64 * FRACT_SCALE;
-            (int, fraction)
-        } else if shl < 128 { // x << 64..128
-            let int = mantissa << (shl - 64);
-            (int, 0.0)
-        } else { // x << 128..
-            (0, 0.0)
-        }
+    } 
+    else if shl < 64 { // x << 1..64
+        let int = mantissa >> (64 - shl);
+        let fraction = ((mantissa as u64) << shl) as f64 * FRACT_SCALE;
+        (int, fraction)
+    } else if shl < 128 { // x << 64..128
+        let int = mantissa << (shl - 64);
+        (int, 0.0)
+    } else { // x << 128..
+        (0, 0.0)
     }
 }
 
@@ -180,8 +181,8 @@ fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
         ((bits[2] as u64) << 32) |
         ((bits[3] as u64) << 48);
 
-    let f64_value = f64::from_bits(u64_bits);
-    f64_value
+    
+    f64::from_bits(u64_bits)
 }
 
 fn get_max(a: i32, b: i32) -> i32 {
@@ -296,8 +297,8 @@ fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
         _ => 64
     };
 
-    let recommended_bitdepth = get_max(bitdepth, bitdepth_signed);
-    recommended_bitdepth
+    
+    get_max(bitdepth, bitdepth_signed)
 }
 
 fn process_args(input_path: &str, arguments: &Args) {
@@ -352,13 +353,12 @@ fn construct_output_path(filename: &str, new_directory: Option<&str>) -> String 
     }
 }
 
-fn process_data_and_write_output(full_path: &PathBuf, file: &mut File, arguments: &Args) {
-
+fn process_data_and_write_output(full_path: &Path, file: &mut File, arguments: &Args) {
     let full_path_str = full_path.to_str().unwrap_or("");
     debug!("File: {} ,", full_path_str);
-    let mut bitdepth = 64;
-    let mut dc_component: i64 = 0;
-    let mut fractional = true;
+    let mut _bitdepth = 64;
+    let mut _dc_component: i64 = 0;
+    let mut _fractional = true;
     let wav_data = read_metrics_from_wav(full_path_str);
     if arguments.dump_raw { writeln!(file, "{:?}", wav_data).expect("Unable to write to file"); }
     // Depending on Metric Tag, apply a transformation
@@ -375,21 +375,21 @@ fn process_data_and_write_output(full_path: &PathBuf, file: &mut File, arguments
         }
     };
     // We split the code here
-    if iwav_data.len() > 0 {
-        fractional = false;
+    if !iwav_data.is_empty() {
+        _fractional = false;
         if arguments.dump_optimized { writeln!(file, "{:?}", iwav_data).expect("Unable to write to file"); }
-        (bitdepth, dc_component) = analyze_int_data(&iwav_data);
+        (_bitdepth, _dc_component) = analyze_int_data(&iwav_data);
     } else {
-        (bitdepth, dc_component, fractional) = analyze_data(&wav_data);
+        (_bitdepth, _dc_component, _fractional) = analyze_data(&wav_data);
     }
-    if bitdepth == 64 || fractional {
+    if _bitdepth == 64 || _fractional {
         debug!("No optimization, exiting");
         std::process::exit(0);
     } else if arguments.write {
         debug!("Writing optimal file!");
         match iwav_data.len() {
-            0 => write_optimal_wav(full_path_str, wav_data, bitdepth, dc_component, 1),
-            _ => write_optimal_int_wav(full_path_str, iwav_data, bitdepth, dc_component, 1)
+            0 => write_optimal_wav(full_path_str, wav_data, _bitdepth, _dc_component, 1),
+            _ => write_optimal_int_wav(full_path_str, iwav_data, _bitdepth, _dc_component, 1)
         }
     }
 }

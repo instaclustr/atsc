@@ -86,7 +86,7 @@ impl Constant {
     pub fn to_bytes(self) -> Vec<u8> {
         // Use Bincode and flate2-rs? Do this at the Stream Level?
         let config = BinConfig::get();
-        bincode::encode_to_vec(&self, config).unwrap()
+        bincode::encode_to_vec(self, config).unwrap()
     }
 }
 

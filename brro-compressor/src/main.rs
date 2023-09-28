@@ -1,9 +1,6 @@
 use log::{info, debug};
 use clap::{Parser, command, arg};
 
-#[macro_use]
-extern crate log;
-
 #[derive(Parser, Default, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {

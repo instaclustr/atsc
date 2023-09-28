@@ -22,7 +22,7 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
             current_channel = 0;
         }
     }
-    return raw_data;
+    raw_data
 }
 
 fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
@@ -31,8 +31,8 @@ fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
                 ((bits[2] as u64) << 32) |
                 ((bits[3] as u64) << 48);
 
-    let f64_value = f64::from_bits(u64_bits);
-    f64_value
+    
+    f64::from_bits(u64_bits)
 }
 
 #[derive(Parser,Default,Debug)]
