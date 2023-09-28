@@ -58,17 +58,17 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 /// # Examples
 /// Creating a new index, metric is of expected time 0, but for sure location of X is 0
 /// ```no_run
-/// let vsri = VSRI::new("metric_name", 0, 0);
+/// let vsri = Vsri::new("metric_name", 0, 0);
 /// vsri.flush();
 /// ```
 /// Updating an index, adding point at time 5sec
 /// ```no_run
-/// let vsri = VSRI::load("metric_name").unwrap().update_for_point(5);
+/// let vsri = Vsri::load("metric_name").unwrap().update_for_point(5);
 /// vsri.flush();
 /// ```
 /// Fetch a sample location from the index given a timestamp
 /// ```no_run
-/// let vsri = VSRI::load("metric_name").unwrap();
+/// let vsri = Vsri::load("metric_name").unwrap();
 /// vsri.get_sample_location("metric_name", 5);
 /// ```
 
@@ -81,7 +81,7 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 /// Each segments describes a line with the form of mX + B that has a lenght 
 /// of # of samples.
 #[derive(Debug)]
-pub struct VSRI {
+pub struct Vsri {
     index_file: String,
     min_ts: i32,
     max_ts: i32,
@@ -89,14 +89,14 @@ pub struct VSRI {
     vsri_segments: Vec<[i32; 4]> // [Sample Rate (m), X0, Y0, # of Samples]
 }
 
-impl VSRI {
+impl Vsri {
 
     /// Creates the index, it doesn't create the file in the disk
     /// flush needs to be called for that
     pub fn new(filename: &String) -> Self {
         debug!("[INDEX] Creating new index!");
         let segments: Vec<[i32; 4]> = Vec::new();
-        VSRI {
+        Vsri {
             index_file: filename.to_string(),
             min_ts: 0,
             max_ts: 0,
@@ -107,7 +107,7 @@ impl VSRI {
     /// Given a filename and a time location, returns the sample location in the 
     /// data file. Or None in case it doesn't exist.
     pub fn get_sample_location(filename: String, y: i32) -> Option<i32> {
-        let vsri = match  VSRI::load(&filename) {
+        let vsri = match  Vsri::load(&filename) {
             Ok(vsri) => vsri,
             Err(_err) => { return None }
          };
@@ -196,8 +196,7 @@ impl VSRI {
             _ => {
                 // More than 1 segment
                 let mut previous_seg_end: i32 = 0;
-                let mut segment_count = 0;
-                for segment in &self.vsri_segments {
+                for (segment_count, segment) in self.vsri_segments.iter().enumerate() {
                     let sample_rate = segment[0];
                     let y0 = segment[2];
                     let num_samples = segment[3];
@@ -219,7 +218,6 @@ impl VSRI {
                     }
                     // At this point, time segments doesn't touch this segment.
                     previous_seg_end = segment_end_y;
-                    segment_count += 1;
                 }
             }
         }
@@ -260,7 +258,7 @@ impl VSRI {
             // If it doesn't fit, create a new fake segment
             self.vsri_segments.push(self.create_fake_segment(y));
         }
-        return Ok(());
+        Ok(())
     }
 
     /// Minimum time stamp
@@ -275,8 +273,8 @@ impl VSRI {
 
     fn calculate_b(&self, segment: &[i32; 4]) -> i32 {
         // b = y - mx
-        let b = segment[2] - segment[0] * segment[1];
-        b
+        
+        segment[2] - segment[0] * segment[1]
     }
 
     /// Returns the most recent (the last) calculated segment
@@ -309,9 +307,9 @@ impl VSRI {
     /// For a given sample position, return the timestamp associated
     pub fn get_time(&self, x:i32) -> Option<i32> {
         match x {
-            0 => { return Some(self.min()); },
-            _ if x > self.get_sample_count() => { return None; },
-            _ if x == self.get_sample_count() => { return Some(self.max()); },
+            0 => { Some(self.min())},
+            _ if x > self.get_sample_count() => { None},
+            _ if x == self.get_sample_count() => { Some(self.max())},
             // it is somewhere in the middle
             _ => {
                 // Find the segment where X fits
@@ -444,7 +442,7 @@ impl VSRI {
             }
             i+=1;
         }
-        Ok(VSRI {
+        Ok(Vsri {
             index_file: filename.to_string(),
             min_ts,
             max_ts,

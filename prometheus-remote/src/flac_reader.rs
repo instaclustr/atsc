@@ -81,8 +81,8 @@ impl SimpleFlacReader {
                     ((bits[2] as u64) << 32) |
                     ((bits[3] as u64) << 48);
         
-        let f64_value = f64::from_bits(u64_bits);
-        f64_value
+        
+        f64::from_bits(u64_bits)
     }
 
 }
@@ -116,7 +116,7 @@ impl FlacMetric {
         );
         // Transform datetime to string with the format YYYY-MM-DD
         let datetime_str = datetime.format("%Y-%m-%d").to_string();
-        return datetime_str;
+        datetime_str
     }
 
     /// Load sample data into the Flac Object
@@ -137,7 +137,7 @@ impl FlacMetric {
         // Probe the media source stream for a format.
         let probed = symphonia::default::get_probe().format(Hint::new().mime_type("FLaC"), mss, &format_opts, &metadata_opts).unwrap();
         // Get the format reader yielded by the probe operation.
-        return probed.format;
+        probed.format
     }
 
     fn get_decoder(&self) ->  Box<dyn Decoder> {
@@ -147,7 +147,7 @@ impl FlacMetric {
         let track = format.default_track().unwrap();
         // Create a decoder for the track.
         let decoder = symphonia::default::get_codecs().make(&track.codec_params, &decoder_opts).unwrap();
-        return decoder;
+        decoder
     }
 
 
@@ -265,8 +265,8 @@ impl FlacMetric {
                 ((bits[2] as u64) << 32) |
                 ((bits[3] as u64) << 48);
     
-    let f64_value = f64::from_bits(u64_bits);
     
-    f64_value
+    
+    f64::from_bits(u64_bits)
     }
 }

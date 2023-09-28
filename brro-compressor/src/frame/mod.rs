@@ -1,4 +1,4 @@
-use crate::compressor::{self, Compressor};
+use crate::compressor::Compressor;
 
 /// This is the structure of a compressor frame
 pub struct CompressorFrame{

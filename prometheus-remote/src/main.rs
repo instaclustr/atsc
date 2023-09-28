@@ -1,3 +1,6 @@
+// Lucas - Once the project is far enough along I strongly reccomend reenabling dead code checks
+#![allow(dead_code)]
+
 mod wav_writer;
 mod fs_utils;
 mod lib_vsri;
@@ -24,7 +27,7 @@ extern crate log;
 use crate::fs_utils::get_file_index_time;
 
 // Data sampling frequency. How many seconds between each sample.
-static VERSION: &'static str = "0.1.1";
+static VERSION: &str = "0.1.1";
 
 fn get_flac_samples_to_prom(metric: &str, source: &str, _job: &str, start_ms: i64, end_ms: i64, step_ms: i64) -> Vec<Sample> {
     // TODO: #6 Count the number of samples for the given metric! -> Can be done with the Index alone \m/ \m/
@@ -102,7 +105,7 @@ fn parse_remote_write_request(timeseries: &TimeSeries, metadata: Option<&MetricM
         // Not going to share state, flush it once you're done.
         // TODO: #3 Improve write performance (?)
         let mut metric_data: Vec<(i64, f64)> = timeseries.samples.iter().map(|x| (x.timestamp, x.value)).collect();
-        if timeseries.samples.len() < 1 {
+        if timeseries.samples.is_empty() {
             error!("[WRITE][MAIN] Empty samples: {:?}", timeseries.samples);
             return Ok(());
         }
