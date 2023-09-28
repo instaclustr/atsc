@@ -1,5 +1,6 @@
 use bincode::config::{self, Configuration};
-use crate::compressor::constant::constant;
+use self::constant::constant;
+use self::noop::noop;
 
 pub mod noop;
 pub mod constant;
@@ -16,7 +17,7 @@ pub enum Compressor {
 impl Compressor {
     fn compress(&self, data: &[f64] ) -> Vec<u8> {
         match self {
-            Compressor::Noop => todo!(),
+            Compressor::Noop => noop(data),
             Compressor::FFT => todo!(),
             Compressor::Constant => constant(data),
             _ => todo!(),
@@ -30,6 +31,7 @@ pub struct BinConfig {
 
 impl BinConfig {
     pub fn get() -> Configuration {
+        // Little endian and Variable int encoding
         config::standard()
     }
 }
