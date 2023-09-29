@@ -192,7 +192,10 @@ dependencies = [
  "bincode",
  "clap",
  "env_logger",
+ "hound",
  "log",
+ "median",
+ "regex",
  "rustfft",
 ]
 
