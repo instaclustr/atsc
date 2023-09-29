@@ -44,7 +44,6 @@ fn process_file(full_path: PathBuf, arguments: &Args, new_directory: Option<&str
         let iwav_data = optimizer::process_data_and_write_output(&full_path);
 
         // print!("{:?}", iwav_data);
-
         // VERY BAD
         let iwav_data_f: Vec<f64> = iwav_data.iter().map(|&x| x as f64).collect();
 
