@@ -97,6 +97,13 @@ impl Constant {
         let config = BinConfig::get();
         bincode::encode_to_vec(self, config).unwrap()
     }
+
+    /// Returns an array of data. It creates an array of data the size of the frame with a constant value
+    /// and pushes the residuals to the right place.
+    pub fn to_data(&self) -> Vec<f64> {
+        Vec::new()
+    }
+
 }
 
 pub fn constant(data: &[f64]) -> Vec<u8> {

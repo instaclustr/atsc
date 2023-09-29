@@ -32,7 +32,7 @@ impl Noop {
         self.data = Noop::optimize(data);
     }
 
-    /// Receives a data stream and generates a Constant
+    /// Receives a data stream and generates a Noop
     pub fn decompress(data: &Vec<u8>) -> Self {
         let config = BinConfig::get();
         match bincode::decode_from_slice(&data, config) {
@@ -45,6 +45,11 @@ impl Noop {
     pub fn to_bytes(&self) -> Vec<u8> {
         let config = BinConfig::get();
         bincode::encode_to_vec(self, config).unwrap()
+    }
+
+    /// Returns an array of data
+    pub fn to_data(&self) -> Vec<f64> {
+        Vec::new()
     }
 
 }

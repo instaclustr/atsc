@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bincode::{Decode, Encode};
 use rustfft::{FftPlanner, num_complex::Complex};
 use super::BinConfig;
@@ -54,10 +56,26 @@ impl FFT {
         let fft = planner.plan_fft_forward(v);
         let mut buffer = FFT::optimize(data);
         fft.process(&mut buffer);
+        // TODO: Process FFT data
+    }
+
+    /// Decompresses data
+    pub fn decompress(data: &Vec<u8>) -> Self {
+        let config = BinConfig::get();
+        match bincode::decode_from_slice(&data, config) {
+            Ok((constant, _)) => constant,
+            Err(e) => panic!("{e}")
+        }
     }
 
     pub fn to_bytes(self) -> Vec<u8> {
         let config = BinConfig::get();
         bincode::encode_to_vec(self, config).unwrap()
+    }
+
+    /// Returns an array of data
+    /// Runs the ifft, and push residuals into place and/or adjusts max and mins accordingly
+    pub fn to_data(&self) -> Vec<f64> {
+       Vec::new()
     }
 }
