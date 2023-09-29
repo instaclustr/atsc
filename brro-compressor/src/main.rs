@@ -45,13 +45,14 @@ fn process_file(full_path: PathBuf, arguments: &Args, new_directory: Option<&str
 
         // print!("{:?}", iwav_data);
 
+        // VERY BAD
         let iwav_data_f: Vec<f64> = iwav_data.iter().map(|&x| x as f64).collect();
 
-        let mut result: Vec<u8> = Vec::new();
+        let mut compressed: Vec<u8> = Vec::new();
         if arguments.noop {
-             result = compressor::noop::noop(&iwav_data_f);
+             compressed = compressor::noop::noop(&iwav_data_f);
         } else if arguments.constant {
-             result = compressor::constant::constant(&iwav_data_f);
+             compressed = compressor::constant::constant(&iwav_data_f);
         }
 
 
@@ -63,7 +64,7 @@ fn process_file(full_path: PathBuf, arguments: &Args, new_directory: Option<&str
                 return;
             }
         };
-        writeln!(file, "{:?}", result).expect("Unable to write to file");
+        writeln!(file, "{:?}", compressed).expect("Unable to write to file");
     }
 }
 
