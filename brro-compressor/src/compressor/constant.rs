@@ -7,7 +7,7 @@ const CONSTANT_COMPRESSOR_ID: u8 = 0;
 
 /// This is a temporary implementation, other implementations (FFT, Polynomial) might provide the same result
 /// as going through the data anyway.
-#[derive(Encode, Decode, PartialEq, Debug)]
+#[derive(Encode, Decode, PartialEq, Debug, Clone)]
 pub struct Constant {
     pub id: u8,
     pub constant: i64,
@@ -52,7 +52,6 @@ impl Constant {
     }
 
     /// Compresses the data. Walks the data array and sets one value as the constant.
-    /// TODO: Fix residuals positions
     /// Performance consideration, we do O(3*n) in the worst case, best case is O(n). 
     pub fn compress(&mut self, data: &[i64]) {
         // Count occurrences of each value in the data
@@ -83,8 +82,17 @@ impl Constant {
         }
     }
 
-    /// This function transforms the structure into a Binary stream to be appended to the frame
-    pub fn to_bytes(self) -> Vec<u8> {
+    /// Receives a data stream and generates a Constant
+    pub fn decompress(data: &Vec<u8>) -> Self {
+        let config = BinConfig::get();
+        match bincode::decode_from_slice(&data, config) {
+            Ok((constant, _)) => constant,
+            Err(e) => panic!("{e}")
+        }
+    }
+
+    /// This function transforms the structure into a Binary stream
+    pub fn to_bytes(&self) -> Vec<u8> {
         // Use Bincode and flate2-rs? Do this at the Stream Level?
         let config = BinConfig::get();
         bincode::encode_to_vec(self, config).unwrap()
@@ -109,6 +117,18 @@ mod tests {
     fn test_constant() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
         assert_eq!(constant(&vector1), [0, 2, 0]);
+    }
+
+    #[test]
+    fn test_compression() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
+        let mut c = Constant::new(vector1.len());
+        c.compress(&Constant::optimize(&vector1));
+        let bin_data = c.to_bytes();
+        let c2 = Constant::decompress(&bin_data);
+        
+        assert_eq!(bin_data, [0, 2, 0]);
+        assert_eq!(c.clone(), c2);
     }
 
     #[test]
