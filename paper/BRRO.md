@@ -13,7 +13,7 @@ The relevance of time as an axis makes time series data distinct from other type
 In this document we propose a novel approach to Monitoring timeseries compression, instead of relying on compression based on the properties of the samples [2] [3] or in the small segments of the sequence [4].
 We propose an approach each timeseries as a digital signal and apply a set of techniques that already exist in other domains, namely in Audio compression.
 
-One important factor in our approach is that although we rely mostly on Function Approximation (FA), and that is frequently used in Timeseries as a lossy compression, we approach this problem from a lossless perspective. 
+One important factor in our approach is that although we rely mostly on Function Approximation (FA), and that is frequently used in Timeseries as a lossy compression, we approach this problem from a lossless perspective.
 
 > INTERNAL COMMENT: Lossy might be very interesting too!
 > INTERNAL COMMENT 2: Lossy might be the only way of getting decent float compression besides changing the FA
@@ -29,7 +29,7 @@ The state of the art in Timeseries compression can be found here [5] and here [6
 ## Introduction
 
 Computer systems monitoring, not general timeseries monitoring, is a process that is normally
-characterized by very low frequency sampling (0.05Hz to 1~2Hz) of processes. Processes like database processes, Operating System general health, etc generate a lot of signals [10]. 
+characterized by very low frequency sampling (0.05Hz to 1~2Hz) of processes. Processes like database processes, Operating System general health, etc generate a lot of signals [10].
 
 > INTERNAL COMMENT: Does very low frequency creates the problem for FFTs, etc or is the tools that aren't expecting such low frequencies?
 
