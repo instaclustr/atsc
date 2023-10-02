@@ -48,8 +48,8 @@ impl Noop {
     }
 
     /// Returns an array of data
-    pub fn to_data(&self) -> Vec<f64> {
-        Vec::new()
+    pub fn to_data(&self, _frame_size: usize) -> Vec<i64> {
+        self.data.clone()
     }
 
 }
@@ -80,5 +80,11 @@ mod tests {
         let c2 = Noop::decompress(&bin_data);
 
         assert_eq!(c.clone(), c2);
+    }
+
+    #[test]
+    fn test_decompression() {
+        let vector1 = vec![1.0, 2.0, 3.0, 4.0, 1.0];
+        assert_eq!(Noop::decompress(&noop(&vector1)).to_data(0), [1,2,3,4,1]);
     }
 }
