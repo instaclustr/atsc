@@ -1,14 +1,12 @@
-// Import necessary libraries
+// Implement a streaming reader here
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 // Function to check if a file is a WAV file
 fn is_wav_file(file_path: &Path) -> io::Result<bool> {
-    // Open the file for reading
+    // Open the file for reading and read the first 12 bytes (header) of the file
     let mut file = fs::File::open(file_path)?;
-
-    // Read the first 12 bytes (header) of the file
     let mut header = [0u8; 12];
     file.read_exact(&mut header)?;
 
@@ -52,13 +50,44 @@ fn stream_reader(directory_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> io::Result<()> {
-    // Define the directory path where files will be processed
-    let directory_path = PathBuf::from(""); // Replace with the actual directory path
+// Import the testing module
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // Call the stream_reader function to process files in the directory
-    stream_reader(&directory_path)?;
+    #[test]
+    fn test_is_wav_file_with_wav() {
+        // Create a temporary file with a valid WAV header
+        let temp_file_path = "test.wav";
+        let header: [u8; 12] = [82, 73, 70, 70, 4, 0, 0, 0, 87, 65, 86, 69];
+        std::fs::write(temp_file_path, &header).expect("Failed to create temporary WAV file");
 
-    Ok(())
+        // Check if the file is recognized as a WAV file
+        let path = Path::new(temp_file_path);
+        let result = is_wav_file(&path);
+
+        // Assert that it should be recognized as a WAV file
+        assert!(result.is_ok() && result.unwrap() == true);
+
+        // Clean up the temporary file
+        std::fs::remove_file(temp_file_path).expect("Failed to remove temporary file");
+    }
+
+    #[test]
+    fn test_is_wav_file_with_non_wav() {
+        // Create a temporary file with a non-WAV header
+        let temp_file_path = "test.txt";
+        let header: [u8; 12] = [84, 69, 83, 84, 32, 70, 73, 76, 69, 33, 33, 33];
+        std::fs::write(temp_file_path, &header).expect("Failed to create temporary non-WAV file");
+
+        // Check if the file is recognized as a WAV file
+        let path = Path::new(temp_file_path);
+        let result = is_wav_file(&path);
+
+        // Assert that it should not be recognized as a WAV file
+        assert!(result.is_ok() && result.unwrap() == false);
+
+        // Clean up the temporary file
+        std::fs::remove_file(temp_file_path).expect("Failed to remove temporary file");
+    }
 }
-
