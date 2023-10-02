@@ -4,7 +4,7 @@ use bincode::{Decode, Encode};
 
 // 250 to optimize bincode encoding, since it checks for <251 for u8
 const NOOP_COMPRESSOR_ID:u8 = 250;
-#[derive(Encode, Decode, PartialEq, Debug)]
+#[derive(Encode, Decode, PartialEq, Debug, Clone)]
 pub struct Noop {
     pub id: u8,
     pub data: Vec<i64>,
@@ -32,10 +32,24 @@ impl Noop {
         self.data = Noop::optimize(data);
     }
 
+    /// Receives a data stream and generates a Noop
+    pub fn decompress(data: &Vec<u8>) -> Self {
+        let config = BinConfig::get();
+        match bincode::decode_from_slice(&data, config) {
+            Ok((constant, _)) => constant,
+            Err(e) => panic!("{e}")
+        }
+    }
+
     /// This function transforms the structure in a Binary stream to be appended to the frame
-    pub fn to_bytes(self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let config = BinConfig::get();
         bincode::encode_to_vec(self, config).unwrap()
+    }
+
+    /// Returns an array of data
+    pub fn to_data(&self) -> Vec<f64> {
+        Vec::new()
     }
 
 }
@@ -52,8 +66,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_constant() {
+    fn test_noop() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
         assert_eq!(noop(&vector1), [250, 5, 2, 2, 2, 2, 2]);
+    }
+    
+    #[test]
+    fn test_compression() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
+        let mut c = Noop::new(vector1.len());
+        c.compress(&vector1);
+        let bin_data = c.to_bytes();
+        let c2 = Noop::decompress(&bin_data);
+
+        assert_eq!(c.clone(), c2);
     }
 }
