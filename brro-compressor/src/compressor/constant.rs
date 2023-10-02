@@ -100,8 +100,12 @@ impl Constant {
 
     /// Returns an array of data. It creates an array of data the size of the frame with a constant value
     /// and pushes the residuals to the right place.
-    pub fn to_data(&self) -> Vec<f64> {
-        Vec::new()
+    pub fn to_data(&self, frame_size: usize) -> Vec<i64> {
+        let mut data = vec![self.constant; frame_size];
+        for (i, v) in &self.residuals {
+            data[*i as usize] = *v;
+        }
+        data
     }
 
 }
@@ -155,5 +159,18 @@ mod tests {
 
         assert!(c.constant == 1);
         assert_eq!(c.residuals, vec![(1,2),(4,3)]);
+    }
+
+    #[test]
+    fn test_to_data() {
+        let vector1 = vec![1.0, 2.0, 1.0, 1.0, 3.0];
+        // Currently we are not dealing with floats
+        let out_vector1:Vec<i64> = vector1.iter()
+                                  .map(|&x| x as i64)
+                                  .collect();
+        let frame_size = vector1.len();
+        let compressed_data = constant(&vector1);
+        let out = Constant::decompress(&compressed_data).to_data(frame_size);
+        assert_eq!(out_vector1, out);
     }
 }
