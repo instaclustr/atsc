@@ -14,3 +14,7 @@ clap = {version = "4.3.14", features = ["derive"] }
 bincode = "2.0.0-rc.3"
 rustfft = "6.1.0"
 tempfile = "3.2"
+
+regex = "1.9.1"
+hound = "3.5"
+median = "0.3.2"
