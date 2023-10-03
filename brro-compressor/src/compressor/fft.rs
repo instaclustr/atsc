@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
-use bincode::{Decode, Encode};
-use rustfft::{FftPlanner, num_complex::Complex};
 use super::BinConfig;
-use log::{error, debug, warn};
+use bincode::{Decode, Encode};
+use log::{debug, error, warn};
+use rustfft::{num_complex::Complex, FftPlanner};
 
 const CONSTANT_COMPRESSOR_ID: u8 = 15;
 
@@ -39,15 +37,18 @@ impl FFT {
     // TODO: This actually seems to makes sense here. Call it convert?
     fn optimize(data: &[f64]) -> Vec<Complex<f32>> {
         data.iter()
-            .map(|x| Complex{re: FFT::f64_to_f32(*x), im: 0.0f32})
+            .map(|x| Complex {
+                re: FFT::f64_to_f32(*x),
+                im: 0.0f32,
+            })
             .collect()
     }
 
-    /// Compress data via FFT. 
+    /// Compress data via FFT.
     /// This picks a set of data, computes the FFT, and stores the most relevant frequencies, dropping
     /// the remaining ones.
     pub fn compress(&mut self, data: &[f64]) {
-        // First thing, always try to get the data len as a power of 2. 
+        // First thing, always try to get the data len as a power of 2.
         let v = data.len();
         if !v.is_power_of_two() {
             warn!("Slow FFT, data segment is not a power of 2!");
@@ -60,11 +61,11 @@ impl FFT {
     }
 
     /// Decompresses data
-    pub fn decompress(data: &Vec<u8>) -> Self {
+    pub fn decompress(data: &[u8]) -> Self {
         let config = BinConfig::get();
-        match bincode::decode_from_slice(&data, config) {
+        match bincode::decode_from_slice(data, config) {
             Ok((constant, _)) => constant,
-            Err(e) => panic!("{e}")
+            Err(e) => panic!("{e}"),
         }
     }
 
@@ -76,6 +77,6 @@ impl FFT {
     /// Returns an array of data
     /// Runs the ifft, and push residuals into place and/or adjusts max and mins accordingly
     pub fn to_data(&self) -> Vec<f64> {
-       Vec::new()
+        Vec::new()
     }
 }

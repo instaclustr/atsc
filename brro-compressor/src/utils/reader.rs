@@ -1,7 +1,7 @@
 // Implement a streaming reader here
 use std::fs;
 use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 
 // Function to check if a file is a WAV file
 fn is_wav_file(file_path: &Path) -> io::Result<bool> {
@@ -60,14 +60,14 @@ mod tests {
         // Create a temporary file with a valid WAV header
         let temp_file_path = "test.wav";
         let header: [u8; 12] = [82, 73, 70, 70, 4, 0, 0, 0, 87, 65, 86, 69];
-        std::fs::write(temp_file_path, &header).expect("Failed to create temporary WAV file");
+        std::fs::write(temp_file_path, header).expect("Failed to create temporary WAV file");
 
         // Check if the file is recognized as a WAV file
         let path = Path::new(temp_file_path);
-        let result = is_wav_file(&path);
+        let result = is_wav_file(path);
 
         // Assert that it should be recognized as a WAV file
-        assert!(result.is_ok() && result.unwrap() == true);
+        assert!(result.is_ok() && result.unwrap());
 
         // Clean up the temporary file
         std::fs::remove_file(temp_file_path).expect("Failed to remove temporary file");
@@ -78,14 +78,14 @@ mod tests {
         // Create a temporary file with a non-WAV header
         let temp_file_path = "test.txt";
         let header: [u8; 12] = [84, 69, 83, 84, 32, 70, 73, 76, 69, 33, 33, 33];
-        std::fs::write(temp_file_path, &header).expect("Failed to create temporary non-WAV file");
+        std::fs::write(temp_file_path, header).expect("Failed to create temporary non-WAV file");
 
         // Check if the file is recognized as a WAV file
         let path = Path::new(temp_file_path);
-        let result = is_wav_file(&path);
+        let result = is_wav_file(path);
 
         // Assert that it should not be recognized as a WAV file
-        assert!(result.is_ok() && result.unwrap() == false);
+        assert!(result.is_ok() && !result.unwrap());
 
         // Clean up the temporary file
         std::fs::remove_file(temp_file_path).expect("Failed to remove temporary file");

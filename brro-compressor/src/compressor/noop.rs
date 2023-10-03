@@ -1,9 +1,9 @@
-use log::{info, debug};
 use super::BinConfig;
 use bincode::{Decode, Encode};
+use log::{debug, info};
 
 // 250 to optimize bincode encoding, since it checks for <251 for u8
-const NOOP_COMPRESSOR_ID:u8 = 250;
+const NOOP_COMPRESSOR_ID: u8 = 250;
 #[derive(Encode, Decode, PartialEq, Debug, Clone)]
 pub struct Noop {
     pub id: u8,
@@ -13,7 +13,10 @@ pub struct Noop {
 impl Noop {
     pub fn new(frame_size: usize) -> Self {
         debug!("Noop compressor");
-        Noop { id: NOOP_COMPRESSOR_ID, data: Vec::with_capacity(frame_size) }
+        Noop {
+            id: NOOP_COMPRESSOR_ID,
+            data: Vec::with_capacity(frame_size),
+        }
     }
 
     /// Currently the data is provided in f64, this compressor needs i64. So the optimizer needs
@@ -33,11 +36,11 @@ impl Noop {
     }
 
     /// Receives a data stream and generates a Noop
-    pub fn decompress(data: &Vec<u8>) -> Self {
+    pub fn decompress(data: &[u8]) -> Self {
         let config = BinConfig::get();
-        match bincode::decode_from_slice(&data, config) {
+        match bincode::decode_from_slice(data, config) {
             Ok((constant, _)) => constant,
-            Err(e) => panic!("{e}")
+            Err(e) => panic!("{e}"),
         }
     }
 
@@ -51,7 +54,6 @@ impl Noop {
     pub fn to_data(&self, _frame_size: usize) -> Vec<i64> {
         self.data.clone()
     }
-
 }
 
 pub fn noop(data: &[f64]) -> Vec<u8> {
@@ -59,9 +61,9 @@ pub fn noop(data: &[f64]) -> Vec<u8> {
     let mut c = Noop::new(data.len());
     c.compress(data);
     c.to_bytes()
- }
+}
 
- #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -70,7 +72,7 @@ mod tests {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
         assert_eq!(noop(&vector1), [250, 5, 2, 2, 2, 2, 2]);
     }
-    
+
     #[test]
     fn test_compression() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
@@ -85,6 +87,9 @@ mod tests {
     #[test]
     fn test_decompression() {
         let vector1 = vec![1.0, 2.0, 3.0, 4.0, 1.0];
-        assert_eq!(Noop::decompress(&noop(&vector1)).to_data(0), [1,2,3,4,1]);
+        assert_eq!(
+            Noop::decompress(&noop(&vector1)).to_data(0),
+            [1, 2, 3, 4, 1]
+        );
     }
 }
