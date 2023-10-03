@@ -8,7 +8,7 @@ const CONSTANT_COMPRESSOR_ID: u8 = 15;
 
 /// Struct to store frequencies, since bincode can't encode num_complex Complex format, this one is compatible
 // This could be a Generic to support f64, integers, etc...
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Copy, Clone)]
 pub struct FrequencyPoint {
     /// Frequency position
     pos: u16, // This is the reason that frame size is limited to 65535, probably enough
@@ -35,6 +35,10 @@ impl FrequencyPoint {
 
     pub fn to_complex(self) -> Complex<f32> {
         Complex{re: self.freq_real, im: self.freq_img}
+    }
+
+    pub fn to_inv_complex(self) -> Complex<f32> {
+        Complex{re: self.freq_real, im: self.freq_img * -1.0}
     }
 
     /// To allow to use rust std structures
@@ -103,7 +107,14 @@ impl FFT {
         y
     }
 
-    // TODO: This actually seems to makes sense here. Call it convert?
+    /// Rounds a number to the specified number of decimal places
+    // TODO: Move this into utils? I think this will be helpfull somewhere else.
+    fn round(x: f64, decimals: u32) -> f64 {
+        let y = 10i32.pow(decimals) as f64;
+        (x * y).round() / y
+    }
+
+    // Converts an f64 vec to an Vec of Complex F32
     fn optimize(data: &[f64]) -> Vec<Complex<f32>> {
         data.iter()
             .map(|x| Complex{re: FFT::f64_to_f32(*x), im: 0.0f32})
@@ -169,13 +180,39 @@ impl FFT {
         bincode::encode_to_vec(self, config).unwrap()
     }
 
+    /// Gets the full sized array with the frequencies mirrored
+    fn get_mirrored_freqs(&self, len: usize) -> Vec<Complex<f32>> {
+        // Because we are dealing with Real inputs, we only store half the frequencies, but 
+        // we need all for the ifft
+        let mut data = vec![Complex{re: 0.0f32, im: 0.0f32}; len];
+        for f in &self.frequencies {
+            let pos = f.pos as usize;
+            data[pos] = f.to_complex();
+            // fo doesn't mirror
+            if pos == 0 { continue; }
+            // Mirror and invert the imaginary part
+            data[len-pos] = f.to_inv_complex()
+        }
+        data
+    }
+
     /// Returns an array of data
     /// Runs the ifft, and push residuals into place and/or adjusts max and mins accordingly
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
-        let mut data = vec![0.0f32; frame_size];
+        // Vec to process the ifft
+        let mut data = self.get_mirrored_freqs(frame_size);
+        // Plan the ifft
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_inverse(frame_size);
-       Vec::new()
+        // run the ifft
+        fft.process(&mut data);
+        // We need this for normalization
+        let len = frame_size as f64;
+        // We only need the real part
+        let out_data = data.iter()
+                           .map(|&f| FFT::round((f.re as f64)/len, 1))
+                           .collect();
+        out_data
     }
 }
 
@@ -201,11 +238,21 @@ mod tests {
     }
 
     #[test]
-    fn test_to_data() {
+    fn test_to_lossess_data() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
         let compressed_data = fft(&vector1, frame_size);
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
         assert_eq!(vector1, out);
+    }
+
+    #[test]
+    fn test_to_lossy_data() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
+        let lossy_vec = vec![1.0, 1.3, 1.5, 1.0, 1.8, 0.5, 1.0, 1.3, 3.5, 1.0, 0.8, 4.5];
+        let frame_size = vector1.len();
+        let compressed_data = fft(&vector1, 5);
+        let out = FFT::decompress(&compressed_data).to_data(frame_size);
+        assert_eq!(lossy_vec, out);
     }
 }

@@ -4,6 +4,7 @@
 
 - Do we give the user the change of selecting it?
 - Configuration needs to be minimal, the end user is probably a metric server and/or a database
+- Pass Frame settings to the compressors (Min, max, size)
 
 ## How do we slice the input data?
 
