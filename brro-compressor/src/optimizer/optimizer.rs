@@ -47,7 +47,7 @@ fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
 }
 
 
-pub fn process_data(wav_data: Vec<f64>, tag: MetricTag) -> Vec<i64> {
+pub fn process_data(wav_data: &Vec<f64>, tag: &MetricTag) -> Vec<i64> {
     let mut _bitdepth = 64;
     let mut _dc_component: i64 = 0;
     let mut _fractional = true;

@@ -10,33 +10,30 @@ use brro_compressor::utils::writer;
 fn process_args(input_path: &str, arguments: &Args) {
     let path = Path::new(input_path);
 
-    let base_dir = Path::new("new");
+    let new_name = format!("{}-compressed", path.file_name().unwrap().to_string_lossy());
+    let base_dir = path.with_file_name(new_name);
 
     writer::initialize_directory(&base_dir).expect("Failed to initialize directory");
 
-    //REPLACE
-    let mut counter = 0;
     if arguments.directory {
-        let reader_results = reader::stream_reader(path).expect("TODO: panic message");
-        for data in reader_results {
+        let (file_contents, file_names) = reader::stream_reader(path).expect("TODO: panic message");
+        for (index, data) in file_contents.iter().enumerate() {
             let (vec_data, tag) = data;
             let optimizer_results = optimizer::process_data(vec_data, tag);
 
-            let iwav_data_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
+            let optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
 
             let mut compressed: Vec<u8> = Vec::new();
             if arguments.noop {
-                compressed = compressor::noop::noop(&iwav_data_f);
+                compressed = compressor::noop::noop(&optimizer_results_f);
             } else if arguments.constant {
-                compressed = compressor::constant::constant(&iwav_data_f);
+                compressed = compressor::constant::constant(&optimizer_results_f);
             }
 
-
-            let file_name = format!("compressed_{}.txt", counter);
+            let file_name =  writer::replace_extension(&file_names[index], "txt)");
             let new_path = base_dir.join(&file_name);
             let mut file = writer::create_streaming_writer(&new_path).expect("TODO: panic message");
             writer::write_data_to_stream(&mut file, &compressed).expect("Failed to write compressed data");
-            counter += 1;
         }
     } else {
         // process_file(input_path.into());

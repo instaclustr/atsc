@@ -36,8 +36,12 @@ fn process_raw_file(file_path: &Path) -> io::Result<()> {
 }
 
 // Function to read and process files in a directory
-pub fn stream_reader(directory_path: &Path) -> io::Result<Vec<(Vec<f64>, MetricTag)>> {
+pub fn stream_reader(directory_path: &Path) -> io::Result<(Vec<(Vec<f64>, MetricTag)>, Vec<String>)> {
     let mut results: Vec<(Vec<f64>, MetricTag)> = Vec::new();
+
+    let mut filenames: Vec<String> = Vec::new();
+
+
     // Iterate through entries (files and subdirectories) in the given directory
     for entry in fs::read_dir(directory_path)? {
         // Unwrap the entry to get the actual entry information
@@ -45,6 +49,13 @@ pub fn stream_reader(directory_path: &Path) -> io::Result<Vec<(Vec<f64>, MetricT
 
         // Get the path of the entry (file or directory)
         let file_path = entry.path();
+
+        // Add the filename to the list
+        if let Some(filename) = file_path.file_name() {
+            if let Some(filename_str) = filename.to_str() {
+                filenames.push(filename_str.to_string());
+            }
+        }
 
         // Check if the file is a WAV file
         if is_wav_file(&file_path)? {
@@ -56,7 +67,7 @@ pub fn stream_reader(directory_path: &Path) -> io::Result<Vec<(Vec<f64>, MetricT
             process_raw_file(&file_path)?;
         }
     }
-    Ok(results)
+    Ok((results, filenames))
 }
 
 /*

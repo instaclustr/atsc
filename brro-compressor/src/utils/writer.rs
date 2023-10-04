@@ -26,7 +26,13 @@ pub fn initialize_directory(base_dir: &Path) -> io::Result<()> {
     }
     Ok(())
 }
-
+pub fn replace_extension(filename: &String, new_extension: &str) -> String {
+    let path = Path::new(&filename);
+    let without_extension = path.file_stem().unwrap_or_default(); // gets the filename without extension
+    let mut new_path = PathBuf::from(without_extension);
+    new_path.set_extension(new_extension);
+    new_path.to_string_lossy().into_owned()
+}
 #[cfg(test)]
 mod tests {
     use super::*;
