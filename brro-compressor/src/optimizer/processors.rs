@@ -55,7 +55,7 @@ pub fn process_data(wav_data: &Vec<f64>, tag: &MetricTag) -> Vec<i64> {
     debug!("Tag: {:?}", tag);
     let data = match tag {
         MetricTag::Other => Vec::new(),
-        MetricTag::QuasiRandom => to_median_filter(&wav_data),
+        MetricTag::QuasiRandom => to_median_filter(wav_data),
         _ => {
             wav_data
                 .iter()
@@ -64,5 +64,5 @@ pub fn process_data(wav_data: &Vec<f64>, tag: &MetricTag) -> Vec<i64> {
         }
     };
     _fractional = false;
-    return data;
+    data
 }

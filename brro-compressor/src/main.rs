@@ -1,9 +1,8 @@
 use std::path::Path;
+use brro_compressor::optimizer::processors;
 use clap::{Parser, command, arg};
 use log::debug;
 use brro_compressor::compressor;
-
-use brro_compressor::optimizer::optimizer;
 use brro_compressor::utils::reader;
 use brro_compressor::utils::writer;
 
@@ -19,7 +18,7 @@ fn process_args(input_path: &str, arguments: &Args) {
         let (file_contents, file_names) = reader::stream_reader(path).expect("TODO: panic message");
         for (index, data) in file_contents.iter().enumerate() {
             let (vec_data, tag) = data;
-            let optimizer_results = optimizer::process_data(vec_data, tag);
+            let optimizer_results = processors::process_data(vec_data, tag);
 
             let optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
 

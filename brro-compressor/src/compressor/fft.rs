@@ -174,7 +174,7 @@ impl FFT {
     }
 
     /// Decompresses data
-    pub fn decompress(data: &Vec<u8>) -> Self {
+    pub fn decompress(data: &[u8]) -> Self {
         let config = BinConfig::get();
         match bincode::decode_from_slice(data, config) {
             Ok((fft, _)) => fft,

@@ -25,7 +25,7 @@ fn process_wav_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
     let wav_data = read_metrics_from_wav(full_path_str);
     // Depending on Metric Tag, apply a transformation
     let tag = tag_metric(full_path_str);
-    return Ok((wav_data, tag));
+    Ok((wav_data, tag))
 }
 
 // Function to process a RAW file
