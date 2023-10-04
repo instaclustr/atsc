@@ -9,3 +9,6 @@ pub mod preprocessor;
 pub mod utils;
 mod header;
 mod data;
+
+pub mod optimizer;
+pub mod types;
