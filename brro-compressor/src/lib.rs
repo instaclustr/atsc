@@ -11,3 +11,4 @@ mod header;
 mod data;
 
 pub mod optimizer;
+pub mod types;

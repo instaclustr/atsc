@@ -4,14 +4,26 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir; // Import the tempfile crate
 
 // Function to create a streaming writer for a file
-fn create_streaming_writer(file_path: &Path) -> io::Result<File> {
+pub fn create_streaming_writer(file_path: &Path) -> io::Result<File> {
     // Open the file for writing, creating it if it doesn't exist
     File::create(file_path)
 }
 
 // Function to write data to a streaming writer
-fn write_data_to_stream(writer: &mut File, data: &[u8]) -> io::Result<()> {
-    writer.write_all(data)?;
+pub fn write_data_to_stream(writer: &mut File, data: &[u8]) -> io::Result<()> {
+    // Convert each byte to a string representation and collect them into a Vec<String>
+    let strings: Vec<String> = data.iter().map(|&byte| byte.to_string()).collect();
+
+    // Join the Vec<String> into a single String, separated by spaces (or any other delimiter you prefer)
+    let output = strings.join(" ");
+
+    writer.write_all(output.as_bytes())?;
+    Ok(())
+}
+pub fn initialize_directory(base_dir: &Path) -> io::Result<()> {
+    if !base_dir.exists() {
+        fs::create_dir_all(base_dir)?;
+    }
     Ok(())
 }
 
