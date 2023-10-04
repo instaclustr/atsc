@@ -1,6 +1,8 @@
 use bincode::{Decode, Encode};
 use std::{collections::BinaryHeap, cmp::Ordering};
 use rustfft::{FftPlanner, num_complex::Complex};
+use crate::utils::error::calculate_error;
+
 use super::BinConfig;
 use log::{error, debug, warn, info};
 
@@ -82,8 +84,6 @@ pub struct FFT {
     pub id: u8,
     /// Stored frequencies
     pub frequencies: Vec<FrequencyPoint>,
-    /// Stored residuals
-    pub residuals: Vec<(i32, i64)>,
     /// The maximum numeric value of the points in the frame
     pub max_value: f32,  
     /// The minimum numeric value of the points in the frame
@@ -97,7 +97,6 @@ impl FFT {
         FFT {
             id: CONSTANT_COMPRESSOR_ID,
             frequencies: Vec::with_capacity(frame_size),
-            residuals: Vec::with_capacity(frame_size),
             /// The maximum numeric value of the points in the frame
             max_value: FFT::f64_to_f32(max),  
             /// The minimum numeric value of the points in the frame
@@ -228,6 +227,7 @@ impl FFT {
     }
 }
 
+/// Compresses a data segment via FFT.
 pub fn fft(data: &[f64], max_freqs: usize, min: f64, max: f64) -> Vec<u8> {
     info!("Initializing FFT Compressor");
     // Initialize the compressor
@@ -238,6 +238,26 @@ pub fn fft(data: &[f64], max_freqs: usize, min: f64, max: f64) -> Vec<u8> {
     c.to_bytes()
 }
 
+/// Compress targeting a specific max error allowed. This is very computational intensive,
+/// as the FFT will be calculated over and over until the specific error threshold is achived.
+/// `max_freqs` is used as a starting point for the calculation
+pub fn fft_allowed_error(data: &[f64], max_freqs: usize, min: f64, max: f64, allowed_error: f64) -> Vec<u8> {
+    info!("Initializing FFT Compressor");
+    // Initialize the compressor
+    let frame_size = data.len();
+    let mut i = 1;
+    let mut compressed_data = fft(data, max_freqs, min, max);
+    let mut out = FFT::decompress(&compressed_data).to_data(frame_size);
+    let mut e = calculate_error(&data.to_vec(), &out).unwrap();
+    while e > allowed_error {
+        compressed_data = fft(data, max_freqs+i, min, max);
+        out = FFT::decompress(&compressed_data).to_data(frame_size);
+        e = calculate_error(&data.to_vec(), &out).unwrap();
+        i += 1;
+    }
+    compressed_data
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -246,7 +266,7 @@ mod tests {
     #[test]
     fn test_fft() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        assert_eq!(fft(&vector1, 2, 1.0, 5.0), [15, 2, 0, 0, 0, 152, 65, 0, 0, 0, 0, 4, 0, 0, 96, 192, 102, 144, 138, 64, 0, 0, 0, 160, 64, 0, 0, 128, 63]);
+        assert_eq!(fft(&vector1, 2, 1.0, 5.0), [15, 2, 0, 0, 0, 152, 65, 0, 0, 0, 0, 4, 0, 0, 96, 192, 102, 144, 138, 64, 0, 0, 160, 64, 0, 0, 128, 63]);
     }
 
     #[test]
@@ -261,10 +281,20 @@ mod tests {
     #[test]
     fn test_to_lossy_data() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        let lossy_vec = vec![1.0, 1.3, 1.5, 1.0, 1.8, 1.0, 1.0, 1.3, 3.5, 1.0, 1.0, 4.5];
+        let lossy_vec = vec![1.1, 1.0, 1.1, 1.0, 2.1, 1.0, 1.1, 1.0, 3.1, 1.0, 1.1, 4.9];
         let frame_size = vector1.len();
-        let compressed_data = fft(&vector1, 5, 1.0, 5.0);
+        let compressed_data = fft(&vector1, 6, 1.0, 5.0);
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
         assert_eq!(lossy_vec, out);
+    }
+
+    #[test]
+    fn test_to_allowed_error() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
+        let frame_size = vector1.len();
+        let compressed_data = fft_allowed_error(&vector1, 1, 1.0, 5.0, 0.01);
+        let out = FFT::decompress(&compressed_data).to_data(frame_size);
+        let e = calculate_error(&vector1, &out).unwrap();
+        assert!(e <= 0.01);
     }
 }

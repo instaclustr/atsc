@@ -10,7 +10,7 @@ use std::cmp;
 /// # Returns
 ///
 /// The mean squared error, or an error message if the vector lengths are different.
-fn calculate_error(vec1: &Vec<f64>, vec2: &Vec<f64>) -> Option<f64> {
+pub fn calculate_error(vec1: &Vec<f64>, vec2: &Vec<f64>) -> Option<f64> {
     if vec1.len() != vec2.len() {
         return None;
     }
