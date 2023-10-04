@@ -1,6 +1,6 @@
-use std::fs::File;
+use std::fs::{File, self};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 // Function to create a streaming writer for a file
 pub fn create_streaming_writer(file_path: &Path) -> io::Result<File> {
