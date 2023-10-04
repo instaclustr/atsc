@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use bincode::{Decode, Encode};
 use super::BinConfig;
-use log::{info, debug};
+use bincode::{Decode, Encode};
+use log::{debug, info};
+use std::collections::HashMap;
 
 const CONSTANT_COMPRESSOR_ID: u8 = 0;
 
@@ -36,7 +36,7 @@ impl Constant {
     }
 
     /// returns the error value
-    pub fn get_error(self){
+    pub fn get_error(self) {
         self.residuals.len();
     }
 
@@ -52,7 +52,7 @@ impl Constant {
     }
 
     /// Compresses the data. Walks the data array and sets one value as the constant.
-    /// Performance consideration, we do O(3*n) in the worst case, best case is O(n). 
+    /// Performance consideration, we do O(3*n) in the worst case, best case is O(n).
     pub fn compress(&mut self, data: &[i64]) {
         // Count occurrences of each value in the data
         let mut seen_values = HashMap::new();
@@ -75,19 +75,21 @@ impl Constant {
         // if there is more than 1 element in the map, we have to walk the initial array
         if seen_values.len() > 1 {
             // Walk the initial array (again) and push anything not matching the constant to the residuals
-            self.residuals = data.iter().enumerate()
-                            .filter(|&(_,v)| *v != constant)
-                            .map(|(k,v)| (k.try_into().unwrap(), *v))
-                            .collect();
+            self.residuals = data
+                .iter()
+                .enumerate()
+                .filter(|&(_, v)| *v != constant)
+                .map(|(k, v)| (k.try_into().unwrap(), *v))
+                .collect();
         }
     }
 
     /// Receives a data stream and generates a Constant
-    pub fn decompress(data: &Vec<u8>) -> Self {
+    pub fn decompress(data: &[u8]) -> Self {
         let config = BinConfig::get();
-        match bincode::decode_from_slice(&data, config) {
+        match bincode::decode_from_slice(data, config) {
             Ok((constant, _)) => constant,
-            Err(e) => panic!("{e}")
+            Err(e) => panic!("{e}"),
         }
     }
 
@@ -107,7 +109,6 @@ impl Constant {
         }
         data
     }
-
 }
 
 pub fn constant(data: &[f64]) -> Vec<u8> {
@@ -137,7 +138,7 @@ mod tests {
         c.compress(&Constant::optimize(&vector1));
         let bin_data = c.to_bytes();
         let c2 = Constant::decompress(&bin_data);
-        
+
         assert_eq!(bin_data, [0, 2, 0]);
         assert_eq!(c.clone(), c2);
     }
@@ -158,16 +159,14 @@ mod tests {
         c.compress(&Constant::optimize(&vector1));
 
         assert!(c.constant == 1);
-        assert_eq!(c.residuals, vec![(1,2),(4,3)]);
+        assert_eq!(c.residuals, vec![(1, 2), (4, 3)]);
     }
 
     #[test]
     fn test_to_data() {
         let vector1 = vec![1.0, 2.0, 1.0, 1.0, 3.0];
         // Currently we are not dealing with floats
-        let out_vector1:Vec<i64> = vector1.iter()
-                                  .map(|&x| x as i64)
-                                  .collect();
+        let out_vector1: Vec<i64> = vector1.iter().map(|&x| x as i64).collect();
         let frame_size = vector1.len();
         let compressed_data = constant(&vector1);
         let out = Constant::decompress(&compressed_data).to_data(frame_size);
