@@ -1,6 +1,6 @@
-use std::{path::Path};
+use std::path::Path;
 use clap::{Parser, command, arg};
-use log::{debug, error, info};
+use log::debug;
 use brro_compressor::compressor;
 
 use brro_compressor::optimizer::optimizer;

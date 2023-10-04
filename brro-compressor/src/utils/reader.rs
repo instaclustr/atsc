@@ -1,7 +1,7 @@
 // Implement a streaming reader here
 use std::fs;
 use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use log::debug;
 use regex::Regex;
 use types::metric_tag::MetricTag;

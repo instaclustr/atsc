@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 use median::Filter;
-use log::{debug, error, info};
+use log::debug;
 use types::metric_tag::MetricTag;
 use crate::types;
 

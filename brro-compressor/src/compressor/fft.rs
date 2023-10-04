@@ -47,7 +47,7 @@ impl FrequencyPoint {
     fn partial_cmp(&self, other: &Self) -> Ordering {
         let c1 = Complex{re: self.freq_real, im: self.freq_img};
         let c2 = Complex{re: other.freq_real, im: other.freq_img};
-        if self == other { return  Ordering::Equal }
+        if self == other { Ordering::Equal }
         else if c1.norm() > c2.norm()  { return Ordering::Greater;}
         else { return Ordering::Less;}
 
@@ -151,10 +151,7 @@ impl FFT {
         let mut heap = BinaryHeap::from(tmp_vec);
         // Now that we have it, let's pop the elements we need!
         for _ in 0..max_freq {
-            match heap.pop() {
-                Some(item) => {freq_vec.push(item)},
-                None => {}    
-            }
+            if let Some(item) = heap.pop() {freq_vec.push(item)}
         }
         freq_vec
     }
@@ -179,7 +176,7 @@ impl FFT {
     /// Decompresses data
     pub fn decompress(data: &Vec<u8>) -> Self {
         let config = BinConfig::get();
-        match bincode::decode_from_slice(&data, config) {
+        match bincode::decode_from_slice(data, config) {
             Ok((fft, _)) => fft,
             Err(e) => panic!("{e}")
         }
