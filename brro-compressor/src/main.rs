@@ -1,9 +1,9 @@
-use std::{path::Path};
+use std::path::Path;
 use clap::{Parser, command, arg};
-use log::{debug, error, info};
+use log::debug;
 use brro_compressor::compressor;
 
-use brro_compressor::optimizer::optimizer;
+use brro_compressor::optimizer;
 use brro_compressor::utils::reader;
 use brro_compressor::utils::writer;
 
@@ -16,8 +16,8 @@ fn process_args(input_path: &str, arguments: &Args) {
     writer::initialize_directory(&base_dir).expect("Failed to initialize directory");
 
     if arguments.directory {
-        let (file_contents, file_names) = reader::stream_reader(path).expect("TODO: panic message");
-        for (index, data) in file_contents.iter().enumerate() {
+        let files = reader::stream_reader(path).expect("TODO: panic message");
+        for (index, data) in files.contents.iter().enumerate() {
             let (vec_data, tag) = data;
             let optimizer_results = optimizer::process_data(vec_data, tag);
 
@@ -30,7 +30,7 @@ fn process_args(input_path: &str, arguments: &Args) {
                 compressed = compressor::constant::constant(&optimizer_results_f);
             }
 
-            let file_name =  writer::replace_extension(&file_names[index], "txt)");
+            let file_name =  writer::replace_extension(&files.names[index], "txt)");
             let new_path = base_dir.join(&file_name);
             let mut file = writer::create_streaming_writer(&new_path).expect("TODO: panic message");
             writer::write_data_to_stream(&mut file, &compressed).expect("Failed to write compressed data");
