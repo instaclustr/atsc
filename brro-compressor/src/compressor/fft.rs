@@ -84,17 +84,25 @@ pub struct FFT {
     pub frequencies: Vec<FrequencyPoint>,
     /// Stored residuals
     pub residuals: Vec<(i32, i64)>,
+    /// The maximum numeric value of the points in the frame
+    pub max_value: f32,  
+    /// The minimum numeric value of the points in the frame
+    pub min_value: f32,  
 }
 
 impl FFT {
     /// Creates a new instance of the Constant compressor with the size needed to handle the worst case
-    pub fn new(frame_size: usize) -> Self {
+    pub fn new(frame_size: usize, min: f64, max: f64) -> Self {
         debug!("FFT compressor");
         FFT {
             id: CONSTANT_COMPRESSOR_ID,
             frequencies: Vec::with_capacity(frame_size),
             residuals: Vec::with_capacity(frame_size),
-        }
+            /// The maximum numeric value of the points in the frame
+            max_value: FFT::f64_to_f32(max),  
+            /// The minimum numeric value of the points in the frame
+            min_value: FFT::f64_to_f32(min),  
+            }
     }
 
     // TODO: Move this to the optimizer?
@@ -109,9 +117,12 @@ impl FFT {
 
     /// Rounds a number to the specified number of decimal places
     // TODO: Move this into utils? I think this will be helpfull somewhere else.
-    fn round(x: f64, decimals: u32) -> f64 {
+    fn round(&self, x: f32, decimals: u32) -> f64 {
         let y = 10i32.pow(decimals) as f64;
-        (x * y).round() / y
+        let out = (x as f64 * y).round() / y;
+        if out > self.max_value as f64 { return self.max_value as f64; }
+        if out < self.min_value as f64 { return self.min_value as f64; }
+        out
     }
 
     // Converts an f64 vec to an Vec of Complex F32
@@ -207,19 +218,20 @@ impl FFT {
         // run the ifft
         fft.process(&mut data);
         // We need this for normalization
-        let len = frame_size as f64;
+        let len = frame_size as f32;
         // We only need the real part
+        // TODO: Only 1 decimal place is sketchy!
         let out_data = data.iter()
-                           .map(|&f| FFT::round((f.re as f64)/len, 1))
+                           .map(|&f| self.round(f.re/len, 1))
                            .collect();
         out_data
     }
 }
 
-pub fn fft(data: &[f64], max_freqs: usize) -> Vec<u8> {
+pub fn fft(data: &[f64], max_freqs: usize, min: f64, max: f64) -> Vec<u8> {
     info!("Initializing FFT Compressor");
     // Initialize the compressor
-    let mut c = FFT::new(data.len());
+    let mut c = FFT::new(data.len(), min, max);
     // Convert the data
     c.compress(data, max_freqs);
     // Convert to bytes
@@ -234,14 +246,14 @@ mod tests {
     #[test]
     fn test_fft() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        assert_eq!(fft(&vector1, 2), [15, 2, 0, 0, 0, 152, 65, 0, 0, 0, 0, 4, 0, 0, 96, 192, 102, 144, 138, 64, 0]);
+        assert_eq!(fft(&vector1, 2, 1.0, 5.0), [15, 2, 0, 0, 0, 152, 65, 0, 0, 0, 0, 4, 0, 0, 96, 192, 102, 144, 138, 64, 0, 0, 0, 160, 64, 0, 0, 128, 63]);
     }
 
     #[test]
     fn test_to_lossess_data() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let compressed_data = fft(&vector1, frame_size);
+        let compressed_data = fft(&vector1, frame_size, 1.0, 5.0);
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
         assert_eq!(vector1, out);
     }
@@ -249,9 +261,9 @@ mod tests {
     #[test]
     fn test_to_lossy_data() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        let lossy_vec = vec![1.0, 1.3, 1.5, 1.0, 1.8, 0.5, 1.0, 1.3, 3.5, 1.0, 0.8, 4.5];
+        let lossy_vec = vec![1.0, 1.3, 1.5, 1.0, 1.8, 1.0, 1.0, 1.3, 3.5, 1.0, 1.0, 4.5];
         let frame_size = vector1.len();
-        let compressed_data = fft(&vector1, 5);
+        let compressed_data = fft(&vector1, 5, 1.0, 5.0);
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
         assert_eq!(lossy_vec, out);
     }
