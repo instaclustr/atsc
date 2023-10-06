@@ -10,18 +10,11 @@ pub fn create_streaming_writer(file_path: &Path) -> io::Result<File> {
 
 // Function to write data to a streaming writer
 pub fn write_data_to_stream(writer: &mut File, data: &[u8]) -> io::Result<()> {
-    // Convert each byte to a string representation and collect them into a Vec<String>
-    let strings: Vec<String> = data.iter().map(|&byte| byte.to_string()).collect();
-
-    // Join the Vec<String> into a single String, separated by spaces (or any other delimiter you prefer)
-    let output = strings.join(" ");
-
-    writer.write_all(output.as_bytes())?;
-    Ok(())
+    writer.write_all(data)
 }
 pub fn initialize_directory(base_dir: &Path) -> io::Result<()> {
     if !base_dir.exists() {
-        fs::create_dir_all(base_dir)?;
+        std::fs::create_dir_all(base_dir)?;
     }
     Ok(())
 }

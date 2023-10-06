@@ -7,6 +7,7 @@ use regex::Regex;
 use types::metric_tag::MetricTag;
 use crate::types;
 
+
 // Function to check if a file is a WAV file
 fn is_wav_file(file_path: &Path) -> io::Result<bool> {
     // Open the file for reading and read the first 12 bytes (header) of the file
@@ -35,11 +36,16 @@ fn process_raw_file(file_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-// Function to read and process files in a directory
-pub fn stream_reader(directory_path: &Path) -> io::Result<(Vec<(Vec<f64>, MetricTag)>, Vec<String>)> {
-    let mut results: Vec<(Vec<f64>, MetricTag)> = Vec::new();
+pub struct Files {
+    pub contents: Vec<(Vec<f64>, MetricTag)>,
+    pub names: Vec<String>,
+}
 
-    let mut filenames: Vec<String> = Vec::new();
+// Function to read and process files in a directory
+pub fn stream_reader(directory_path: &Path) -> io::Result<Files> {
+    let mut contents: Vec<(Vec<f64>, MetricTag)> = Vec::new();
+
+    let mut names: Vec<String> = Vec::new();
 
 
     // Iterate through entries (files and subdirectories) in the given directory
@@ -53,7 +59,7 @@ pub fn stream_reader(directory_path: &Path) -> io::Result<(Vec<(Vec<f64>, Metric
         // Add the filename to the list
         if let Some(filename) = file_path.file_name() {
             if let Some(filename_str) = filename.to_str() {
-                filenames.push(filename_str.to_string());
+                names.push(filename_str.to_string());
             }
         }
 
@@ -61,13 +67,13 @@ pub fn stream_reader(directory_path: &Path) -> io::Result<(Vec<(Vec<f64>, Metric
         if is_wav_file(&file_path)? {
             // If it's a WAV file, process it using the process_wav_file function
             let wav_result = process_wav_file(&file_path)?;
-            results.push(wav_result);
+            contents.push(wav_result);
         } else {
             // If it's not a WAV file, process it as a RAW file using the process_raw_file function
             process_raw_file(&file_path)?;
         }
     }
-    Ok((results, filenames))
+    Ok(Files {contents, names})
 }
 
 /*
