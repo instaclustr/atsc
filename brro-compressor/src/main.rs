@@ -19,7 +19,7 @@ fn process_args(input_path: &str, arguments: &Args) {
         let files = reader::stream_reader(path).expect("TODO: panic message");
         for (index, data) in files.contents.iter().enumerate() {
             let (vec_data, tag) = data;
-            let optimizer_results = processors::process_data(vec_data, tag);
+            let optimizer_results = optimizer::process_data(vec_data, tag);
 
             let optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
 
