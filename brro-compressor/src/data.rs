@@ -16,6 +16,7 @@ impl CompressedStream {
         }
     }
 
+    /// Compress a chunk of data adding it as a new frame to the current stream
     pub fn compress_chunk(&mut self, chunk: &[f64]) {
         let mut compressor_frame = CompressorFrame::new(None);
         compressor_frame.compress(chunk);
@@ -23,6 +24,7 @@ impl CompressedStream {
         self.data_frames.push(compressor_frame);
     }
 
+    /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
     pub fn compress_chunk_with(&mut self, chunk: &[f64], compressor: Compressor) {
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         compressor_frame.compress(chunk);

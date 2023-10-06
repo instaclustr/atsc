@@ -7,8 +7,8 @@ pub mod compressor;
 pub mod frame;
 pub mod preprocessor;
 pub mod utils;
-mod header;
-mod data;
+pub mod header;
+pub mod data;
 
 pub mod optimizer;
 pub mod types;

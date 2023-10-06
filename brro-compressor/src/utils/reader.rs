@@ -41,6 +41,27 @@ pub struct Files {
     pub names: Vec<String>,
 }
 
+/// Read a file by chunks and processes the chunks
+pub fn process_by_chunk(file_path: &Path) -> Result<(), std::io::Error> {
+    let mut file = match std::fs::File::open(file_path) {
+        Ok(f) => f,
+        Err(e) => panic!("{}", e)
+    };
+
+    let mut list_of_chunks = Vec::new();
+    // 64KB at a time, assuming 64Bit samples, ~1024 samples.
+    let chunk_size = 0x10000;
+
+    loop {
+        let mut chunk = Vec::with_capacity(chunk_size);
+        let n = file.by_ref().take(chunk_size as u64).read_to_end(&mut chunk)?;
+        if n == 0 { break; }
+        list_of_chunks.push(chunk);
+        if n < chunk_size { break; }
+    }
+    Ok(())
+}
+
 // Function to read and process files in a directory
 pub fn stream_reader(directory_path: &Path) -> io::Result<Files> {
     let mut contents: Vec<(Vec<f64>, MetricTag)> = Vec::new();

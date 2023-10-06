@@ -6,6 +6,18 @@ use brro_compressor::compressor;
 use brro_compressor::optimizer;
 use brro_compressor::utils::reader;
 use brro_compressor::utils::writer;
+use brro_compressor::data::CompressedStream;
+
+/// Process a chunk of WAV content and compresses it
+/// If a stream is provided it adds a chunk to that stream, otherwise creates a new one
+fn compress_file(stream: Option<CompressedStream>, wav_content: Vec<f64>) -> CompressedStream {
+    let mut cs = match stream {
+                    Some(cs) => cs,
+                    None => CompressedStream::new()
+                };
+    cs.compress_chunk(&wav_content);
+    cs
+}
 
 fn process_args(input_path: &str, arguments: &Args) {
     let path = Path::new(input_path);
@@ -35,7 +47,8 @@ fn process_args(input_path: &str, arguments: &Args) {
             writer::write_data_to_stream(&mut file, &compressed).expect("Failed to write compressed data");
         }
     } else {
-        // process_file(input_path.into());
+        // TODO: Make this do something...
+        compress_file(None, Vec::new());
     }
 }
 
