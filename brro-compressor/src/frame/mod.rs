@@ -1,7 +1,9 @@
 use std::mem::size_of_val;
+use bincode::{Decode, Encode};
 use crate::compressor::Compressor;
 
 /// This is the structure of a compressor frame
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct CompressorFrame{
     /// The frame size in bytes,
     frame_size: usize,

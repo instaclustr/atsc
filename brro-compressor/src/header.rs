@@ -1,5 +1,7 @@
-/// This will write the file headers
+use bincode::{Decode, Encode};
 
+/// This will write the file headers
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct CompressorHeader {
     initial_segment: [u8; 4],
     // We should go unsigned

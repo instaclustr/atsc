@@ -1,4 +1,5 @@
 use bincode::config::{self, Configuration};
+use bincode::{Decode, Encode};
 use self::constant::constant;
 use self::fft::fft;
 use self::noop::noop;
@@ -7,7 +8,7 @@ pub mod noop;
 pub mod constant;
 pub mod fft;
 
-#[derive(Default)]
+#[derive(Encode, Decode, Default, Debug, Clone)]
 pub enum Compressor {
     #[default]
     Noop,
