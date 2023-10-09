@@ -28,6 +28,7 @@ impl CompressorFrame {
     }
 
     /// Calculates the size of the Frame and "closes it"
+    // TODO this is probably wrong, so we have to use the write stream to dump the bytes writen
     pub fn close(&mut self) {
         let size = size_of_val(&self.samples)
             + size_of_val(&self.compressor)

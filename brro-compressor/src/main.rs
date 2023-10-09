@@ -48,7 +48,8 @@ fn process_args(input_path: &str, arguments: &Args) {
         }
     } else {
         // TODO: Make this do something...
-        compress_file(None, Vec::new());
+        let cs = compress_file(None, Vec::new());
+        cs.to_bytes();
     }
 }
 
