@@ -1,6 +1,6 @@
 // Implement a streaming reader here
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Error, Read};
 use std::path::Path;
 use log::debug;
 use regex::Regex;
@@ -85,18 +85,24 @@ pub fn stream_reader(directory_path: &Path) -> io::Result<Files> {
         }
 
         // Check if the file is a WAV file
-        if is_wav_file(&file_path)? {
-            // If it's a WAV file, process it using the process_wav_file function
-            let wav_result = process_wav_file(&file_path)?;
-            contents.push(wav_result);
-        } else {
-            // If it's not a WAV file, process it as a RAW file using the process_raw_file function
-            process_raw_file(&file_path)?;
-        }
+        let res = read_file(&file_path)?;
+        if let Some((vec, tag)) = res { contents.push((vec, tag)) }
     }
     Ok(Files {contents, names})
 }
 
+pub fn read_file(file_path: &Path) -> Result<Option<(Vec<f64>, MetricTag)>, Error> {
+    if is_wav_file(file_path)? {
+        // If it's a WAV file, process it using the process_wav_file function
+        let wav_result = process_wav_file(file_path)?;
+        Ok(Option::from(wav_result))
+    } else {
+        // If it's not a WAV file, process it as a RAW file using the process_raw_file function
+        process_raw_file(file_path)?;
+        Ok(None)
+    }
+
+}
 /*
 Reads a WAV file, checks the channels and the information contained there. From that
 information takes a decision on the best channel, block size and bitrate for the BRRO
