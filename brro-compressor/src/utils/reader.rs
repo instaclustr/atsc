@@ -43,10 +43,7 @@ pub struct Files {
 
 /// Read a file by chunks and processes the chunks
 pub fn process_by_chunk(file_path: &Path) -> Result<(), std::io::Error> {
-    let mut file = match std::fs::File::open(file_path) {
-        Ok(f) => f,
-        Err(e) => panic!("{}", e)
-    };
+    let mut file = std::fs::File::open(file_path)?;
 
     let mut list_of_chunks = Vec::new();
     // 64KB at a time, assuming 64Bit samples, ~1024 samples.

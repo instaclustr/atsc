@@ -25,7 +25,7 @@ impl Compressor {
             Compressor::Noop => noop(data),
             Compressor::FFT => fft(data, 8, 0.0, 10.0), // TODO: Remove the placeholders
             Compressor::Constant => constant(data),
-            _ => noop(data),
+            _ => todo!(),
         }
     }
 }

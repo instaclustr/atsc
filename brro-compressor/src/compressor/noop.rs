@@ -38,10 +38,8 @@ impl Noop {
     /// Receives a data stream and generates a Noop
     pub fn decompress(data: &[u8]) -> Self {
         let config = BinConfig::get();
-        match bincode::decode_from_slice(data, config) {
-            Ok((constant, _)) => constant,
-            Err(e) => panic!("{e}"),
-        }
+        let (noop, _) = bincode::decode_from_slice(data, config).unwrap();
+        noop
     }
 
     /// This function transforms the structure in a Binary stream to be appended to the frame
