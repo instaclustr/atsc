@@ -239,8 +239,7 @@ pub fn fft(data: &[f64], max_freqs: usize, min: f64, max: f64) -> Vec<u8> {
 /// as the FFT will be calculated over and over until the specific error threshold is achived.
 /// `max_freqs` is used as a starting point for the calculation
 pub fn fft_allowed_error(data: &[f64], max_freqs: usize, min: f64, max: f64, allowed_error: f64) -> Vec<u8> {
-    info!("Initializing FFT Compressor");
-    // Initialize the compressor
+    // TODO: This can be greatly improved
     let frame_size = data.len();
     let mut i = 1;
     let mut compressed_data = fft(data, max_freqs, min, max);
