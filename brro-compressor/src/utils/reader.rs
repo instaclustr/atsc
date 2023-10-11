@@ -1,6 +1,6 @@
 // Implement a streaming reader here
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Error, Read};
 use std::path::Path;
 use log::debug;
 use regex::Regex;
@@ -20,7 +20,7 @@ fn is_wav_file(file_path: &Path) -> io::Result<bool> {
 }
 
 // Function to process a WAV file
-fn process_wav_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
+pub fn process_wav_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
     let full_path_str = file_path.to_str().unwrap_or("");
     debug!("File: {} ,", full_path_str);
     let wav_data = read_metrics_from_wav(full_path_str);
@@ -42,7 +42,7 @@ pub struct Files {
 }
 
 /// Read a file by chunks and processes the chunks
-pub fn process_by_chunk(file_path: &Path) -> Result<(), std::io::Error> {
+pub fn process_by_chunk(file_path: &Path) -> Result<(Vec<Vec<u8>>), std::io::Error> {
     let mut file = match std::fs::File::open(file_path) {
         Ok(f) => f,
         Err(e) => panic!("{}", e)
@@ -59,7 +59,7 @@ pub fn process_by_chunk(file_path: &Path) -> Result<(), std::io::Error> {
         list_of_chunks.push(chunk);
         if n < chunk_size { break; }
     }
-    Ok(())
+    Ok(list_of_chunks)
 }
 
 // Function to read and process files in a directory
@@ -85,18 +85,26 @@ pub fn stream_reader(directory_path: &Path) -> io::Result<Files> {
         }
 
         // Check if the file is a WAV file
-        if is_wav_file(&file_path)? {
-            // If it's a WAV file, process it using the process_wav_file function
-            let wav_result = process_wav_file(&file_path)?;
-            contents.push(wav_result);
-        } else {
-            // If it's not a WAV file, process it as a RAW file using the process_raw_file function
-            process_raw_file(&file_path)?;
+        let res= read_file(&file_path)?;
+        match res {
+            Some((vec, tag)) => contents.push((vec, tag)),
+            _ => (),
         }
     }
     Ok(Files {contents, names})
 }
 
+pub fn read_file(file_path: &Path) -> Result<Option<(Vec<f64>, MetricTag)>, Error> {
+    if is_wav_file(&file_path)? {
+        // If it's a WAV file, process it using the process_wav_file function
+        let wav_result = process_wav_file(&file_path)?;
+        return Ok(Option::from(wav_result));
+    } else {
+        // If it's not a WAV file, process it as a RAW file using the process_raw_file function
+        process_raw_file(&file_path)?;
+    }
+    Ok(None)
+}
 /*
 Reads a WAV file, checks the channels and the information contained there. From that
 information takes a decision on the best channel, block size and bitrate for the BRRO
