@@ -49,7 +49,7 @@ fn process_single_file(path: &Path, arguments: &Args) {
 
         if let Some(filename_osstr) = path.file_name() {
             if let Some(filename_str) = filename_osstr.to_str() {
-                let new_filename_string = writer::replace_extension(&filename_str.to_string(),"bin");
+                let new_filename_string = writer::replace_extension(&filename_str.to_string(), "bin");
                 let new_path = path.parent().unwrap().join(new_filename_string);
                 write_compressed_data_to_path(&compressed_data, &new_path);
             }
@@ -62,27 +62,18 @@ fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     let optimizer_results = optimizer::process_data(vec, tag);
     let optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
 
-    let cs = CompressedStream::new();
+    let mut cs = CompressedStream::new();
     if arguments.constant {
-        compress_file(Compressor::Constant, cs, optimizer_results_f)
+        cs.compress_chunk_with(&optimizer_results_f, Compressor::Constant);
+        cs.to_bytes()
     } else {
-        compress_file(Compressor::Noop, cs, optimizer_results_f)
+        cs.compress_chunk_with(&optimizer_results_f, Compressor::Noop);
+        cs.to_bytes()
     }
 }
-fn compress_file(compressor: Compressor, mut stream: CompressedStream, wav_content: Vec<f64>) -> Vec<u8> {
-    return match compressor {
-        Compressor::Constant =>{
-            stream.compress_chunk_with(&wav_content, Compressor::Constant);
-            stream.to_bytes()
-        }
-        _ =>{
-            stream.compress_chunk_with(&wav_content, Compressor::Noop);
-            stream.to_bytes()
-        }
-    }
-}
+
 /// Writes the compressed data to the specified path.
-fn write_compressed_data_to_path(compressed: &Vec<u8>, path: &Path) {
+fn write_compressed_data_to_path(compressed: &[u8], path: &Path) {
     let mut file = writer::create_streaming_writer(path).expect("Failed to create a streaming writer");
     writer::write_data_to_stream(&mut file, compressed).expect("Failed to write compressed data");
 }
@@ -105,6 +96,7 @@ struct Args {
     #[arg(long, action)]
     constant: bool,
 }
+
 fn main() {
     env_logger::init();
     let arguments = Args::parse();
