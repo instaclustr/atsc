@@ -87,10 +87,8 @@ impl Constant {
     /// Receives a data stream and generates a Constant
     pub fn decompress(data: &[u8]) -> Self {
         let config = BinConfig::get();
-        match bincode::decode_from_slice(data, config) {
-            Ok((constant, _)) => constant,
-            Err(e) => panic!("{e}"),
-        }
+        let (ct, _) = bincode::decode_from_slice(data, config).unwrap();
+        ct
     }
 
     /// This function transforms the structure into a Binary stream

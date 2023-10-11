@@ -45,10 +45,8 @@ impl CompressedStream {
     /// Gets a binary stream and generates a Compressed Stream
     pub fn from_bytes(data: &[u8]) -> Self {
         let config = BinConfig::get();
-        match bincode::decode_from_slice(data, config) {
-            Ok((compressed_stream, _)) => compressed_stream,
-            Err(e) => panic!("{e}")
-        }
+        let (compressed_stream, _) = bincode::decode_from_slice(data, config).unwrap();
+        compressed_stream
     }
 }
 
