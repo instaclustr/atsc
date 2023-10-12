@@ -46,17 +46,15 @@ fn process_directory(arguments: &Args) {
 }
 
 /// Processes a single file.
-fn process_single_file(arguments: &Args) {
-    if let Some((vec, tag)) = reader::read_file(&arguments.input).expect("Failed to read file") {
-        let compressed_data = compress_data(&vec, &tag, arguments);
+fn process_single_file(path: &Path, arguments: &Args) {
+    let (vec, tag) = reader::read_file(path).expect("Failed to read file");
+    let compressed_data = compress_data(&vec, &tag, arguments);
 
-        if let Some(filename_osstr) = arguments.input.file_name() {
-            if let Some(filename_str) = filename_osstr.to_str() {
-                let new_filename_string =
-                    writer::replace_extension(&filename_str.to_string(), "bin");
-                let new_path = arguments.input.parent().unwrap().join(new_filename_string);
-                write_compressed_data_to_path(&compressed_data, &new_path);
-            }
+    if let Some(filename_osstr) = path.file_name() {
+        if let Some(filename_str) = filename_osstr.to_str() {
+            let new_filename_string = writer::replace_extension(&filename_str.to_string(), "bin");
+            let new_path = path.parent().unwrap().join(new_filename_string);
+            write_compressed_data_to_path(&compressed_data, &new_path);
         }
     }
 }
