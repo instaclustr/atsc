@@ -30,10 +30,8 @@ fn process_wav_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
 }
 
 // Function to process a RAW file
-fn process_raw_file(file_path: &Path) -> io::Result<()> {
-    // Handle RAW file processing here (for example, decoding or encoding)
-    println!("Processing RAW file: {:?}", file_path);
-    Ok(())
+fn process_raw_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
+    todo!("Handle RAW file processing here (for example, decoding or encoding): {file_path:?}");
 }
 
 pub struct Files {
@@ -82,21 +80,18 @@ pub fn stream_reader(directory_path: &Path) -> io::Result<Files> {
         }
 
         // Check if the file is a WAV file
-        let res = read_file(&file_path)?;
-        if let Some((vec, tag)) = res { contents.push((vec, tag)) }
+        contents.push(read_file(&file_path)?);
     }
     Ok(Files {contents, names})
 }
 
-pub fn read_file(file_path: &Path) -> Result<Option<(Vec<f64>, MetricTag)>, Error> {
+pub fn read_file(file_path: &Path) -> Result<(Vec<f64>, MetricTag), Error> {
     if is_wav_file(file_path)? {
         // If it's a WAV file, process it using the process_wav_file function
-        let wav_result = process_wav_file(file_path)?;
-        Ok(Option::from(wav_result))
+        process_wav_file(file_path)
     } else {
         // If it's not a WAV file, process it as a RAW file using the process_raw_file function
-        process_raw_file(file_path)?;
-        Ok(None)
+        process_raw_file(file_path)
     }
 
 }
