@@ -1,36 +1,39 @@
-use std::path::Path;
-use clap::{Parser, command, arg};
-use log::debug;
 use brro_compressor::compressor::Compressor;
+use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer;
+use brro_compressor::types::metric_tag::MetricTag;
 use brro_compressor::utils::reader;
 use brro_compressor::utils::writer;
-use brro_compressor::data::CompressedStream;
-use brro_compressor::types::metric_tag::MetricTag;
+use clap::{arg, command, Parser};
+use log::debug;
+use std::path::Path;
+use std::path::PathBuf;
 
 /// Processes the given input based on the provided arguments.
 /// If `arguments.directory` is true, it processes all files in the directory.
 /// Otherwise, it processes the individual file.
-fn process_args(input_path: &str, arguments: &Args) {
-    let path = Path::new(input_path);
-
+fn process_args(arguments: &Args) {
     // If the input path points to a directory
     if arguments.directory {
-        process_directory(path, arguments);
+        process_directory(arguments);
     }
     // If the input path points to a single file
     else {
-        process_single_file(path, arguments);
+        process_single_file(arguments);
     }
 }
 
 /// Processes all files in a given directory.
-fn process_directory(path: &Path, arguments: &Args) {
-    let new_name = format!("{}-compressed", path.file_name().unwrap().to_string_lossy());
-    let base_dir = path.with_file_name(new_name);
+fn process_directory(arguments: &Args) {
+    let new_name = format!(
+        "{}-compressed",
+        arguments.input.file_name().unwrap().to_string_lossy()
+    );
+    let base_dir = arguments.input.with_file_name(new_name);
 
     writer::initialize_directory(&base_dir).expect("Failed to initialize directory");
-    let files = reader::stream_reader(path).expect("Failed to read files from directory");
+    let files =
+        reader::stream_reader(&arguments.input).expect("Failed to read files from directory");
 
     for (index, data) in files.contents.iter().enumerate() {
         let (vec_data, tag) = data;
@@ -73,16 +76,16 @@ fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
 
 /// Writes the compressed data to the specified path.
 fn write_compressed_data_to_path(compressed: &[u8], path: &Path) {
-    let mut file = writer::create_streaming_writer(path).expect("Failed to create a streaming writer");
+    let mut file =
+        writer::create_streaming_writer(path).expect("Failed to create a streaming writer");
     writer::write_data_to_stream(&mut file, compressed).expect("Failed to write compressed data");
 }
-
 
 #[derive(Parser, Default, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// input file
-    input: String,
+    input: PathBuf,
 
     #[arg(short, action)]
     directory: bool,
@@ -100,5 +103,5 @@ fn main() {
     env_logger::init();
     let arguments = Args::parse();
     debug!("{:?}", arguments);
-    process_args(&arguments.input, &arguments);
+    process_args(&arguments);
 }
