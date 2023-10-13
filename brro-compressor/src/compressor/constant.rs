@@ -82,6 +82,7 @@ impl Constant {
                 .map(|(k, v)| (k.try_into().unwrap(), *v))
                 .collect();
         }
+        debug!("Compressed {} elements into {} elements!",data.len(), self.residuals.len()+1);
     }
 
     /// Receives a data stream and generates a Constant
