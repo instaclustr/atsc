@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fs;
 use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer;
@@ -5,22 +7,42 @@ use brro_compressor::types::metric_tag::MetricTag;
 use brro_compressor::utils::reader;
 use brro_compressor::utils::writer;
 use clap::{arg, command, Parser};
-use log::debug;
+use log::{debug, error};
 use std::path::Path;
 use std::path::PathBuf;
 
 /// Processes the given input based on the provided arguments.
-/// If `arguments.directory` is true, it processes all files in the directory.
-/// Otherwise, it processes the individual file.
-fn process_args(arguments: &Args) {
-    // If the input path points to a directory
-    if arguments.directory {
-        process_directory(arguments);
+fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
+
+    // Create a vector of boolean values from the argument flags.
+    // Then, count how many of these flags are set to true.
+    let count = vec![arguments.noop, arguments.constant, arguments.fft]
+        .iter()
+        .filter(|&&x| x)
+        .count();
+
+    if count > 1 {
+        return Err("Multiple compressors are set to true. Please specify only one.".into());
     }
+
+    let metadata = fs::metadata(&arguments.input)?;
+
     // If the input path points to a single file
-    else {
+    if metadata.is_file() {
+        debug!("Target is a file");
         process_single_file(arguments);
     }
+    // If the input path points to a directory
+    else if metadata.is_dir() {
+        debug!("Target is a directory");
+        process_directory(arguments);
+    }
+    // If the input path is neither a file nor a directory
+    else {
+        return Err("The provided path is neither a file nor a directory.".into());
+    }
+
+    Ok(())
 }
 
 /// Processes all files in a given directory.
@@ -66,13 +88,14 @@ fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     let optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
 
     let mut cs = CompressedStream::new();
-    if arguments.constant {
-        cs.compress_chunk_with(&optimizer_results_f, Compressor::Constant);
-        cs.to_bytes()
-    } else {
-        cs.compress_chunk_with(&optimizer_results_f, Compressor::Noop);
-        cs.to_bytes()
-    }
+    let compressor = match arguments {
+        _ if arguments.constant => Compressor::Constant,
+        _ if arguments.fft => Compressor::FFT,
+        _ => Compressor::Noop,
+    };
+
+    cs.compress_chunk_with(&optimizer_results_f, compressor);
+    cs.to_bytes()
 }
 
 /// Writes the compressed data to the specified path.
@@ -88,9 +111,6 @@ struct Args {
     /// input file
     input: PathBuf,
 
-    #[arg(short, action)]
-    directory: bool,
-
     /// Forces Noop compressor
     #[arg(long, action)]
     noop: bool,
@@ -98,11 +118,19 @@ struct Args {
     /// Forces Constant compressor
     #[arg(long, action)]
     constant: bool,
+
+    /// Forces Constant compressor
+    #[arg(long, action)]
+    fft: bool,
+
 }
 
 fn main() {
     env_logger::init();
     let arguments = Args::parse();
     debug!("{:?}", arguments);
-    process_args(&arguments);
+
+    if let Err(e) = process_args(&arguments) {
+        error!("Error processing arguments: {}", e);
+    }
 }
