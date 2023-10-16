@@ -284,4 +284,13 @@ mod tests {
         assert_eq!(lossy_vec, out);
     }
 
+    #[test]
+    fn test_to_allowed_error() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
+        let frame_size = vector1.len();
+        let compressed_data = fft_allowed_error(&vector1, 1, 1.0, 5.0, 0.01);
+        let out = FFT::decompress(&compressed_data).to_data(frame_size);
+        let e = calculate_error(&vector1, &out).unwrap();
+        assert!(e <= 0.01);
+    }
 }
