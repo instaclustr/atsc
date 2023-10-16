@@ -85,7 +85,7 @@ fn process_single_file(arguments: &Args) -> Result<(), std::io::Error>  {
                 let new_filename_string =
                     writer::replace_extension(&filename_str.to_string(), "bro");
                 let new_path = arguments.input.parent().unwrap().join(new_filename_string);
-                write_compressed_data_to_path(&compressed_data, &new_path);
+                write_compressed_data_to_path(&compressed_data, &new_path)?;
             }
         }
     }
