@@ -1,8 +1,9 @@
 use bincode::config::{self, Configuration};
 use bincode::{Decode, Encode};
-use self::constant::constant;
-use self::fft::fft;
-use self::noop::noop;
+
+use self::constant::{constant, constant_to_data};
+use self::fft::{fft, fft_to_data};
+use self::noop::{noop, noop_to_data};
 
 pub mod noop;
 pub mod constant;
@@ -26,6 +27,15 @@ impl Compressor {
             Compressor::FFT => fft(data, 8, 0.0, 10.0), // TODO: Remove the placeholders
             Compressor::Constant => constant(data),
             _ => todo!(),
+        }
+    }
+
+    pub fn decompress(&self, samples: usize, data: &[u8] ) -> Vec<f64> {
+        match self {
+            Compressor::Noop => noop_to_data(samples, data),
+            Compressor::FFT => fft_to_data(samples, data),
+            Compressor::Constant => constant_to_data(samples, data),
+            _ => todo!()
         }
     }
 }

@@ -1,5 +1,6 @@
 use std::mem::size_of_val;
 use bincode::{Decode, Encode};
+use log::debug;
 use crate::compressor::Compressor;
 
 /// This is the structure of a compressor frame
@@ -8,7 +9,7 @@ pub struct CompressorFrame{
     /// The frame size in bytes,
     frame_size: usize,
     /// The number of samples in this frame,
-    samples: u32,
+    samples: usize,
     /// The compressor used in the current frame
     compressor: Compressor,
     /// Output from the compressor
@@ -41,6 +42,14 @@ impl CompressorFrame {
     pub fn compress(&mut self, data: &[f64]) {
         // TODO: Optimize here
         // self.compressor = optimizer_selection
+        self.samples = data.len();
         self.data = self.compressor.compress(data);
     }
+
+    /// Decompresses a frame and returns the resulting data array
+    pub fn decompress(&self) -> Vec<f64> {
+        debug!("Decompressing Frame. Size: {}, Samples: {}", self.frame_size, self.samples);
+        self.compressor.decompress(self.samples, &self.data)
+    }
+
 }
