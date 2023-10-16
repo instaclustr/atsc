@@ -32,7 +32,6 @@ impl CompressedStream {
         compressor_frame.compress(chunk);
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
-
     }
 
     /// Transforms the whole CompressedStream into bytes to be written to a file
@@ -42,12 +41,21 @@ impl CompressedStream {
         bincode::encode_to_vec(self, config).unwrap()
     }
 
-    /// Gets a binary stream and generates a Compressed Stream
+    /// Gets a binary stream and generates a Compressed Stream, at this point, anything inside the stream is
+    /// still in the compressed state
     pub fn from_bytes(data: &[u8]) -> Self {
         let config = BinConfig::get();
         let (compressed_stream, _) = bincode::decode_from_slice(data, config).unwrap();
         compressed_stream
     }
+
+    /// Decompresses all the frames and returns a vector with the data
+    pub fn decompress(&self) -> Vec<f64> {
+        self.data_frames.iter()
+                .flat_map(|f| f.decompress())
+                .collect()
+    }
+
 }
 
 #[cfg(test)]
@@ -76,7 +84,7 @@ mod tests {
         let mut cs = CompressedStream::new();
         cs.compress_chunk_with(&vector1, Compressor::Constant);
         let b = cs.to_bytes();
-        assert_eq!(b, [66, 82, 82, 79, 0, 1, 37, 0, 3, 3, 0, 2, 0]);
+        assert_eq!(b, [66, 82, 82, 79, 0, 1, 41, 251, 0, 4, 3, 3, 0, 2, 0]);
     }
 
     #[test]
@@ -88,5 +96,16 @@ mod tests {
         let b = cs.to_bytes();
         let cs2 = CompressedStream::from_bytes(&b);
         assert_eq!(len, cs2.data_frames.len());
+    }
+
+    #[test]
+    fn test_constant_decompression() {
+        let vector1 = vec![1.0; 1024];
+        let mut cs = CompressedStream::new();
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        let b = cs.to_bytes();
+        let cs2 = CompressedStream::from_bytes(&b);
+        let out = cs2.decompress();
+        assert_eq!(vector1, out);
     }
 }

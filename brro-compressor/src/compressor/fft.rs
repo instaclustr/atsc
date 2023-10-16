@@ -233,6 +233,12 @@ pub fn fft(data: &[f64], max_freqs: usize, min: f64, max: f64) -> Vec<u8> {
     c.to_bytes()
 }
 
+/// Uncompress a FFT data
+pub fn fft_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
+    let c = FFT::decompress(compressed_data);
+    c.to_data(sample_number)
+}
+
 /// Compress targeting a specific max error allowed. This is very computational intensive,
 /// as the FFT will be calculated over and over until the specific error threshold is achived.
 /// `max_freqs` is used as a starting point for the calculation
@@ -268,7 +274,7 @@ mod tests {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
         let compressed_data = fft(&vector1, frame_size, 1.0, 5.0);
-        let out = FFT::decompress(&compressed_data).to_data(frame_size);
+        let out = fft_to_data(vector1.len(), &compressed_data);
         assert_eq!(vector1, out);
     }
 
@@ -276,9 +282,8 @@ mod tests {
     fn test_to_lossy_data() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let lossy_vec = vec![1.1, 1.0, 1.1, 1.0, 2.1, 1.0, 1.1, 1.0, 3.1, 1.0, 1.1, 4.9];
-        let frame_size = vector1.len();
         let compressed_data = fft(&vector1, 6, 1.0, 5.0);
-        let out = FFT::decompress(&compressed_data).to_data(frame_size);
+        let out = fft_to_data(vector1.len(), &compressed_data);
         assert_eq!(lossy_vec, out);
     }
 

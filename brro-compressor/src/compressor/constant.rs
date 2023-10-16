@@ -120,6 +120,12 @@ pub fn constant(data: &[f64]) -> Vec<u8> {
     c.to_bytes()
 }
 
+pub fn constant_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
+    let c = Constant::decompress(compressed_data);
+    let out_i64 = c.to_data(sample_number);
+    out_i64.iter().map(|&x| x as f64).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,11 +170,9 @@ mod tests {
     #[test]
     fn test_to_data() {
         let vector1 = vec![1.0, 2.0, 1.0, 1.0, 3.0];
-        // Currently we are not dealing with floats
-        let out_vector1: Vec<i64> = vector1.iter().map(|&x| x as i64).collect();
         let frame_size = vector1.len();
         let compressed_data = constant(&vector1);
-        let out = Constant::decompress(&compressed_data).to_data(frame_size);
-        assert_eq!(out_vector1, out);
+        let out = constant_to_data(frame_size, &compressed_data);
+        assert_eq!(vector1, out);
     }
 }
