@@ -9,22 +9,27 @@ use log::debug;
 use std::path::Path;
 use std::path::PathBuf;
 
+/// Define a data structure for compressor settings
+struct CompressorSettings {
+    // Define fields for compressor settings here
+}
+
 /// Processes the given input based on the provided arguments.
 /// If `arguments.directory` is true, it processes all files in the directory.
 /// Otherwise, it processes the individual file.
-fn process_args(arguments: &Args) {
+fn process_args(arguments: &Args, compressor_settings: Option<CompressorSettings>) {
     // If the input path points to a directory
     if arguments.directory {
-        process_directory(arguments);
+        process_directory(arguments, compressor_settings);
     }
     // If the input path points to a single file
     else {
-        process_single_file(arguments);
+        process_single_file(arguments, compressor_settings);
     }
 }
 
 /// Processes all files in a given directory.
-fn process_directory(arguments: &Args) {
+fn process_directory(arguments: &Args, compressor_settings: Option<CompressorSettings>) {
     let new_name = format!(
         "{}-compressed",
         arguments.input.file_name().unwrap().to_string_lossy()
@@ -32,12 +37,11 @@ fn process_directory(arguments: &Args) {
     let base_dir = arguments.input.with_file_name(new_name);
 
     writer::initialize_directory(&base_dir).expect("Failed to initialize directory");
-    let files =
-        reader::stream_reader(&arguments.input).expect("Failed to read files from directory");
+    let files = reader::stream_reader(&arguments.input).expect("Failed to read files from directory");
 
     for (index, data) in files.contents.iter().enumerate() {
         let (vec_data, tag) = data;
-        let compressed_data = compress_data(vec_data, tag, arguments);
+        let compressed_data = compress_data(vec_data, tag, arguments, &compressor_settings);
 
         let file_name = writer::replace_extension(&files.names[index], "bin");
         let new_path = base_dir.join(&file_name);
@@ -46,14 +50,13 @@ fn process_directory(arguments: &Args) {
 }
 
 /// Processes a single file.
-fn process_single_file(arguments: &Args) {
+fn process_single_file(arguments: &Args, compressor_settings: Option<CompressorSettings>) {
     let (vec, tag) = reader::read_file(&arguments.input).expect("Failed to read file");
-    let compressed_data = compress_data(&vec, &tag, arguments);
+    let compressed_data = compress_data(&vec, &tag, arguments, &compressor_settings);
 
     if let Some(filename_osstr) = arguments.input.file_name() {
         if let Some(filename_str) = filename_osstr.to_str() {
-            let new_filename_string =
-                writer::replace_extension(&filename_str.to_string(), "bin");
+            let new_filename_string = writer::replace_extension(&filename_str.to_string(), "bin");
             let new_path = arguments.input.parent().unwrap().join(new_filename_string);
             write_compressed_data_to_path(&compressed_data, &new_path);
         }
@@ -61,7 +64,7 @@ fn process_single_file(arguments: &Args) {
 }
 
 /// Compresses the data based on the provided tag and arguments.
-fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
+fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args, compressor_settings: &Option<CompressorSettings>) -> Vec<u8> {
     let optimizer_results = optimizer::process_data(vec, tag);
     let optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
 
@@ -70,15 +73,23 @@ fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
         cs.compress_chunk_with(&optimizer_results_f, Compressor::Constant);
         cs.to_bytes()
     } else {
-        cs.compress_chunk_with(&optimizer_results_f, Compressor::Noop);
+        // Check if compressor settings were provided and use them
+        if let Some(_settings) = compressor_settings {
+            // Use the provided settings
+            // You may need to replace `Compressor::Noop` with an actual compressor based on the settings
+            cs.compress_chunk_with(&optimizer_results_f, Compressor::Noop);
+        } else {
+            // Use default settings or handle this case as needed
+            cs.compress_chunk_with(&optimizer_results_f, Compressor::Noop);
+        }
         cs.to_bytes()
     }
 }
 
+
 /// Writes the compressed data to the specified path.
 fn write_compressed_data_to_path(compressed: &[u8], path: &Path) {
-    let mut file =
-        writer::create_streaming_writer(path).expect("Failed to create a streaming writer");
+    let mut file = writer::create_streaming_writer(path).expect("Failed to create a streaming writer");
     writer::write_data_to_stream(&mut file, compressed).expect("Failed to write compressed data");
 }
 
@@ -104,5 +115,15 @@ fn main() {
     env_logger::init();
     let arguments = Args::parse();
     debug!("{:?}", arguments);
-    process_args(&arguments);
+
+    // Create an optional CompressorSettings based on user input
+    let compressor_settings = if arguments.noop {
+        None // Use default settings or handle this case as needed
+    } else {
+        Some(CompressorSettings {
+            // Define settings based on user input here
+        })
+    };
+
+    process_args(&arguments, compressor_settings);
 }
