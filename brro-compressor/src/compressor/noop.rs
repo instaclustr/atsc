@@ -33,6 +33,7 @@ impl Noop {
     /// "Compress"
     pub fn compress(&mut self, data: &[f64]) {
         self.data = Noop::optimize(data);
+        debug!("Compressed {} elements into {} elements!",data.len(), self.data.len());
     }
 
     /// Receives a data stream and generates a Noop
@@ -55,7 +56,7 @@ impl Noop {
 }
 
 pub fn noop(data: &[f64]) -> Vec<u8> {
-    info!("[Compressor] Initializing Noop Compressor");
+    info!("Initializing Noop Compressor");
     let mut c = Noop::new(data.len());
     c.compress(data);
     c.to_bytes()

@@ -24,6 +24,7 @@ fn process_wav_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
     let full_path_str = file_path.to_str().unwrap_or("");
     debug!("File: {} ,", full_path_str);
     let wav_data = read_metrics_from_wav(full_path_str);
+    debug!("Data Len: {}", wav_data.len());
     // Depending on Metric Tag, apply a transformation
     let tag = tag_metric(full_path_str);
     Ok((wav_data, tag))
@@ -32,6 +33,11 @@ fn process_wav_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
 // Function to process a RAW file
 fn process_raw_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
     todo!("Handle RAW file processing here (for example, decoding or encoding): {file_path:?}");
+}
+
+// Function to process a BRRO (Compressed) file
+fn process_brro_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
+    todo!("Handle BRRO file processing here (for example, decoding or encoding): {file_path:?}");
 }
 
 pub struct Files {
