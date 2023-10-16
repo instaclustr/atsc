@@ -62,6 +62,12 @@ pub fn noop(data: &[f64]) -> Vec<u8> {
     c.to_bytes()
 }
 
+pub fn noop_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
+    let c = Noop::decompress(compressed_data);
+    let out_i64 = c.to_data(sample_number);
+    out_i64.iter().map(|&x| x as f64).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,9 +92,7 @@ mod tests {
     #[test]
     fn test_decompression() {
         let vector1 = vec![1.0, 2.0, 3.0, 4.0, 1.0];
-        assert_eq!(
-            Noop::decompress(&noop(&vector1)).to_data(0),
-            [1, 2, 3, 4, 1]
-        );
+        let n = noop(&vector1);
+        assert_eq!(noop_to_data(vector1.len(), &n),vector1);
     }
 }

@@ -47,6 +47,7 @@ fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
 
 /// Processes all files in a given directory.
 fn process_directory(arguments: &Args) -> Result<(), std::io::Error> {
+    // TODO: Uncompresses directories
     let new_name = format!(
         "{}-compressed",
         arguments.input.file_name().unwrap().to_string_lossy()
@@ -71,15 +72,21 @@ fn process_directory(arguments: &Args) -> Result<(), std::io::Error> {
 /// Processes a single file.
 fn process_single_file(arguments: &Args) -> Result<(), std::io::Error>  {
     debug!("Processing single file...");
-    let (vec, tag) = reader::read_file(&arguments.input)?;
-    let compressed_data = compress_data(&vec, &tag, arguments);
-    if let Some(filename_osstr) = arguments.input.file_name() {
-        if let Some(filename_str) = filename_osstr.to_str() {
-            // BRO extension
-            let new_filename_string =
-                writer::replace_extension(&filename_str.to_string(), "bro");
-            let new_path = arguments.input.parent().unwrap().join(new_filename_string);
-            write_compressed_data_to_path(&compressed_data, &new_path)?;
+    if arguments.uncompress {
+        // TODO: Read a BRRO file, feed it to the decompressor
+        decompress_data(&[1,2,3]);
+        // TODO: Write the ouput out
+    } else {
+        let (vec, tag) = reader::read_file(&arguments.input)?;
+        let compressed_data = compress_data(&vec, &tag, arguments);
+        if let Some(filename_osstr) = arguments.input.file_name() {
+            if let Some(filename_str) = filename_osstr.to_str() {
+                // BRO extension
+                let new_filename_string =
+                    writer::replace_extension(&filename_str.to_string(), "bro");
+                let new_path = arguments.input.parent().unwrap().join(new_filename_string);
+                write_compressed_data_to_path(&compressed_data, &new_path);
+            }
         }
     }
     Ok(())
@@ -102,6 +109,13 @@ fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     cs.to_bytes()
 }
 
+/// Compresses the data based on the provided tag and arguments.
+fn decompress_data(compressed_data: &[u8]) -> Vec<f64> {
+    debug!("decompressing data!");
+    let cs = CompressedStream::from_bytes(compressed_data);
+    cs.decompress()
+}
+
 /// Writes the compressed data to the specified path.
 fn write_compressed_data_to_path(compressed: &[u8], path: &Path) -> Result<(), std::io::Error>{
     let mut file =
@@ -115,18 +129,20 @@ fn write_compressed_data_to_path(compressed: &[u8], path: &Path) -> Result<(), s
 struct Args {
     /// input file
     input: PathBuf,
-
     /// Forces Noop compressor
     #[arg(long, action)]
     noop: bool,
-
     /// Forces Constant compressor
     #[arg(long, action)]
     constant: bool,
-
-    /// Forces Constant compressor
+    /// Forces FFT compressor
+    //TODO: This needs to be a subcommand
     #[arg(long, action)]
     fft: bool,
+    /// Uncompresses the input file/directory
+    #[arg(short, action)]
+    uncompress: bool,
+
 
 }
 
