@@ -46,7 +46,9 @@ fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
     filtered
 }
 
-
+/// This should look at the data and return an optimized dataset for a specific compressor,
+/// If a compressor is hand picked, this should be skipped.
+/// TODO: Make it do that
 pub fn process_data(wav_data: &Vec<f64>, tag: &MetricTag) -> Vec<i64> {
     let mut _bitdepth = 64;
     let mut _dc_component: i64 = 0;

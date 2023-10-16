@@ -60,8 +60,8 @@ fn process_directory(arguments: &Args) -> Result<(), std::io::Error> {
     for (index, data) in files.contents.iter().enumerate() {
         let (vec_data, tag) = data;
         let compressed_data = compress_data(vec_data, tag, arguments);
-
-        let file_name = writer::replace_extension(&files.names[index], "bin");
+        // BRO extension
+        let file_name = writer::replace_extension(&files.names[index], "bro");
         let new_path = base_dir.join(&file_name);
         write_compressed_data_to_path(&compressed_data, &new_path)?;
     }
@@ -70,13 +70,14 @@ fn process_directory(arguments: &Args) -> Result<(), std::io::Error> {
 
 /// Processes a single file.
 fn process_single_file(arguments: &Args) -> Result<(), std::io::Error>  {
+    debug!("Processing single file...");
     let (vec, tag) = reader::read_file(&arguments.input)?;
     let compressed_data = compress_data(&vec, &tag, arguments);
-
     if let Some(filename_osstr) = arguments.input.file_name() {
         if let Some(filename_str) = filename_osstr.to_str() {
+            // BRO extension
             let new_filename_string =
-                writer::replace_extension(&filename_str.to_string(), "bin");
+                writer::replace_extension(&filename_str.to_string(), "bro");
             let new_path = arguments.input.parent().unwrap().join(new_filename_string);
             write_compressed_data_to_path(&compressed_data, &new_path)?;
         }
@@ -86,8 +87,9 @@ fn process_single_file(arguments: &Args) -> Result<(), std::io::Error>  {
 
 /// Compresses the data based on the provided tag and arguments.
 fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
+    debug!("Compressing data!");
     let optimizer_results = optimizer::process_data(vec, tag);
-    let optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
+    let _optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
 
     let mut cs = CompressedStream::new();
     let compressor = match arguments {
@@ -96,7 +98,7 @@ fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
         _ => Compressor::Noop,
     };
 
-    cs.compress_chunk_with(&optimizer_results_f, compressor);
+    cs.compress_chunk_with(vec, compressor);
     cs.to_bytes()
 }
 
