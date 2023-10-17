@@ -13,18 +13,6 @@ use std::path::PathBuf;
 
 /// Processes the given input based on the provided arguments.
 fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
-
-    // Create a vector of boolean values from the argument flags.
-    // Then, count how many of these flags are set to true.
-    let count = vec![arguments.noop, arguments.constant, arguments.fft]
-        .iter()
-        .filter(|&&x| x)
-        .count();
-
-    if count > 1 {
-        return Err("Multiple compressors are set to true. Please specify only one.".into());
-    }
-
     let metadata = fs::metadata(&arguments.input)?;
 
     // If the input path points to a single file
@@ -99,10 +87,13 @@ fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     let _optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
 
     let mut cs = CompressedStream::new();
-    let compressor = match arguments {
-        _ if arguments.constant => Compressor::Constant,
-        _ if arguments.fft => Compressor::FFT,
-        _ => Compressor::Noop,
+    let compressor = match arguments.compressor {
+        CompressorType::Noop => Compressor::Noop,
+        CompressorType::Constant => Compressor::Constant,
+        CompressorType::Fft => Compressor::FFT,
+        CompressorType::Polynomial => Compressor::Polynomial,
+        CompressorType::TopBottom => Compressor::TopBottom,
+        CompressorType::Wavelet => Compressor::Wavelet
     };
 
     cs.compress_chunk_with(vec, compressor);
@@ -129,21 +120,26 @@ fn write_compressed_data_to_path(compressed: &[u8], path: &Path) -> Result<(), s
 struct Args {
     /// input file
     input: PathBuf,
-    /// Forces Noop compressor
-    #[arg(long, action)]
-    noop: bool,
-    /// Forces Constant compressor
-    #[arg(long, action)]
-    constant: bool,
-    /// Forces FFT compressor
-    //TODO: This needs to be a subcommand
-    #[arg(long, action)]
-    fft: bool,
+
+    #[arg(long, value_enum, default_value = "noop")]
+    compressor: CompressorType,
+
     /// Uncompresses the input file/directory
     #[arg(short, action)]
     uncompress: bool,
 
 
+}
+
+#[derive(clap::ValueEnum, Default, Clone, Debug)]
+enum CompressorType {
+    #[default]
+    Noop,
+    Fft,
+    Wavelet,
+    Constant,
+    Polynomial,
+    TopBottom,
 }
 
 fn main() {
