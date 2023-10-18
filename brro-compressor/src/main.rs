@@ -1,9 +1,3 @@
-/// The above code is a Rust program that compresses data based on user input and settings.
-///
-/// Arguments:
-///
-/// * `arguments`: The `arguments` parameter is a struct that contains the parsed command-line arguments. It has the following fields:
-/// * `compressor_settings`: The `compressor_settings` parameter is an optional `CompressorSettings` struct that contains fields for compressor settings. It is used to customize the behavior of the compressor based on user input. If the `compressor_settings` parameter is `Some`, it means that the user has provided specific compressor settings
 use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer;
