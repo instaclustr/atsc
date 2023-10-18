@@ -24,7 +24,7 @@ impl Compressor {
     pub fn compress(&self, data: &[f64] ) -> Vec<u8> {
         match self {
             Compressor::Noop => noop(data),
-            Compressor::FFT => fft(data, 8, 0.0, 10.0), // TODO: Remove the placeholders
+            Compressor::FFT => fft(data),
             Compressor::Constant => constant(data),
             _ => todo!(),
         }
