@@ -4,12 +4,12 @@ use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer;
 use brro_compressor::types::metric_tag::MetricTag;
-use brro_compressor::utils::reader;
 use brro_compressor::utils::writer;
 use clap::{arg, command, Parser};
 use log::{debug, error};
 use std::path::Path;
 use std::path::PathBuf;
+use brro_compressor::utils::reader::{StreamReader};
 
 /// Processes the given input based on the provided arguments.
 fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
@@ -43,14 +43,20 @@ fn process_directory(arguments: &Args) -> Result<(), std::io::Error> {
     let base_dir = arguments.input.with_file_name(new_name);
 
     writer::initialize_directory(&base_dir)?;
-    let files =
-        reader::stream_reader(&arguments.input)?;
 
-    for (index, data) in files.contents.iter().enumerate() {
-        let (vec_data, tag) = data;
-        let compressed_data = compress_data(vec_data, tag, arguments);
+    let reader = StreamReader::from_directory(arguments.input.clone());
+
+    let mut vec = reader.contents_f;
+    let mut tag = reader.tags;
+    let names = reader.names;
+
+    for name in names.iter().rev() {
+        let vec_data = vec.pop().unwrap();
+        let tag_data = tag.pop().unwrap();
+
+        let compressed_data = compress_data(&vec_data, &tag_data, arguments);
         // BRO extension
-        let file_name = writer::replace_extension(&files.names[index], "bro");
+        let file_name = writer::replace_extension(name, "bro");
         let new_path = base_dir.join(&file_name);
         write_compressed_data_to_path(&compressed_data, &new_path)?;
     }
@@ -61,12 +67,21 @@ fn process_directory(arguments: &Args) -> Result<(), std::io::Error> {
 fn process_single_file(arguments: &Args) -> Result<(), std::io::Error>  {
     debug!("Processing single file...");
     if arguments.uncompress {
-        // TODO: Read a BRRO file, feed it to the decompressor
-        decompress_data(&[1,2,3]);
-        // TODO: Write the ouput out
+
+        let mut reader = StreamReader::from_file(arguments.input.clone());
+
+        let vec = reader.contents_u.remove(0);
+        let slice_data: &[u8] = &vec;
+        let data = decompress_data(slice_data);
+        writer::write_optimal_wav(&arguments.input.to_string_lossy(), data, 1);
     } else {
-        let (vec, tag) = reader::read_file(&arguments.input)?;
+        let mut reader = StreamReader::from_file(arguments.input.clone());
+
+        let vec = reader.contents_f.remove(0);
+        let tag = reader.tags.remove(0);
+
         let compressed_data = compress_data(&vec, &tag, arguments);
+
         if let Some(filename_osstr) = arguments.input.file_name() {
             if let Some(filename_str) = filename_osstr.to_str() {
                 // BRO extension
