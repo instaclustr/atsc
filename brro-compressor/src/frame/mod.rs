@@ -9,7 +9,7 @@ pub struct CompressorFrame{
     /// The frame size in bytes,
     frame_size: usize,
     /// The number of samples in this frame,
-    samples: usize,
+    sample_count: usize,
     /// The compressor used in the current frame
     compressor: Compressor,
     /// Output from the compressor
@@ -23,7 +23,7 @@ impl CompressorFrame {
     pub fn new(provided_compressor: Option<Compressor>) -> Self {
         CompressorFrame { 
             frame_size: 0,
-            samples: 0,
+            sample_count: 0,
             compressor: provided_compressor.unwrap_or_default(),
             data: Vec::new() }
     }
@@ -31,7 +31,7 @@ impl CompressorFrame {
     /// Calculates the size of the Frame and "closes it"
     // TODO this is probably wrong, so we have to use the write stream to dump the bytes writen
     pub fn close(&mut self) {
-        let size = size_of_val(&self.samples)
+        let size = size_of_val(&self.sample_count)
             + size_of_val(&self.compressor)
             + size_of_val(&self.data)
             + size_of_val(&self.frame_size);
@@ -42,14 +42,14 @@ impl CompressorFrame {
     pub fn compress(&mut self, data: &[f64]) {
         // TODO: Optimize here
         // self.compressor = optimizer_selection
-        self.samples = data.len();
+        self.sample_count = data.len();
         self.data = self.compressor.compress(data);
     }
 
     /// Decompresses a frame and returns the resulting data array
     pub fn decompress(&self) -> Vec<f64> {
-        debug!("Decompressing Frame. Size: {}, Samples: {}", self.frame_size, self.samples);
-        self.compressor.decompress(self.samples, &self.data)
+        debug!("Decompressing Frame. Size: {}, Samples: {}", self.frame_size, self.sample_count);
+        self.compressor.decompress(self.sample_count, &self.data)
     }
 
 }

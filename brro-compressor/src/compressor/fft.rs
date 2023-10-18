@@ -92,11 +92,11 @@ pub struct FFT {
 
 impl FFT {
     /// Creates a new instance of the Constant compressor with the size needed to handle the worst case
-    pub fn new(samples: usize, min: f64, max: f64) -> Self {
-        debug!("FFT compressor");
+    pub fn new(sample_count: usize, min: f64, max: f64) -> Self {
+        debug!("FFT compressor: min:{} max:{}", min, max);
         FFT {
             id: FFT_COMPRESSOR_ID,
-            frequencies: Vec::with_capacity(samples),
+            frequencies: Vec::with_capacity(sample_count),
             /// The maximum numeric value of the points in the frame
             max_value: FFT::f64_to_f32(max),  
             /// The minimum numeric value of the points in the frame
@@ -104,7 +104,6 @@ impl FFT {
             }
     }
 
-    // TODO: Move this to the optimizer?
     fn f64_to_f32(x: f64) -> f32 {
         let y = x as f32;
         if !(x.is_finite() && y.is_finite()) {
@@ -179,46 +178,45 @@ impl FFT {
     /// NOTE: This does not otimize for smallest possible error, just being smaller than the error.
     pub fn compress_bounded(&mut self, data: &[f64], max_err: f64) {
         // Variables
-        let mut i = 1;
-        let v = data.len();
-        let len = v as f32;
-        if !v.is_power_of_two() {
+        let len = data.len();
+        let len_f32 = len as f32;
+        if !len.is_power_of_two() {
             warn!("Slow FFT, data segment is not a power of 2!");
         }
         // Let's start from the defaults values for frequencies
-        let max_freq =  if 3 >= (v/100) { 3 } else { v/100 };
+        let max_freq =  if 3 >= (len/100) { 3 } else { len/100 };
         // Clean the data
         let mut buffer = FFT::optimize(data);
 
         // Create the FFT planners
         let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_forward(v);
-        let ifft = planner.plan_fft_inverse(v);
+        let fft = planner.plan_fft_forward(len);
+        let ifft = planner.plan_fft_inverse(len);
         
         // FFT calculations
         fft.process(&mut buffer);
         self.frequencies = FFT::fft_trim(&mut buffer.clone(), max_freq);
         // Inverse FFT and error check
-        let mut idata = self.get_mirrored_freqs(v);
+        let mut idata = self.get_mirrored_freqs(len);
         // run the ifft
         ifft.process(&mut idata);
         let mut out_data = idata.iter()
-                           .map(|&f| self.round(f.re/len, 1))
+                           .map(|&f| self.round(f.re/len_f32, 1))
                            .collect();
-        let mut e = calculate_error(&data.to_vec(), &out_data).unwrap();
+        let mut e = calculate_error(data, &out_data).unwrap();
         // Repeat until the error is good enough
-        while e > max_err {
-            println!("Error: {}", e);
+        for i in 1..data.len() {
+            if e <= max_err {
+                break;
+            }
+            debug!("Error: {}", e);
             self.frequencies = FFT::fft_trim(&mut buffer.clone(), max_freq+i);
-            idata = self.get_mirrored_freqs(v);
+            idata = self.get_mirrored_freqs(len);
             ifft.process(&mut idata);
             out_data = idata.iter()
-                           .map(|&f| self.round(f.re/len, 1))
+                           .map(|&f| self.round(f.re/len_f32, 1))
                            .collect();
-            e = calculate_error(&data.to_vec(), &out_data).unwrap();
-            i += 1;
-            // We can't have more frequencies
-            if i > v { break; }
+            e = calculate_error(data, &out_data).unwrap();
         }
     }
 
@@ -228,6 +226,7 @@ impl FFT {
         // First thing, always try to get the data len as a power of 2. 
         let v = data.len();
         let max_freq =  if 3 >= (v/100) { 3 } else { v/100 };
+        debug!("Setting max_freq count to: {}", max_freq);
         if !v.is_power_of_two() {
             warn!("Slow FFT, data segment is not a power of 2!");
         }
@@ -357,7 +356,7 @@ mod tests {
     }
 
     #[test]
-    fn test_to_lossess_data() {
+    fn test_to_lossless_data() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let compressed_data = fft_set(&vector1, 12);
         let out = fft_to_data(vector1.len(), &compressed_data);
