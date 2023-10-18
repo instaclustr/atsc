@@ -16,12 +16,12 @@ pub struct Constant {
 
 impl Constant {
     /// Creates a new instance of the Constant compressor with the size needed to handle the worst case
-    pub fn new(frame_size: usize) -> Self {
+    pub fn new(sample_count: usize) -> Self {
         debug!("Constant compressor");
         Constant {
             id: CONSTANT_COMPRESSOR_ID,
             constant: 0,
-            residuals: Vec::with_capacity(frame_size),
+            residuals: Vec::with_capacity(sample_count),
         }
     }
 
