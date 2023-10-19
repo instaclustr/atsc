@@ -13,6 +13,7 @@ pub fn prev_power_of_two(n: usize) -> usize {
 
 /// Converts a float to u64 with a given precision
 pub fn f64_to_u64(number: f64, precision: usize) -> u64 {
+    // TODO: Panic on overflow
     if precision > 6 { panic!("Precision only available up to 6 digits!")}
     let mul = [1, 10, 100, 1_000, 10_000, 100_000, 1_000_000][precision];
     (number * mul as f64) as u64
