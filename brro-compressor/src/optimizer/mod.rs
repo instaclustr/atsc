@@ -25,6 +25,8 @@ struct OptimizerPlan {
 }
 
 impl OptimizerPlan {
+    
+    /// Creates an optimal data compression plan
     pub fn plan(data: Vec<f64>) -> Self {
         let c_data = OptimizerPlan::clean_data(&data);
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
@@ -34,7 +36,9 @@ impl OptimizerPlan {
                         compressors: optimizer }
     }
 
+    /// Creates an optimal plan for compression for the data set provided bound by a given error
     pub fn plan_bounded(data: Vec<f64>, max_error: f32) -> Self {
+        // TODO: Check error limits
         let c_data = OptimizerPlan::clean_data(&data);
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
         let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, Some(max_error));
@@ -43,8 +47,14 @@ impl OptimizerPlan {
                         compressors: optimizer }
     }
 
+    /// Sets a given compressor for all data chunks
+    pub fn set_compressor(&mut self, compressor: Compressor) {
+        let new_compressors = vec![compressor; self.compressors.len()];
+        self.compressors = new_compressors;
+    }
+
     /// Removes NaN and infinite references from the data
-    pub fn clean_data(wav_data: &Vec<f64>) -> Vec<f64> {
+    pub fn clean_data(wav_data: &[f64]) -> Vec<f64> {
         // Cleaning data, removing NaN, etc. This might reduce sample count
         wav_data.iter()
             .filter(|x| !(x.is_nan() || x.is_infinite()))
@@ -79,23 +89,34 @@ impl OptimizerPlan {
         chunk_sizes
     }
 
+    /// Returns an iterator with the data slice and the compressor associated
+    pub fn get_execution(&self) ->  Vec<(&Compressor, &[f64])> {
+        let mut output = Vec::with_capacity(self.chunk_sizes.len());
+        let mut s = 0;
+        for (i,size) in self.chunk_sizes.iter().enumerate() {
+            output.push((&self.compressors[i] ,&self.data[s..(s+*size)]));
+            s += *size;
+        }
+        output
+    }
+
     /// Walks the data, checks how much variability is in the data, and assigns a compressor based on that
     /// NOTE: Is this any good? 
-    fn best_compressor(data: &[f64]) -> Compressor {
+    fn get_compressor(data: &[f64]) -> Compressor {
         let _ = data.iter().map(|&f| f64_to_u64(f, 0));
         // For now, let's just return FFT
         Compressor::FFT
     }
 
     /// Assigns a compressor to a chunk of data
-    fn assign_compressor(clean_data: &Vec<f64>, chunks: &Vec<usize>, max_error: Option<f32>) -> Vec<Compressor> {
+    fn assign_compressor(clean_data: &[f64], chunks: &Vec<usize>, max_error: Option<f32>) -> Vec<Compressor> {
         let mut selection = Vec::with_capacity(chunks.len());
         match max_error {
             Some(_err) => todo!(),
             None => {
                 let mut s = 0;
                 for size in chunks.iter() {
-                    selection.push(OptimizerPlan::best_compressor(&clean_data[s..(s+*size-1)]));
+                    selection.push(OptimizerPlan::get_compressor(&clean_data[s..(s+*size)]));
                     s += *size;
                 }
             },
@@ -120,6 +141,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn optimizer() {
+        let fake_data = vec![12.23; 2049];
+        let op = OptimizerPlan::plan(fake_data);
+        let plan_vec = op.get_execution();
+        assert_eq!(plan_vec.len(), 2);
+    }
+
+    #[test]
     fn test_get_chunks_sizes() {
         let len_very_large: usize = 131072 * 3 + 1765;
         let len_small: usize = 31;
@@ -135,7 +164,6 @@ mod tests {
     fn assign_compressor() {
         let fake_data = vec![12.23; 132671];
         let chunks = OptimizerPlan::get_chunks_sizes(fake_data.len());
-        println!("{:?}", chunks);
         let compressor_vec = OptimizerPlan::assign_compressor(&fake_data, &chunks, None);
         assert_eq!(compressor_vec.len(), 4);
     }
