@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+
 // Function to create a streaming writer for a file
 pub fn create_streaming_writer(file_path: &Path) -> io::Result<File> {
     // Open the file for writing, creating it if it doesn't exist
@@ -25,6 +26,7 @@ pub fn replace_extension(filename: &String, new_extension: &str) -> String {
     new_path.set_extension(new_extension);
     new_path.to_string_lossy().into_owned()
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -39,8 +41,7 @@ mod tests {
         // Write data to the streaming writer
         let data_to_write = b"Hello, World!\n";
         {
-            let mut writer =
-                create_streaming_writer(&test_file_path).expect("Failed to create writer");
+            let mut writer = create_streaming_writer(&test_file_path).expect("Failed to create writer");
             write_data_to_stream(&mut writer, data_to_write).expect("Failed to write data");
             writer.flush().expect("Failed to flush data");
         }

@@ -1,6 +1,6 @@
-pub mod reader;
-pub mod writer;
 pub mod error;
+pub mod readers;
+pub mod writers;
 mod file_type_detector;
 
 // Is this the right place?

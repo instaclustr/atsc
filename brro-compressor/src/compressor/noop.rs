@@ -11,11 +11,11 @@ pub struct Noop {
 }
 
 impl Noop {
-    pub fn new(frame_size: usize) -> Self {
+    pub fn new(sample_count: usize) -> Self {
         debug!("Noop compressor");
         Noop {
             id: NOOP_COMPRESSOR_ID,
-            data: Vec::with_capacity(frame_size),
+            data: Vec::with_capacity(sample_count),
         }
     }
 
