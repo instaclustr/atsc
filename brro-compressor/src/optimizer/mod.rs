@@ -128,7 +128,7 @@ impl OptimizerPlan {
 
 /// This should look at the data and return an optimized dataset for a specific compressor,
 /// If a compressor is hand picked, this should be skipped.
-pub fn process_data(wav_data: &Vec<f64>, tag: &MetricTag) -> Vec<f64> {
+pub fn process_data(wav_data: &[f64], tag: &MetricTag) -> Vec<f64> {
     debug!("Tag: {:?} Len: {}", tag, wav_data.len());
     wav_data.iter()
         .filter(|x| !(x.is_nan() || x.is_infinite()))
