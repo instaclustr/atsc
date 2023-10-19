@@ -4,7 +4,7 @@
 use median::Filter;
 use log::debug;
 use types::metric_tag::MetricTag;
-use crate::types;
+use crate::{types, utils::prev_power_of_two, compressor::Compressor};
 
 /// Max Frame size, this can aprox. 36h of data at 1point/sec rate, a little more than 1 week at 1point/5sec
 /// and 1 month (30 days) at 1 point/20sec. 
@@ -14,6 +14,84 @@ const MAX_FRAME_SIZE: usize = 131072; // 2^17
 /// The Min frame size is one that allows our compressors potentially achieve 100x compression. Currently the most
 /// limited one is the FFT compressor, that needs 3 frequencies at minimum, 3x100 = 300, next power of 2 is 512.
 const MIN_FRAME_SIZE: usize = 512; // 2^9
+
+// My idea here:
+// 1. Clean data
+// 2. Split into good sized chunks (aka power of 2)
+// 3. Get each chunk into the compressor that it should go
+// 3.1. Chunks should be at least of a size that it can allow a 100x compression for that given compressor (FFT is 512)
+// 4. From the clean data and chunk sizes, assign an optimizer for each chunk
+struct OptimizerPlan {
+    pub data: Vec<f64>,
+    pub chunk_sizes: Vec<usize>,
+    pub compressors: Vec<Compressor>,
+}
+
+impl OptimizerPlan {
+    pub fn create_plan(data: Vec<f64>) -> Self {
+        let c_data = OptimizerPlan::clean_data(&data);
+        let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
+        let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, None);
+        OptimizerPlan { data: c_data,
+                        chunk_sizes: chunks,
+                        compressors: optimizer }
+    }
+
+    pub fn create_plan_bounded(data: Vec<f64>, max_error: f32) -> Self {
+        let c_data = OptimizerPlan::clean_data(&data);
+        let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
+        let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, Some(max_error));
+        OptimizerPlan { data: c_data,
+                        chunk_sizes: chunks,
+                        compressors: optimizer }
+    }
+
+    /// Removes NaN and infinite references from the data
+    pub fn clean_data(wav_data: &Vec<f64>) -> Vec<f64> {
+        // Cleaning data, removing NaN, etc. This might reduce sample count
+        wav_data.iter()
+            .filter(|x| !(x.is_nan() || x.is_infinite()))
+            .copied()
+            .collect()
+    }
+
+    /// This function gets a length and returns a vector with the chunk sizes to feed to the different compressors
+    /// A lot of assumptions go into selecting the chunk size, including:
+    /// 1. Collection rate - It is not expected that the collection rate exceeds 1point sec (it is expected actually less)
+    /// 2. Maximum compression achievable - A compressed frame as overhead and a minimum number of segments, small frames don't allow great compressions
+    /// 3. FFT operates faster under power of 2
+    fn get_chunks_sizes(mut len: usize) -> Vec<usize> {
+        let mut chunk_sizes = Vec::<usize>::new();
+        while len > 0 {
+            match len {
+                _ if len >= MAX_FRAME_SIZE => {
+                    chunk_sizes.push(MAX_FRAME_SIZE);
+                    len -= MAX_FRAME_SIZE;
+                },
+                _ if len <= MIN_FRAME_SIZE => {
+                    chunk_sizes.push(len);
+                    len = 0;
+                },
+                _ => {
+                    let size = prev_power_of_two(len);
+                    chunk_sizes.push(size);
+                    len -= size;
+                }
+            }
+        }
+        chunk_sizes
+    }
+
+    /// Assigns a compressor to a chunk of data
+    fn assign_compressor(clean_data: &Vec<f64>, chunks: &Vec<usize>, max_error: Option<f32>) -> Vec<Compressor> {
+        let selection = Vec::with_capacity(chunks.len());
+        match max_error {
+            Some(err) => todo!(),
+            None => return selection,
+        }
+    }
+
+}
 
 impl MetricTag {
     #[allow(clippy::wrong_self_convention)]
@@ -55,32 +133,29 @@ fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
     filtered
 }
 
-/// This function gets a length and returns a vector with the chunk sizes to feed to the different compressors
-/// A lot of assumptions go into selecting the chunk size, including:
-/// 1. Collection rate - It is not expected that the collection rate exceeds 1point sec (it is expected actually less)
-/// 2. Maximum compression achievable - A compressed frame as overhead and a minimum number of segments, small frames don't allow great compressions
-/// 3. FFT operates faster under power of 2
-fn get_chunks_sizes(len: usize) -> Vec<usize> {
-    Vec::<usize>::with_capacity(MIN_FRAME_SIZE)
-}
-
 /// This should look at the data and return an optimized dataset for a specific compressor,
 /// If a compressor is hand picked, this should be skipped.
 pub fn process_data(wav_data: &Vec<f64>, tag: &MetricTag) -> Vec<f64> {
-    // My idea here:
-    // 1. Clean data
-    // 2. Split into good sized chunks (aka power of 2)
-    // 3. Get each chunk into the compressor that it should go
-    // 3.1. Chunks should be at least of a size that it can allow a 100x compression for that given compressor (FFT is 512)
-    let len = wav_data.len();
-    if !len.is_power_of_two() {
-        todo!()
-    }
-    // Cleaning data, removing NaN, etc. This might reduce sample count
     debug!("Tag: {:?} Len: {}", tag, wav_data.len());
-    // Is len a power of 2? If not try to get the previous power of 2 
     wav_data.iter()
-                .filter(|x| !(x.is_nan() || x.is_infinite()))
-                .copied()
-                .collect()
+        .filter(|x| !(x.is_nan() || x.is_infinite()))
+        .copied()
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_chunks_sizes() {
+        let len_very_large: usize = 131072 * 3 + 1765;
+        let len_small: usize = 31;
+        let len_right_sized: usize = 2048;
+        let len_some_size: usize = 12032;
+        assert_eq!(OptimizerPlan::get_chunks_sizes(len_very_large), [131072, 131072, 131072, 1024, 512, 229]);
+        assert_eq!(OptimizerPlan::get_chunks_sizes(len_small), [31]);
+        assert_eq!(OptimizerPlan::get_chunks_sizes(len_right_sized), [2048]);
+        assert_eq!(OptimizerPlan::get_chunks_sizes(len_some_size), [8192, 2048, 1024, 512, 256]);
+    }
 }
