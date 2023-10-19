@@ -1,10 +1,6 @@
-// Lucas - Once the project is far enough along I strongly reccomend reenabling dead code checks
-#![allow(dead_code)]
-
-use median::Filter;
 use log::debug;
 use types::metric_tag::MetricTag;
-use crate::{types, utils::prev_power_of_two, compressor::Compressor};
+use crate::{types, utils::{prev_power_of_two, f64_to_u64}, compressor::Compressor};
 
 /// Max Frame size, this can aprox. 36h of data at 1point/sec rate, a little more than 1 week at 1point/5sec
 /// and 1 month (30 days) at 1 point/20sec. 
@@ -21,6 +17,7 @@ const MIN_FRAME_SIZE: usize = 512; // 2^9
 // 3. Get each chunk into the compressor that it should go
 // 3.1. Chunks should be at least of a size that it can allow a 100x compression for that given compressor (FFT is 512)
 // 4. From the clean data and chunk sizes, assign an optimizer for each chunk
+#[derive(Debug, Clone)]
 struct OptimizerPlan {
     pub data: Vec<f64>,
     pub chunk_sizes: Vec<usize>,
@@ -28,7 +25,7 @@ struct OptimizerPlan {
 }
 
 impl OptimizerPlan {
-    pub fn create_plan(data: Vec<f64>) -> Self {
+    pub fn plan(data: Vec<f64>) -> Self {
         let c_data = OptimizerPlan::clean_data(&data);
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
         let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, None);
@@ -37,7 +34,7 @@ impl OptimizerPlan {
                         compressors: optimizer }
     }
 
-    pub fn create_plan_bounded(data: Vec<f64>, max_error: f32) -> Self {
+    pub fn plan_bounded(data: Vec<f64>, max_error: f32) -> Self {
         let c_data = OptimizerPlan::clean_data(&data);
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
         let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, Some(max_error));
@@ -82,55 +79,30 @@ impl OptimizerPlan {
         chunk_sizes
     }
 
+    /// Walks the data, checks how much variability is in the data, and assigns a compressor based on that
+    /// NOTE: Is this any good? 
+    fn best_compressor(data: &[f64]) -> Compressor {
+        let _ = data.iter().map(|&f| f64_to_u64(f, 0));
+        // For now, let's just return FFT
+        Compressor::FFT
+    }
+
     /// Assigns a compressor to a chunk of data
     fn assign_compressor(clean_data: &Vec<f64>, chunks: &Vec<usize>, max_error: Option<f32>) -> Vec<Compressor> {
-        let selection = Vec::with_capacity(chunks.len());
+        let mut selection = Vec::with_capacity(chunks.len());
         match max_error {
-            Some(err) => todo!(),
-            None => return selection,
+            Some(_err) => todo!(),
+            None => {
+                let mut s = 0;
+                for size in chunks.iter() {
+                    selection.push(OptimizerPlan::best_compressor(&clean_data[s..(s+*size-1)]));
+                    s += *size;
+                }
+            },
         }
+        selection
     }
 
-}
-
-impl MetricTag {
-    #[allow(clippy::wrong_self_convention)]
-    fn from_float(&self, x: f64) -> i64 {
-        match self {
-            MetricTag::Other => {
-                0
-            }
-            MetricTag::NotFloat | MetricTag::QuasiRandom => {
-                x as i64
-            }
-            MetricTag::Percent(y) => {
-                to_multiply_and_truncate(x, *y)
-            }
-            MetricTag::Duration(y) => {
-                to_multiply_and_truncate(x, *y)
-            }
-            MetricTag::Bytes(y) => {
-                (x as i64) / (*y as i64)
-            }
-        }
-    }
-}
-
-/// Converts a float via multiplication and truncation
-fn to_multiply_and_truncate(number: f64, mul: i32) -> i64 {
-    (number * mul as f64) as i64
-}
-
-fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
-    let mut filtered = Vec::with_capacity(data.len());
-    // 10minutes of data
-    let mut filter = Filter::new(50);
-    for point in data {
-        let point_int = MetricTag::QuasiRandom.from_float(*point);
-        let median = filter.consume(point_int);
-        filtered.push(median)
-    }
-    filtered
 }
 
 /// This should look at the data and return an optimized dataset for a specific compressor,
@@ -157,5 +129,14 @@ mod tests {
         assert_eq!(OptimizerPlan::get_chunks_sizes(len_small), [31]);
         assert_eq!(OptimizerPlan::get_chunks_sizes(len_right_sized), [2048]);
         assert_eq!(OptimizerPlan::get_chunks_sizes(len_some_size), [8192, 2048, 1024, 512, 256]);
+    }
+
+    #[test]
+    fn assign_compressor() {
+        let fake_data = vec![12.23; 132671];
+        let chunks = OptimizerPlan::get_chunks_sizes(fake_data.len());
+        println!("{:?}", chunks);
+        let compressor_vec = OptimizerPlan::assign_compressor(&fake_data, &chunks, None);
+        assert_eq!(compressor_vec.len(), 4);
     }
 }
