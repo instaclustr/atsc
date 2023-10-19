@@ -34,7 +34,7 @@ fn to_multiply_and_truncate(number: f64, mul: i32) -> i64 {
     (number * mul as f64) as i64
 }
 
-fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
+fn to_median_filter(data: &[f64]) -> Vec<i64> {
     let mut filtered = Vec::with_capacity(data.len());
     // 10minutes of data
     let mut filter = Filter::new(50);
@@ -49,7 +49,7 @@ fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
 /// This should look at the data and return an optimized dataset for a specific compressor,
 /// If a compressor is hand picked, this should be skipped.
 /// TODO: Make it do that
-pub fn process_data(wav_data: &Vec<f64>, tag: &MetricTag) -> Vec<i64> {
+pub fn process_data(wav_data: &[f64], tag: &MetricTag) -> Vec<i64> {
     let mut _bitdepth = 64;
     let mut _dc_component: i64 = 0;
     let mut _fractional = true;
