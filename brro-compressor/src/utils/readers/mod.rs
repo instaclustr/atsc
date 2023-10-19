@@ -1,2 +1,2 @@
-mod bro_reader;
-mod wav_reader;
+pub mod bro_reader;
+pub mod wav_reader;

@@ -1,2 +1,2 @@
-mod bro_writer;
-mod wav_writer;
+pub mod bro_writer;
+pub mod wav_writer;

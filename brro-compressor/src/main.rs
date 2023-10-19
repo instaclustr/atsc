@@ -4,12 +4,11 @@ use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer;
 use brro_compressor::types::metric_tag::MetricTag;
-use brro_compressor::utils::writer;
+use brro_compressor::utils::readers::{bro_reader, wav_reader};
+use brro_compressor::utils::writers::{bro_writer, wav_writer};
 use clap::{arg, command, Parser};
 use log::{debug, error};
-use std::path::Path;
-use std::path::PathBuf;
-use brro_compressor::utils::reader::{StreamReader};
+use std::path::{Path, PathBuf};
 
 /// Processes the given input based on the provided arguments.
 fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
@@ -32,71 +31,81 @@ fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-
 /// Processes all files in a given directory.
-fn process_directory(arguments: &Args) -> Result<(), std::io::Error> {
-    // TODO: Uncompresses directories
-    let new_name = format!(
-        "{}-compressed",
-        arguments.input.file_name().unwrap().to_string_lossy()
-    );
-    let base_dir = arguments.input.with_file_name(new_name);
+fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
+    if arguments.uncompress {
+        let file_name = arguments.input.file_name().ok_or("Failed to retrieve file name.")?;
+        let new_name = format!("{}-decompressed", file_name.to_string_lossy());
+        let base_dir = arguments.input.with_file_name(new_name);
 
-    writer::initialize_directory(&base_dir)?;
+        wav_writer::initialize_directory(&base_dir)?;
+        //read
+        let files = bro_reader::dir_reader(&arguments.input)?;
 
-    let reader = StreamReader::from_directory(arguments.input.clone());
+        for (index, data) in files.contents.iter().enumerate() {
+            let arr: &[u8] = data;
+            //decompress
+            let decompressed_data = decompress_data(arr);
+            //write
+            let new_path = base_dir.join(&files.names[index]);
+            let path_str = new_path.to_str().ok_or("Invalid Unicode in file path")?;
+            wav_writer::write_optimal_wav(path_str, decompressed_data, 1);
+        }
+        Ok(())
+    } else {
+        let file_name = arguments.input.file_name().ok_or("Failed to retrieve file name.")?;
+        let new_name = format!("{}-compressed", file_name.to_string_lossy());
+        let base_dir = arguments.input.with_file_name(new_name);
 
-    let mut vec = reader.contents_f;
-    let mut tag = reader.tags;
-    let names = reader.names;
+        bro_writer::initialize_directory(&base_dir)?;
+        //read
+        let files = wav_reader::dir_reader(&arguments.input)?;
 
-    for name in names.iter().rev() {
-        let vec_data = vec.pop().unwrap();
-        let tag_data = tag.pop().unwrap();
-
-        let compressed_data = compress_data(&vec_data, &tag_data, arguments);
-        // BRO extension
-        let file_name = writer::replace_extension(name, "bro");
-        let new_path = base_dir.join(&file_name);
-        write_compressed_data_to_path(&compressed_data, &new_path)?;
+        for (index, data) in files.contents.iter().enumerate() {
+            let (vec_data, tag) = data;
+            //compress
+            let compressed_data = compress_data(vec_data, tag, arguments);
+            // write
+            write_compressed_to_path(&base_dir, &compressed_data, &files.names[index])?;
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Processes a single file.
-fn process_single_file(arguments: &Args) -> Result<(), std::io::Error>  {
+fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
     debug!("Processing single file...");
     if arguments.uncompress {
-
-        let mut reader = StreamReader::from_file(arguments.input.clone());
-
-        let vec = reader.contents_u.remove(0);
-        let slice_data: &[u8] = &vec;
-        let data = decompress_data(slice_data);
-        writer::write_optimal_wav(&arguments.input.to_string_lossy(), data, 1);
+        //read
+        let vec = bro_reader::read_file(&arguments.input)?;
+        let arr: &[u8] = &vec;
+        //decompress
+        let decompressed_data = decompress_data(arr);
+        //write
+        let filename_osstr = arguments.input.file_name().ok_or("Failed to get file name.")?;
+        let filename_str = filename_osstr.to_str().ok_or("Failed to convert OS string to string.")?;
+        let parent = arguments.input.parent().ok_or("Failed to determine parent directory.")?;
+        let new_path = parent.join(filename_str);
+        let path_str = new_path.to_str().ok_or("Failed to convert path to string.")?;
+        wav_writer::write_optimal_wav(path_str, decompressed_data, 1);
     } else {
-        let mut reader = StreamReader::from_file(arguments.input.clone());
-
-        let vec = reader.contents_f.remove(0);
-        let tag = reader.tags.remove(0);
-
+        //read
+        let (vec, tag) = wav_reader::read_file(&arguments.input)?;
+        //compress
         let compressed_data = compress_data(&vec, &tag, arguments);
-
-        if let Some(filename_osstr) = arguments.input.file_name() {
-            if let Some(filename_str) = filename_osstr.to_str() {
-                // BRO extension
-                let new_filename_string =
-                    writer::replace_extension(&filename_str.to_string(), "bro");
-                let new_path = arguments.input.parent().unwrap().join(new_filename_string);
-                write_compressed_data_to_path(&compressed_data, &new_path)?;
-            }
-        }
+        //write
+        let filename_str = arguments
+            .input
+            .file_name()
+            .and_then(|filename_osstr| filename_osstr.to_str())
+            .ok_or("Failed to convert filename to string")?;
+        write_compressed_to_path(&arguments.input, &compressed_data, filename_str)?;
     }
     Ok(())
 }
 
 /// Compresses the data based on the provided tag and arguments.
-fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
+fn compress_data(vec: &[f64], tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     debug!("Compressing data!");
     let optimizer_results = optimizer::process_data(vec, tag);
     let _optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
@@ -115,21 +124,25 @@ fn compress_data(vec: &Vec<f64>, tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     cs.to_bytes()
 }
 
+
 /// Compresses the data based on the provided tag and arguments.
 fn decompress_data(compressed_data: &[u8]) -> Vec<f64> {
     debug!("decompressing data!");
     let cs = CompressedStream::from_bytes(compressed_data);
     cs.decompress()
 }
+/// Writes the compressed data to the provided path
+fn write_compressed_to_path(input_path: &Path, compressed_bytes: &[u8], original_filename: &str) -> Result<(), Box<dyn Error>> {
+    // Use BRO extension
+    let compressed_filename = bro_writer::replace_extension(&original_filename.to_string(), "bro");
+    let target_directory = if input_path.is_dir() { input_path } else { input_path.parent().unwrap() };
+    let output_path = target_directory.join(compressed_filename);
 
-/// Writes the compressed data to the specified path.
-fn write_compressed_data_to_path(compressed: &[u8], path: &Path) -> Result<(), std::io::Error>{
-    let mut file =
-        writer::create_streaming_writer(path)?;
-    writer::write_data_to_stream(&mut file, compressed)?;
+    let mut output_file = bro_writer::create_streaming_writer(&output_path)?;
+    bro_writer::write_data_to_stream(&mut output_file, compressed_bytes)?;
+
     Ok(())
 }
-
 #[derive(Parser, Default, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -142,7 +155,6 @@ struct Args {
     /// Uncompresses the input file/directory
     #[arg(short, action)]
     uncompress: bool,
-
 
 }
 
