@@ -109,7 +109,7 @@ impl OptimizerPlan {
     }
 
     /// Assigns a compressor to a chunk of data
-    fn assign_compressor(clean_data: &[f64], chunks: &Vec<usize>, max_error: Option<f32>) -> Vec<Compressor> {
+    fn assign_compressor(clean_data: &[f64], chunks: &[usize], max_error: Option<f32>) -> Vec<Compressor> {
         let mut selection = Vec::with_capacity(chunks.len());
         match max_error {
             Some(_err) => todo!(),

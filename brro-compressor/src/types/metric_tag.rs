@@ -42,7 +42,7 @@ impl MetricTag {
         (number * mul as f64) as i64
     }
 
-    fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
+    fn to_median_filter(data: &[f64]) -> Vec<i64> {
         let mut filtered = Vec::with_capacity(data.len());
         // 10minutes of data
         let mut filter = Filter::new(50);
