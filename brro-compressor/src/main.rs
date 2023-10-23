@@ -41,6 +41,7 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
         wav_writer::initialize_directory(&base_dir)?;
         //read
         let files = bro_reader::dir_reader(&arguments.input)?;
+        // TODO: This should be calling `process_single_file` and avoid code duplication
 
         for (index, data) in files.contents.iter().enumerate() {
             let arr: &[u8] = data;
@@ -49,6 +50,7 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
             //write
             let new_path = base_dir.join(&files.names[index]);
             let path_str = new_path.to_str().ok_or("Invalid Unicode in file path")?;
+            // TODO: Decompression shouldn't optimize the WAV
             wav_writer::write_optimal_wav(path_str, decompressed_data, 1);
         }
         Ok(())
