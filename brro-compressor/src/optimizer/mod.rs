@@ -27,8 +27,8 @@ pub struct OptimizerPlan {
 impl OptimizerPlan {
     
     /// Creates an optimal data compression plan
-    pub fn plan(data: Vec<f64>) -> Self {
-        let c_data = OptimizerPlan::clean_data(&data);
+    pub fn plan(data: &[f64]) -> Self {
+        let c_data = OptimizerPlan::clean_data(data);
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
         let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, None);
         OptimizerPlan { data: c_data,
@@ -37,9 +37,9 @@ impl OptimizerPlan {
     }
 
     /// Creates an optimal plan for compression for the data set provided bound by a given error
-    pub fn plan_bounded(data: Vec<f64>, max_error: f32) -> Self {
+    pub fn plan_bounded(data: &[f64], max_error: f32) -> Self {
         // TODO: Check error limits
-        let c_data = OptimizerPlan::clean_data(&data);
+        let c_data = OptimizerPlan::clean_data(data);
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
         let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, Some(max_error));
         OptimizerPlan { data: c_data,
@@ -143,7 +143,7 @@ mod tests {
     #[test]
     fn optimizer() {
         let fake_data = vec![12.23; 2049];
-        let op = OptimizerPlan::plan(fake_data);
+        let op = OptimizerPlan::plan(&fake_data);
         let plan_vec = op.get_execution();
         assert_eq!(plan_vec.len(), 2);
     }

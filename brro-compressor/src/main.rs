@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fs;
 use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
-use brro_compressor::optimizer;
+use brro_compressor::optimizer::OptimizerPlan;
 use brro_compressor::types::metric_tag::MetricTag;
 use brro_compressor::utils::readers::{bro_reader, wav_reader};
 use brro_compressor::utils::writers::{bro_writer, wav_writer};
@@ -105,21 +105,26 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
 }
 
 /// Compresses the data based on the provided tag and arguments.
-fn compress_data(vec: &[f64], tag: &MetricTag, arguments: &Args) -> Vec<u8> {
+fn compress_data(vec: &[f64], _tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     debug!("Compressing data!");
-    let optimizer_results = optimizer::process_data(vec, tag);
-    debug!("# Samples in: {}, # Samples out: {}", vec.len(), optimizer_results.len());
+    //let optimizer_results = optimizer::process_data(vec, tag);
+    // Create Optimization Plan and Stream for the data.
+    let mut op = OptimizerPlan::plan(vec);
     let mut cs = CompressedStream::new();
-    let compressor = match arguments.compressor {
-        CompressorType::Noop => Compressor::Noop,
-        CompressorType::Constant => Compressor::Constant,
-        CompressorType::Fft => Compressor::FFT,
-        CompressorType::Polynomial => Compressor::Polynomial,
-        CompressorType::TopBottom => Compressor::TopBottom,
-        CompressorType::Wavelet => Compressor::Wavelet
-    };
-
-    cs.compress_chunk_with(&optimizer_results, compressor);
+    // Assign the compressor if it was selected
+    match arguments.compressor {
+        CompressorType::Noop => op.set_compressor(Compressor::Noop),
+        CompressorType::Constant => op.set_compressor(Compressor::Constant),
+        CompressorType::Fft => op.set_compressor(Compressor::FFT),
+        CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
+        CompressorType::TopBottom => op.set_compressor(Compressor::TopBottom),
+        CompressorType::Wavelet => op.set_compressor(Compressor::Wavelet),
+        _ => todo!("Auto selection of compressor not yet implemented!"),
+    }
+    for (c, d) in op.get_execution().into_iter() {
+        debug!("Chunk size: {}", d.len());
+        cs.compress_chunk_with(d, c.to_owned());
+    }
     cs.to_bytes()
 }
 
@@ -149,12 +154,15 @@ struct Args {
     input: PathBuf,
 
     /// Select a compressor, default is Noop
-    #[arg(long, value_enum, default_value = "noop")]
+    #[arg(long, value_enum, default_value = "auto")]
     compressor: CompressorType,
 
-     /// Sets the maximum allowed error for the compressed data, must be between 0.01 and 1. Default is 0.05 (5%).
-     #[arg(long, action)]
-     error: f32,
+     /// Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 5 (5%).
+     /// 0 is lossless compression
+     /// 50 will do a median filter on the data.
+     /// In between will pick optimize for the error
+     #[arg(short, long, default_value = "5")]
+     error: i8,
 
     /// Uncompresses the input file/directory
     #[arg(short, action)]
@@ -168,6 +176,7 @@ struct Args {
 #[derive(clap::ValueEnum, Default, Clone, Debug)]
 enum CompressorType {
     #[default]
+    Auto,
     Noop,
     Fft,
     Wavelet,
