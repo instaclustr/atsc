@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 use std::{collections::BinaryHeap, cmp::Ordering};
 use rustfft::{FftPlanner, num_complex::Complex};
-use crate::utils::error::calculate_error;
+use crate::utils::error::error_nmsqe;
 
 use super::BinConfig;
 use log::{error, debug, warn, info};
@@ -200,10 +200,10 @@ impl FFT {
         let mut idata = self.get_mirrored_freqs(len);
         // run the ifft
         ifft.process(&mut idata);
-        let mut out_data = idata.iter()
+        let mut out_data: Vec<f64> = idata.iter()
                            .map(|&f| self.round(f.re/len_f32, 1))
                            .collect();
-        let mut e = calculate_error(data, &out_data).unwrap();
+        let mut e = error_nmsqe(data, &out_data);
         // Repeat until the error is good enough
         for i in 1..data.len() {
             if e <= max_err {
@@ -216,7 +216,7 @@ impl FFT {
             out_data = idata.iter()
                            .map(|&f| self.round(f.re/len_f32, 1))
                            .collect();
-            e = calculate_error(data, &out_data).unwrap();
+            e = error_nmsqe(data, &out_data);
         }
     }
 
@@ -378,7 +378,7 @@ mod tests {
         let frame_size = vector1.len();
         let compressed_data = fft_allowed_error(&vector1, 0.01);
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
-        let e = calculate_error(&vector1, &out).unwrap();
+        let e = error_nmsqe(&vector1, &out);
         assert!(e <= 0.01);
     }
 }
