@@ -108,7 +108,7 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
 fn compress_data(vec: &[f64], tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     debug!("Compressing data!");
     let optimizer_results = optimizer::process_data(vec, tag);
-    debug!("Samples in: {}, Samples out: {}", vec.len(), optimizer_results.len());
+    debug!("# Samples in: {}, # Samples out: {}", vec.len(), optimizer_results.len());
     let mut cs = CompressedStream::new();
     let compressor = match arguments.compressor {
         CompressorType::Noop => Compressor::Noop,
@@ -148,13 +148,21 @@ struct Args {
     /// input file
     input: PathBuf,
 
+    /// Select a compressor, default is Noop
     #[arg(long, value_enum, default_value = "noop")]
     compressor: CompressorType,
+
+     /// Sets the maximum allowed error for the compressed data, must be between 0.01 and 1. Default is 0.05 (5%).
+     #[arg(long, action)]
+     error: f32,
 
     /// Uncompresses the input file/directory
     #[arg(short, action)]
     uncompress: bool,
 
+    /// Verbose output
+    #[arg(long, action)]
+    verbose: bool,
 }
 
 #[derive(clap::ValueEnum, Default, Clone, Debug)]

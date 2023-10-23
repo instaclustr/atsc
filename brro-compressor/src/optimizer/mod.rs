@@ -18,7 +18,7 @@ const MIN_FRAME_SIZE: usize = 512; // 2^9
 // 3.1. Chunks should be at least of a size that it can allow a 100x compression for that given compressor (FFT is 512)
 // 4. From the clean data and chunk sizes, assign an optimizer for each chunk
 #[derive(Debug, Clone)]
-struct OptimizerPlan {
+pub struct OptimizerPlan {
     pub data: Vec<f64>,
     pub chunk_sizes: Vec<usize>,
     pub compressors: Vec<Compressor>,
@@ -89,7 +89,7 @@ impl OptimizerPlan {
         chunk_sizes
     }
 
-    /// Returns an iterator with the data slice and the compressor associated
+    /// Returns a vector with the data slice and the compressor associated
     pub fn get_execution(&self) ->  Vec<(&Compressor, &[f64])> {
         let mut output = Vec::with_capacity(self.chunk_sizes.len());
         let mut s = 0;
