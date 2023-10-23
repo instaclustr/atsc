@@ -22,7 +22,7 @@ Arguments:
   <INPUT>  input file
 
 Options:
-      --compressor <COMPRESSOR>  [default: noop] [possible values: noop, fft, wavelet, constant, polynomial, top-bottom]
+      --compressor <COMPRESSOR>  [default: auto] [possible values: auto, noop, fft, wavelet, constant, polynomial, top-bottom]
   -u                             Uncompresses the input file/directory
   -h, --help                     Print help
   -V, --version                  Print version

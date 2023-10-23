@@ -161,7 +161,7 @@ struct Args {
     /// input file
     input: PathBuf,
 
-    /// Select a compressor, default is Noop
+    /// Select a compressor, default is auto
     #[arg(long, value_enum, default_value = "auto")]
     compressor: CompressorType,
 
