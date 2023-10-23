@@ -81,6 +81,9 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
         let arr: &[u8] = &vec;
         //decompress
         let decompressed_data = decompress_data(arr);
+        if arguments.verbose {
+            println!("Output={:?}", decompressed_data);
+        }
         //write
         let filename_osstr = arguments.input.file_name().ok_or("Failed to get file name.")?;
         let filename_str = filename_osstr.to_str().ok_or("Failed to convert OS string to string.")?;
@@ -91,6 +94,9 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
     } else {
         //read
         let (vec, tag) = wav_reader::read_file(&arguments.input)?;
+        if arguments.verbose {
+            println!("Input={:?}", vec);
+        }
         //compress
         let compressed_data = compress_data(&vec, &tag, arguments);
         //write
@@ -168,7 +174,7 @@ struct Args {
     #[arg(short, action)]
     uncompress: bool,
 
-    /// Verbose output
+    /// Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
     #[arg(long, action)]
     verbose: bool,
 }
