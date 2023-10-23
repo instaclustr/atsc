@@ -156,7 +156,7 @@ fn write_compressed_to_path(input_path: &Path, compressed_bytes: &[u8], original
     Ok(())
 }
 #[derive(Parser, Default, Debug)]
-#[command(author="NetApp", version="0.2", about="A Time-Series compressor", long_about = None)]
+#[command(author, version, about="A Time-Series compressor", long_about = None)]
 struct Args {
     /// input file
     input: PathBuf,

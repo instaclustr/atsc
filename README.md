@@ -4,7 +4,7 @@ Version: 0.2 Released: 23/10/2023
 
 ## Description
 
-BRRO Compressor is a compressor that relies on the characterists of a signal to provide a far greater compression that currently existing ones. BRRO relies on different techniques based on a initial analysis of the signal to use the best suited method for compressor for that specific signal segment.
+BRRO Compressor is a compressor that relies on the characteristics of a signal to provide a far greater compression that currently existing ones. BRRO relies on different techniques based on a initial analysis of the signal to use the best suited method for compressor for that specific signal segment.
 
 For a detailed description on the compressor methods and logic check `BRRO.md`.
 
@@ -55,7 +55,7 @@ Make Prometheus server a source of your grafana and check the data.
 
 ### brro_optimizer
 
-Maybe the most important tool at this point, it picks a WAV file from the datasets described below and optimizes it into a way that we might see a meaning full compression into FLAC.
+Maybe the most important tool at this point, it picks a WAV file from the datasets described below and optimizes it into a way that we might see a meaningful compression into FLAC.
 The tool also has options to dump the output of the file as a single sample per period, instead of the 4 channels. This is good to obtain the data as it was feed into the flac-server.
 The code performs optimizations based on file name, so renaming might cause issues.
 

@@ -28,12 +28,12 @@ pub fn nmsqe(original: &[f64], generated: &[f64]) -> Option<f64> {
         return None;
     }
 
-    let squared_error: f64 = (0..original.len())
-        .map(|i| (generated[i] - original[i]).powi(2))
+    let squared_error: f64 = original
+        .iter()
+        .zip(generated.iter())
+        .map(|(original, generated)| (generated - original).powi(2))
         .sum();
-    let original_square_sum: f64 = (0..original.len())
-        .map(|i| original[i].powi(2))
-        .sum();
+    let original_square_sum: f64 = original.iter().map(|original| original.powi(2)).sum();
     Some(squared_error / original_square_sum)
 }
 
