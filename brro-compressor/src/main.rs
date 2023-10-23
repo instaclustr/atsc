@@ -108,8 +108,7 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
 fn compress_data(vec: &[f64], tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     debug!("Compressing data!");
     let optimizer_results = optimizer::process_data(vec, tag);
-    let _optimizer_results_f: Vec<f64> = optimizer_results.iter().map(|&x| x as f64).collect();
-
+    debug!("Samples in: {}, Samples out: {}", vec.len(), optimizer_results.len());
     let mut cs = CompressedStream::new();
     let compressor = match arguments.compressor {
         CompressorType::Noop => Compressor::Noop,
@@ -120,7 +119,7 @@ fn compress_data(vec: &[f64], tag: &MetricTag, arguments: &Args) -> Vec<u8> {
         CompressorType::Wavelet => Compressor::Wavelet
     };
 
-    cs.compress_chunk_with(vec, compressor);
+    cs.compress_chunk_with(&optimizer_results, compressor);
     cs.to_bytes()
 }
 
