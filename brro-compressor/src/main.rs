@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fs;
 use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
-use brro_compressor::optimizer;
+use brro_compressor::optimizer::OptimizerPlan;
 use brro_compressor::types::metric_tag::MetricTag;
 use brro_compressor::utils::readers::{bro_reader, wav_reader};
 use brro_compressor::utils::writers::{bro_writer, wav_writer};
@@ -41,6 +41,7 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
         wav_writer::initialize_directory(&base_dir)?;
         //read
         let files = bro_reader::dir_reader(&arguments.input)?;
+        // TODO: This should be calling `process_single_file` and avoid code duplication
 
         for (index, data) in files.contents.iter().enumerate() {
             let arr: &[u8] = data;
@@ -49,6 +50,7 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
             //write
             let new_path = base_dir.join(&files.names[index]);
             let path_str = new_path.to_str().ok_or("Invalid Unicode in file path")?;
+            // TODO: Decompression shouldn't optimize the WAV
             wav_writer::write_optimal_wav(path_str, decompressed_data, 1);
         }
         Ok(())
@@ -81,6 +83,9 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
         let arr: &[u8] = &vec;
         //decompress
         let decompressed_data = decompress_data(arr);
+        if arguments.verbose {
+            println!("Output={:?}", decompressed_data);
+        }
         //write
         let filename_osstr = arguments.input.file_name().ok_or("Failed to get file name.")?;
         let filename_str = filename_osstr.to_str().ok_or("Failed to convert OS string to string.")?;
@@ -91,6 +96,9 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
     } else {
         //read
         let (vec, tag) = wav_reader::read_file(&arguments.input)?;
+        if arguments.verbose {
+            println!("Input={:?}", vec);
+        }
         //compress
         let compressed_data = compress_data(&vec, &tag, arguments);
         //write
@@ -105,21 +113,26 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
 }
 
 /// Compresses the data based on the provided tag and arguments.
-fn compress_data(vec: &[f64], tag: &MetricTag, arguments: &Args) -> Vec<u8> {
+fn compress_data(vec: &[f64], _tag: &MetricTag, arguments: &Args) -> Vec<u8> {
     debug!("Compressing data!");
-    let optimizer_results = optimizer::process_data(vec, tag);
-    debug!("Samples in: {}, Samples out: {}", vec.len(), optimizer_results.len());
+    //let optimizer_results = optimizer::process_data(vec, tag);
+    // Create Optimization Plan and Stream for the data.
+    let mut op = OptimizerPlan::plan(vec);
     let mut cs = CompressedStream::new();
-    let compressor = match arguments.compressor {
-        CompressorType::Noop => Compressor::Noop,
-        CompressorType::Constant => Compressor::Constant,
-        CompressorType::Fft => Compressor::FFT,
-        CompressorType::Polynomial => Compressor::Polynomial,
-        CompressorType::TopBottom => Compressor::TopBottom,
-        CompressorType::Wavelet => Compressor::Wavelet
-    };
-
-    cs.compress_chunk_with(&optimizer_results, compressor);
+    // Assign the compressor if it was selected
+    match arguments.compressor {
+        CompressorType::Noop => op.set_compressor(Compressor::Noop),
+        CompressorType::Constant => op.set_compressor(Compressor::Constant),
+        CompressorType::Fft => op.set_compressor(Compressor::FFT),
+        CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
+        CompressorType::TopBottom => op.set_compressor(Compressor::TopBottom),
+        CompressorType::Wavelet => op.set_compressor(Compressor::Wavelet),
+        _ => todo!("Auto selection of compressor not yet implemented!"),
+    }
+    for (c, d) in op.get_execution().into_iter() {
+        debug!("Chunk size: {}", d.len());
+        cs.compress_chunk_with(d, c.to_owned());
+    }
     cs.to_bytes()
 }
 
@@ -143,23 +156,35 @@ fn write_compressed_to_path(input_path: &Path, compressed_bytes: &[u8], original
     Ok(())
 }
 #[derive(Parser, Default, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about="A Time-Series compressor", long_about = None)]
 struct Args {
     /// input file
     input: PathBuf,
 
-    #[arg(long, value_enum, default_value = "noop")]
+    /// Select a compressor, default is auto
+    #[arg(long, value_enum, default_value = "auto")]
     compressor: CompressorType,
+
+     /// Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 5 (5%).
+     /// 0 is lossless compression
+     /// 50 will do a median filter on the data.
+     /// In between will pick optimize for the error
+     #[arg(short, long, default_value = "5")]
+     error: i8,
 
     /// Uncompresses the input file/directory
     #[arg(short, action)]
     uncompress: bool,
 
+    /// Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
+    #[arg(long, action)]
+    verbose: bool,
 }
 
 #[derive(clap::ValueEnum, Default, Clone, Debug)]
 enum CompressorType {
     #[default]
+    Auto,
     Noop,
     Fft,
     Wavelet,

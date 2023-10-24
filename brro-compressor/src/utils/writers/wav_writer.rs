@@ -127,6 +127,7 @@ fn analyze_data(data: &Vec<f64>) -> (i32, i64, bool) {
     }
     (recommended_bitdepth, min_int, fractional)
 }
+
 fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
     // Check where those ints fall into
     let bitdepth = match max_int {
@@ -144,8 +145,5 @@ fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
     };
 
 
-    get_max(bitdepth, bitdepth_signed)
-}
-fn get_max(a: i32, b: i32) -> i32 {
-    a.max(b)
+    bitdepth.max(bitdepth_signed)
 }
