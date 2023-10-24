@@ -1,6 +1,6 @@
 [package]
 name = "brro-compressor"
-version = "0.1.0"
+version = "0.2.1"
 authors = ["Carlos Rolo <carlos.rolo@netapp.com>"]
 edition = "2021"
 license = "Apache-2.0"

@@ -40,10 +40,14 @@ impl CompressorFrame {
 
     /// Compress a data and stores the result in the frame
     pub fn compress(&mut self, data: &[f64]) {
-        // TODO: Optimize here
-        // self.compressor = optimizer_selection
         self.sample_count = data.len();
         self.data = self.compressor.compress(data);
+    }
+
+    /// Compress a data and stores the result in the frame
+    pub fn compress_bounded(&mut self, data: &[f64], max_error: f32) {
+        self.sample_count = data.len();
+        self.data = self.compressor.compress_bounded(data, max_error as f64);
     }
 
     /// Decompresses a frame and returns the resulting data array
