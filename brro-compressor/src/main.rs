@@ -129,12 +129,12 @@ fn compress_data(vec: &[f64], _tag: &MetricTag, arguments: &Args) -> Vec<u8> {
         CompressorType::Wavelet => op.set_compressor(Compressor::Wavelet),
         _ => todo!("Auto selection of compressor not yet implemented!"),
     }
-    for (c, d) in op.get_execution().into_iter() {
-        debug!("Chunk size: {}", d.len());
+    for (cpr, data) in op.get_execution().into_iter() {
+        debug!("Chunk size: {}", data.len());
         // If compressor is a losseless one, compress with the error defined, or default
         match arguments.compressor {
-            CompressorType::Fft => cs.compress_chunk_bounded_with(d, c.to_owned(), arguments.error as f32/100.0),
-            _ => cs.compress_chunk_with(d, c.to_owned()),
+            CompressorType::Fft => cs.compress_chunk_bounded_with(data, cpr.to_owned(), arguments.error as f32/100.0),
+            _ => cs.compress_chunk_with(data, cpr.to_owned()),
         }
     }
     cs.to_bytes()
