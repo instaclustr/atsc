@@ -1,7 +1,7 @@
 // Implement a streaming reader here
 use std::fs;
 use std::io::{self, Error, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use log::debug;
 use regex::Regex;
 use types::metric_tag::MetricTag;
@@ -34,9 +34,10 @@ fn process_wav_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
 fn process_raw_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
     todo!("Handle RAW file processing here (for example, decoding or encoding): {file_path:?}");
 }
+// TODO: refactor this into a Vec<File>
 pub struct Files {
     pub contents: Vec<(Vec<f64>, MetricTag)>,
-    pub names: Vec<String>,
+    pub original_paths: Vec<PathBuf>,
 }
 
 /// Read a file by chunks and processes the chunks
@@ -61,28 +62,16 @@ pub fn process_by_chunk(file_path: &Path) -> Result<(), std::io::Error> {
 pub fn dir_reader(directory_path: &Path) -> io::Result<Files> {
     let mut contents: Vec<(Vec<f64>, MetricTag)> = Vec::new();
 
-    let mut names: Vec<String> = Vec::new();
-
+    let mut original_paths: Vec<PathBuf> = Vec::new();
 
     // Iterate through entries (files and subdirectories) in the given directory
     for entry in fs::read_dir(directory_path)? {
-        // Unwrap the entry to get the actual entry information
-        let entry = entry?;
+        let file_path = entry?.path();
 
-        // Get the path of the entry (file or directory)
-        let file_path = entry.path();
-
-        // Add the filename to the list
-        if let Some(filename) = file_path.file_name() {
-            if let Some(filename_str) = filename.to_str() {
-                names.push(filename_str.to_string());
-            }
-        }
-
-        // Check if the file is a WAV file
         contents.push(read_file(&file_path)?);
+        original_paths.push(file_path);
     }
-    Ok(Files {contents, names})
+    Ok(Files {contents, original_paths})
 }
 
 pub fn read_file(file_path: &Path) -> Result<(Vec<f64>, MetricTag), Error> {
