@@ -216,10 +216,27 @@ impl FFT {
             idata = self.get_mirrored_freqs(len);
             ifft.process(&mut idata);
             out_data = idata.iter()
-                           .map(|&f| self.round(f.re/len_f32, 1))
+                           .map(|&f| self.round(f.re/len_f32, 2))
                            .collect();
             e = error_mape(data, &out_data);
         }
+
+        /// Binary search for the ideal frequency size
+        fn binary_search(k: i32, items: &[i32]) -> Option<usize> {
+            let mut low: usize = 0;
+            let mut high: usize = items.len();
+         
+            while low < high {
+                let middle = (high + low) / 2;
+                match items[middle].cmp(&k) {
+                    Ordering::Equal => return Some(middle),
+                    Ordering::Greater => high = middle,
+                    Ordering::Less => low = middle + 1
+                }
+            }
+            None
+        }
+
     }
 
     /// Compresses data via FFT

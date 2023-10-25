@@ -17,7 +17,7 @@ fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
     // If the input path points to a single file
     if metadata.is_file() {
         debug!("Target is a file");
-        process_single_file(arguments)?;
+        process_single_file(&arguments.input, arguments)?;
     }
     // If the input path points to a directory
     else if metadata.is_dir() {
@@ -55,12 +55,13 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
         }
         Ok(())
     } else {
+        // Get the directory name
         let file_name = arguments.input.file_name().ok_or("Failed to retrieve file name.")?;
         let new_name = format!("{}-compressed", file_name.to_string_lossy());
         let base_dir = arguments.input.with_file_name(new_name);
-
+        // Create an output directory
         bro_writer::initialize_directory(&base_dir)?;
-        //read
+        //read all the WAV files
         let files = wav_reader::dir_reader(&arguments.input)?;
 
         for (index, data) in files.contents.iter().enumerate() {
@@ -75,7 +76,7 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
 }
 
 /// Processes a single file.
-fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
+fn process_single_file(file_path: &Path, arguments: &Args) -> Result<(), Box<dyn Error>> {
     debug!("Processing single file...");
     if arguments.uncompress {
         //read
@@ -87,15 +88,16 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
             println!("Output={:?}", decompressed_data);
         }
         //write
-        let filename_osstr = arguments.input.file_name().ok_or("Failed to get file name.")?;
+        let filename_osstr = file_path.file_name().ok_or("Failed to get file name.")?;
         let filename_str = filename_osstr.to_str().ok_or("Failed to convert OS string to string.")?;
-        let parent = arguments.input.parent().ok_or("Failed to determine parent directory.")?;
+        let parent = file_path.parent().ok_or("Failed to determine parent directory.")?;
         let new_path = parent.join(filename_str);
         let path_str = new_path.to_str().ok_or("Failed to convert path to string.")?;
         wav_writer::write_optimal_wav(path_str, decompressed_data, 1);
+    // We are decompressing
     } else {
         //read
-        let (vec, tag) = wav_reader::read_file(&arguments.input)?;
+        let (vec, tag) = wav_reader::read_file(file_path)?;
         if arguments.verbose {
             println!("Input={:?}", vec);
         }
@@ -107,7 +109,7 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
             .file_name()
             .and_then(|filename_osstr| filename_osstr.to_str())
             .ok_or("Failed to convert filename to string")?;
-        write_compressed_to_path(&arguments.input, &compressed_data, filename_str)?;
+        write_compressed_to_path(file_path, &compressed_data, filename_str)?;
     }
     Ok(())
 }
