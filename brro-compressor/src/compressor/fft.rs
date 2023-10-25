@@ -161,6 +161,10 @@ impl FFT {
     /// This picks a set of data, computes the FFT, and uses the hinted number of frequencies to store the N provided
     /// more relevant frequencies
     pub fn compress_hinted(&mut self, data: &[f64], max_freq: usize) {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, we're done here!");
+            return
+         }
         // First thing, always try to get the data len as a power of 2. 
         let v = data.len();
         if !v.is_power_of_two() {
@@ -183,6 +187,10 @@ impl FFT {
     /// the max allowed error. 
     /// NOTE: This does not otimize for smallest possible error, just being smaller than the error.
     pub fn compress_bounded(&mut self, data: &[f64], max_err: f64) {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, we're done here!");
+            return
+         }
         // Variables
         let len = data.len();
         let len_f32 = len as f32;
@@ -208,14 +216,15 @@ impl FFT {
         buff_clone.truncate(size);
         // To make sure we run the first cycle
         let mut current_err = max_err + 1.0;
-        // Setting binary search points
         let mut low: usize = max_freq;
         let mut high: usize = data.len();
-        let mut middle: usize = 0;
+        let mut middle: usize = (high + low) / 2;
         let mut iterations = 0;
         // Aproximation. Faster convergence
-        while ((max_err * 100.0) as i32) < ((current_err * 100.0) as i32) {
+        while ((max_err * 100.0) as i32) != ((current_err * 100.0) as i32) {
             iterations += 1;
+            // Binary search worst case is log N
+            if iterations as f32 > (data.len() as f32).log2() { break; }
             self.frequencies = FFT::fft_trim(&mut buff_clone, max_freq+middle);
             // Inverse FFT and error check
             let mut idata = self.get_mirrored_freqs(len);
@@ -225,15 +234,17 @@ impl FFT {
                            .map(|&f| self.round(f.re/len_f32, 1))
                            .collect();
             current_err = error_mape(data, &out_data);
-            middle = (high + low) / 2;
-            trace!("Current Err: {}", current_err);
+            trace!("Current Err: {} BinSearch Results:{} {} {}", current_err, low,middle,high);
             match current_err {
-                _ if ((max_err * 100.0) as i32) < ((current_err * 100.0) as i32) => high = middle,
-                _ if ((max_err * 100.0) as i32) > ((current_err * 100.0) as i32) => low = middle + 1,
-                _ => break
+                _ if ((max_err * 10000.0) as i32) < ((current_err * 10000.0) as i32) => high = middle,
+                _ if ((max_err * 10000.0) as i32) > ((current_err * 10000.0) as i32) => low = middle + 1,
+                _ if (current_err * 100.0) as i32 == 0 => break,
+                _ if current_err.is_nan() => break,
+                _ => break,
             }
+            middle = (high + low) / 2;
         }
-        debug!("Iterations to convergence: {}, frequencies stored: {}", iterations, self.frequencies.len());
+        debug!("Iterations to convergence: {}, frequencies stored: {}, Error: {}", iterations, self.frequencies.len(), current_err);
     }
         /*
         // Repeat until the error is good enough
@@ -252,25 +263,13 @@ impl FFT {
             e = error_mape(data, &out_data);
         }*/
 
-        /// Binary search for the ideal frequency size
-        fn binary_search(k: i32, items: &[i32]) -> Option<usize> {
-            let mut low: usize = 0;
-            let mut high: usize = items.len();
-         
-            while low < high {
-                let middle = (high + low) / 2;
-                match items[middle].cmp(&k) {
-                    Ordering::Equal => return Some(middle),
-                    Ordering::Greater => high = middle,
-                    Ordering::Less => low = middle + 1
-                }
-            }
-            None
-        }
-
     /// Compresses data via FFT
     /// The set of frequencies to store is 1/100 of the data lenght OR 3, which is bigger.
     pub fn compress(&mut self, data: &[f64]) {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, we're done here!");
+            return
+         }
         // First thing, always try to get the data len as a power of 2. 
         let v = data.len();
         let max_freq =  if 3 >= (v/100) { 3 } else { v/100 };
@@ -321,6 +320,10 @@ impl FFT {
     /// Returns an array of data
     /// Runs the ifft, and push residuals into place and/or adjusts max and mins accordingly
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, faster decompression!");
+            return vec![self.max_value as f64; frame_size];
+         }
         // Vec to process the ifft
         let mut data = self.get_mirrored_freqs(frame_size);
         // Plan the ifft
@@ -453,6 +456,6 @@ mod tests {
         let compressed_data = c.to_bytes();
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
         assert_eq!(vector1, out);
-        assert_eq!(frequencies_total, 1);
+        assert_eq!(frequencies_total, 0);
     }
 }
