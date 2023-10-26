@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 use std::{collections::BinaryHeap, cmp::Ordering};
 use rustfft::{FftPlanner, num_complex::Complex};
-use crate::utils::error::error_mape;
+use crate::utils::error::error_smape;
 
 use super::BinConfig;
 use log::{error, debug, warn, info, trace};
@@ -216,52 +216,31 @@ impl FFT {
         buff_clone.truncate(size);
         // To make sure we run the first cycle
         let mut current_err = max_err + 1.0;
-        let mut low: usize = max_freq;
-        let mut high: usize = data.len();
-        let mut middle: usize = (high + low) / 2;
+        let mut jump: usize = 0;
         let mut iterations = 0;
         // Aproximation. Faster convergence
-        while ((max_err * 100.0) as i32) != ((current_err * 100.0) as i32) {
+        while ((max_err * 1000.0) as i32) < ((current_err * 1000.0) as i32) {
             iterations += 1;
-            // Binary search worst case is log N
-            if iterations as f32 > (data.len() as f32).log2() { break; }
-            self.frequencies = FFT::fft_trim(&mut buff_clone, max_freq+middle);
+            self.frequencies = FFT::fft_trim(&mut buff_clone, max_freq+jump);
             // Inverse FFT and error check
             let mut idata = self.get_mirrored_freqs(len);
             // run the ifft
             ifft.process(&mut idata);
             let out_data: Vec<f64> = idata.iter()
-                           .map(|&f| self.round(f.re/len_f32, 1))
-                           .collect();
-            current_err = error_mape(data, &out_data);
-            trace!("Current Err: {} BinSearch Results:{} {} {}", current_err, low,middle,high);
-            match current_err {
-                _ if ((max_err * 10000.0) as i32) < ((current_err * 10000.0) as i32) => high = middle,
-                _ if ((max_err * 10000.0) as i32) > ((current_err * 10000.0) as i32) => low = middle + 1,
-                _ if (current_err * 100.0) as i32 == 0 => break,
-                _ if current_err.is_nan() => break,
-                _ => break,
-            }
-            middle = (high + low) / 2;
-        }
-        debug!("Iterations to convergence: {}, frequencies stored: {}, Error: {}", iterations, self.frequencies.len(), current_err);
-    }
-        /*
-        // Repeat until the error is good enough
-        for i in 1..data.len() {
-            if e <= max_err {
-                debug!("Last Error: {}. Cycles: {}", e, i);
-                break;
-            }
-            trace!("Error: {}", e);
-            self.frequencies = FFT::fft_trim(&mut buff_clone, max_freq+i);
-            idata = self.get_mirrored_freqs(len);
-            ifft.process(&mut idata);
-            out_data = idata.iter()
                            .map(|&f| self.round(f.re/len_f32, 2))
                            .collect();
-            e = error_mape(data, &out_data);
-        }*/
+            current_err = error_smape(data, &out_data);
+            trace!("Current Err: {}", current_err);
+            // Max iterations is 18 (We start at 10%, we can go to 95% and 1% at a time)
+            match iterations {
+                1..=17 => jump += max_freq/2,
+                18..=22 => jump += max_freq/10,
+                23 => break,
+                _ => break
+            }
+        }
+        debug!("Iterations to convergence: {}, Freqs P:{} S:{}, Error: {}", iterations, jump+max_freq, self.frequencies.len(), current_err);
+    }
 
     /// Compresses data via FFT
     /// The set of frequencies to store is 1/100 of the data lenght OR 3, which is bigger.
@@ -433,7 +412,7 @@ mod tests {
         let frame_size = vector1.len();
         let compressed_data = fft_allowed_error(&vector1, 0.01);
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
-        let e = error_mape(&vector1, &out);
+        let e = error_smape(&vector1, &out);
         assert!(e <= 0.01);
     }
 
