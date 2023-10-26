@@ -1,24 +1,15 @@
-use std::io::{self};
-use std::path::{Path};
+use std::path::PathBuf;
 use hound::{WavSpec, WavWriter};
 use log::info;
 
 // Function to create a streaming writer for a file
-pub fn initialize_directory(base_dir: &Path) -> io::Result<()> {
-    if !base_dir.exists() {
-        std::fs::create_dir_all(base_dir)?;
-    }
-    Ok(())
-}
-pub fn write_optimal_wav(filename: &str, data: Vec<f64>, channels: i32) {
+pub fn write_optimal_wav(mut path: PathBuf, data: Vec<f64>, channels: i32) {
     let (bitdepth, dc, _fractional) = analyze_data(&data);
     // Make DC a float for operations
     let fdc = dc as f64;
     let header: WavSpec = generate_wav_header(Some(channels), bitdepth as u16, 8000);
-    let mut file_path = filename.to_string();
-    file_path.truncate(file_path.len() - 4);
-    file_path = format!("{}.wav", file_path);
-    let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(file_path).unwrap();
+    path.set_extension("wav");
+    let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(path).unwrap();
     let mut wav_writer = WavWriter::new(file, header).unwrap();
     for sample in data {
         let _ = match bitdepth {

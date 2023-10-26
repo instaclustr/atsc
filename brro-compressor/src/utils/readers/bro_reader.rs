@@ -2,7 +2,7 @@
 use std::fs;
 use std::fs::File;
 use std::io::{self, Error, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 // Function to process a WAV file
 fn process_bro_file(file_path: &Path) -> io::Result<Vec<u8>> {
@@ -11,38 +11,25 @@ fn process_bro_file(file_path: &Path) -> io::Result<Vec<u8>> {
     file.read_to_end(&mut contents)?;
     Ok(contents)
 }
+
 pub struct Files {
     pub contents: Vec<Vec<u8>>,
-    pub names: Vec<String>,
+    pub original_paths: Vec<PathBuf>,
 }
-
 
 // Function to read and process files in a directory
 pub fn dir_reader(directory_path: &Path) -> io::Result<Files> {
     let mut contents: Vec<Vec<u8>> = Vec::new();
-
-    let mut names: Vec<String> = Vec::new();
-
+    let mut original_paths: Vec<PathBuf> = Vec::new();
 
     // Iterate through entries (files and subdirectories) in the given directory
     for entry in fs::read_dir(directory_path)? {
-        // Unwrap the entry to get the actual entry information
-        let entry = entry?;
+        let file_path = entry?.path();
 
-        // Get the path of the entry (file or directory)
-        let file_path = entry.path();
-
-        // Add the filename to the list
-        if let Some(filename) = file_path.file_name() {
-            if let Some(filename_str) = filename.to_str() {
-                names.push(filename_str.to_string());
-            }
-        }
-
-        // Check if the file is a WAV file
         contents.push(read_file(&file_path)?);
+        original_paths.push(file_path);
     }
-    Ok(Files {contents, names})
+    Ok(Files {contents, original_paths})
 }
 
 pub fn read_file(file_path: &Path) -> Result<Vec<u8>, Error> {
