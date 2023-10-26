@@ -129,9 +129,13 @@ fn compress_data(vec: &[f64], _tag: &MetricTag, arguments: &Args) -> Vec<u8> {
         CompressorType::Wavelet => op.set_compressor(Compressor::Wavelet),
         _ => todo!("Auto selection of compressor not yet implemented!"),
     }
-    for (c, d) in op.get_execution().into_iter() {
-        debug!("Chunk size: {}", d.len());
-        cs.compress_chunk_with(d, c.to_owned());
+    for (cpr, data) in op.get_execution().into_iter() {
+        debug!("Chunk size: {}", data.len());
+        // If compressor is a losseless one, compress with the error defined, or default
+        match arguments.compressor {
+            CompressorType::Fft => cs.compress_chunk_bounded_with(data, cpr.to_owned(), arguments.error as f32/100.0),
+            _ => cs.compress_chunk_with(data, cpr.to_owned()),
+        }
     }
     cs.to_bytes()
 }
@@ -143,6 +147,7 @@ fn decompress_data(compressed_data: &[u8]) -> Vec<f64> {
     let cs = CompressedStream::from_bytes(compressed_data);
     cs.decompress()
 }
+
 /// Writes the compressed data to the provided path
 fn write_compressed_to_path(input_path: &Path, compressed_bytes: &[u8], original_filename: &str) -> Result<(), Box<dyn Error>> {
     // Use BRO extension
@@ -152,9 +157,9 @@ fn write_compressed_to_path(input_path: &Path, compressed_bytes: &[u8], original
 
     let mut output_file = bro_writer::create_streaming_writer(&output_path)?;
     bro_writer::write_data_to_stream(&mut output_file, compressed_bytes)?;
-
     Ok(())
 }
+
 #[derive(Parser, Default, Debug)]
 #[command(author, version, about="A Time-Series compressor", long_about = None)]
 struct Args {
@@ -169,8 +174,8 @@ struct Args {
      /// 0 is lossless compression
      /// 50 will do a median filter on the data.
      /// In between will pick optimize for the error
-     #[arg(short, long, default_value = "5")]
-     error: i8,
+     #[arg(short, long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(0..51))]
+     error: u8,
 
     /// Uncompresses the input file/directory
     #[arg(short, action)]

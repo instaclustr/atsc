@@ -1,10 +1,10 @@
 use bincode::{Decode, Encode};
 use std::{collections::BinaryHeap, cmp::Ordering};
 use rustfft::{FftPlanner, num_complex::Complex};
-use crate::utils::error::calculate_error;
+use crate::utils::error::error_mape;
 
 use super::BinConfig;
-use log::{error, debug, warn, info};
+use log::{error, debug, warn, info, trace};
 
 const FFT_COMPRESSOR_ID: u8 = 15;
 
@@ -200,23 +200,25 @@ impl FFT {
         let mut idata = self.get_mirrored_freqs(len);
         // run the ifft
         ifft.process(&mut idata);
-        let mut out_data = idata.iter()
+        let mut out_data: Vec<f64> = idata.iter()
                            .map(|&f| self.round(f.re/len_f32, 1))
                            .collect();
-        let mut e = calculate_error(data, &out_data).unwrap();
+        let mut e = error_mape(data, &out_data);
+        debug!("First Error: {}", e);
         // Repeat until the error is good enough
         for i in 1..data.len() {
             if e <= max_err {
+                debug!("Last Error: {}. Cycles: {}", e, i);
                 break;
             }
-            debug!("Error: {}", e);
+            trace!("Error: {}", e);
             self.frequencies = FFT::fft_trim(&mut buffer.clone(), max_freq+i);
             idata = self.get_mirrored_freqs(len);
             ifft.process(&mut idata);
             out_data = idata.iter()
                            .map(|&f| self.round(f.re/len_f32, 1))
                            .collect();
-            e = calculate_error(data, &out_data).unwrap();
+            e = error_mape(data, &out_data);
         }
     }
 
@@ -313,7 +315,7 @@ pub fn fft_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
 /// Compress targeting a specific max error allowed. This is very computational intensive,
 /// as the FFT will be calculated over and over until the specific error threshold is achived.
 pub fn fft_allowed_error(data: &[f64], allowed_error: f64) -> Vec<u8> {
-    info!("Initializing FFT Compressor");
+    info!("Initializing FFT Compressor. Max error: {}", allowed_error);
     let mut min = data[0];
     let mut max = data[0];
     for e in data.iter(){
@@ -378,7 +380,7 @@ mod tests {
         let frame_size = vector1.len();
         let compressed_data = fft_allowed_error(&vector1, 0.01);
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
-        let e = calculate_error(&vector1, &out).unwrap();
+        let e = error_mape(&vector1, &out);
         assert!(e <= 0.01);
     }
 }

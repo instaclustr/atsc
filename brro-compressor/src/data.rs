@@ -1,4 +1,5 @@
 use bincode::{Decode, Encode};
+use log::debug;
 use crate::compressor::{Compressor, BinConfig};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
@@ -30,6 +31,15 @@ impl CompressedStream {
     pub fn compress_chunk_with(&mut self, chunk: &[f64], compressor: Compressor) {
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         compressor_frame.compress(chunk);
+        compressor_frame.close();
+        self.data_frames.push(compressor_frame);
+    }
+
+    /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
+    pub fn compress_chunk_bounded_with(&mut self, chunk: &[f64], compressor: Compressor, max_error: f32) {
+        debug!("Compressing chunk bounded with a max error of {}", max_error);
+        let mut compressor_frame = CompressorFrame::new(Some(compressor));
+        compressor_frame.compress_bounded(chunk, max_error);
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
     }
