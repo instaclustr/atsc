@@ -34,10 +34,11 @@ fn process_wav_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
 fn process_raw_file(file_path: &Path) -> io::Result<(Vec<f64>, MetricTag)> {
     todo!("Handle RAW file processing here (for example, decoding or encoding): {file_path:?}");
 }
-// TODO: refactor this into a Vec<File>
-pub struct Files {
-    pub contents: Vec<(Vec<f64>, MetricTag)>,
-    pub original_paths: Vec<PathBuf>,
+
+pub struct WavFile {
+    pub contents: Vec<f64>,
+    pub tag: MetricTag,
+    pub original_path: PathBuf,
 }
 
 /// Read a file by chunks and processes the chunks
@@ -59,19 +60,19 @@ pub fn process_by_chunk(file_path: &Path) -> Result<(), std::io::Error> {
 }
 
 // Function to read and process files in a directory
-pub fn dir_reader(directory_path: &Path) -> io::Result<Files> {
-    let mut contents: Vec<(Vec<f64>, MetricTag)> = Vec::new();
-
-    let mut original_paths: Vec<PathBuf> = Vec::new();
-
-    // Iterate through entries (files and subdirectories) in the given directory
+pub fn dir_reader(directory_path: &Path) -> io::Result<Vec<WavFile>> {
+    let mut files = vec!();
     for entry in fs::read_dir(directory_path)? {
         let file_path = entry?.path();
 
-        contents.push(read_file(&file_path)?);
-        original_paths.push(file_path);
+        let (contents, tag) = read_file(&file_path)?;
+        files.push(WavFile {
+            contents,
+            tag,
+            original_path: file_path,
+        })
     }
-    Ok(Files {contents, original_paths})
+    Ok(files)
 }
 
 pub fn read_file(file_path: &Path) -> Result<(Vec<f64>, MetricTag), Error> {
