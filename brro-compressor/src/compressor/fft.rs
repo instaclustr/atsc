@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 use std::{collections::BinaryHeap, cmp::Ordering};
 use rustfft::{FftPlanner, num_complex::Complex};
-use crate::utils::error::error_mape;
+use crate::utils::error::error_smape;
 
 use super::BinConfig;
 use log::{error, debug, warn, info, trace};
@@ -131,11 +131,7 @@ impl FFT {
     }
 
     /// Removes the smallest frequencies from `buffer` until `max_freq` remain
-    fn fft_trim(buffer: &mut Vec<Complex<f32>>, max_freq: usize) ->  Vec<FrequencyPoint> {
-        // We need half + 1 frequencies at most, due to the mirrored nature of FFT (signal is always real!)
-        // and the first one being the dc component
-        let size = (buffer.len() / 2) + 1;
-        buffer.truncate(size);
+    fn fft_trim(buffer: &mut [Complex<f32>], max_freq: usize) ->  Vec<FrequencyPoint> {
         let mut freq_vec = Vec::with_capacity(max_freq);
         if max_freq == 1 {
             freq_vec.push(FrequencyPoint::from_complex_with_position(buffer[0], 0));
@@ -150,7 +146,13 @@ impl FFT {
         let mut heap = BinaryHeap::from(tmp_vec);
         // Now that we have it, let's pop the elements we need!
         for _ in 0..max_freq {
-            if let Some(item) = heap.pop() {freq_vec.push(item)}
+            if let Some(item) = heap.pop() {
+                // If the frequency is 0, we don't need it or any other
+                if item.freq_img == 0.0 && item.freq_real == 0.0 {
+                    break;
+                }
+                freq_vec.push(item)
+            }
         }
         freq_vec
     }
@@ -159,6 +161,10 @@ impl FFT {
     /// This picks a set of data, computes the FFT, and uses the hinted number of frequencies to store the N provided
     /// more relevant frequencies
     pub fn compress_hinted(&mut self, data: &[f64], max_freq: usize) {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, we're done here!");
+            return
+         }
         // First thing, always try to get the data len as a power of 2. 
         let v = data.len();
         if !v.is_power_of_two() {
@@ -169,6 +175,10 @@ impl FFT {
         let mut buffer = FFT::optimize(data);
         // The data is processed in place, it gets back to the buffer
         fft.process(&mut buffer);
+        // We need half + 1 frequencies at most, due to the mirrored nature of FFT (signal is always real!)
+        // and the first one being the dc component
+        let size = (buffer.len() / 2) + 1;
+        buffer.truncate(size);
         self.frequencies = FFT::fft_trim(&mut buffer, max_freq);
     }
 
@@ -177,6 +187,10 @@ impl FFT {
     /// the max allowed error. 
     /// NOTE: This does not otimize for smallest possible error, just being smaller than the error.
     pub fn compress_bounded(&mut self, data: &[f64], max_err: f64) {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, we're done here!");
+            return
+         }
         // Variables
         let len = data.len();
         let len_f32 = len as f32;
@@ -195,36 +209,46 @@ impl FFT {
         
         // FFT calculations
         fft.process(&mut buffer);
-        self.frequencies = FFT::fft_trim(&mut buffer.clone(), max_freq);
-        // Inverse FFT and error check
-        let mut idata = self.get_mirrored_freqs(len);
-        // run the ifft
-        ifft.process(&mut idata);
-        let mut out_data: Vec<f64> = idata.iter()
-                           .map(|&f| self.round(f.re/len_f32, 1))
-                           .collect();
-        let mut e = error_mape(data, &out_data);
-        debug!("First Error: {}", e);
-        // Repeat until the error is good enough
-        for i in 1..data.len() {
-            if e <= max_err {
-                debug!("Last Error: {}. Cycles: {}", e, i);
-                break;
-            }
-            trace!("Error: {}", e);
-            self.frequencies = FFT::fft_trim(&mut buffer.clone(), max_freq+i);
-            idata = self.get_mirrored_freqs(len);
+        let mut buff_clone = buffer.clone();
+        // We need half + 1 frequencies at most, due to the mirrored nature of FFT (signal is always real!)
+        // and the first one being the dc component
+        let size = (buff_clone.len() / 2) + 1;
+        buff_clone.truncate(size);
+        // To make sure we run the first cycle
+        let mut current_err = max_err + 1.0;
+        let mut jump: usize = 0;
+        let mut iterations = 0;
+        // Aproximation. Faster convergence
+        while ((max_err * 1000.0) as i32) < ((current_err * 1000.0) as i32) {
+            iterations += 1;
+            self.frequencies = FFT::fft_trim(&mut buff_clone, max_freq+jump);
+            // Inverse FFT and error check
+            let mut idata = self.get_mirrored_freqs(len);
+            // run the ifft
             ifft.process(&mut idata);
-            out_data = idata.iter()
-                           .map(|&f| self.round(f.re/len_f32, 1))
+            let out_data: Vec<f64> = idata.iter()
+                           .map(|&f| self.round(f.re/len_f32, 2))
                            .collect();
-            e = error_mape(data, &out_data);
+            current_err = error_smape(data, &out_data);
+            trace!("Current Err: {}", current_err);
+            // Max iterations is 18 (We start at 10%, we can go to 95% and 1% at a time)
+            match iterations {
+                1..=17 => jump += max_freq/2,
+                18..=22 => jump += max_freq/10,
+                23 => break,
+                _ => break
+            }
         }
+        debug!("Iterations to convergence: {}, Freqs P:{} S:{}, Error: {}", iterations, jump+max_freq, self.frequencies.len(), current_err);
     }
 
     /// Compresses data via FFT
     /// The set of frequencies to store is 1/100 of the data lenght OR 3, which is bigger.
     pub fn compress(&mut self, data: &[f64]) {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, we're done here!");
+            return
+         }
         // First thing, always try to get the data len as a power of 2. 
         let v = data.len();
         let max_freq =  if 3 >= (v/100) { 3 } else { v/100 };
@@ -237,6 +261,10 @@ impl FFT {
         let mut buffer = FFT::optimize(data);
         // The data is processed in place, it gets back to the buffer
         fft.process(&mut buffer);
+        // We need half + 1 frequencies at most, due to the mirrored nature of FFT (signal is always real!)
+        // and the first one being the dc component
+        let size = (buffer.len() / 2) + 1;
+        buffer.truncate(size);
         self.frequencies = FFT::fft_trim(&mut buffer, max_freq);
     }
 
@@ -271,6 +299,10 @@ impl FFT {
     /// Returns an array of data
     /// Runs the ifft, and push residuals into place and/or adjusts max and mins accordingly
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, faster decompression!");
+            return vec![self.max_value as f64; frame_size];
+         }
         // Vec to process the ifft
         let mut data = self.get_mirrored_freqs(frame_size);
         // Plan the ifft
@@ -380,7 +412,29 @@ mod tests {
         let frame_size = vector1.len();
         let compressed_data = fft_allowed_error(&vector1, 0.01);
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
-        let e = error_mape(&vector1, &out);
+        let e = error_smape(&vector1, &out);
         assert!(e <= 0.01);
+    }
+
+    #[test]
+    fn test_static_and_trim() {
+        // This vector should lead to 11 frequencies
+        let vector1 = vec![1.0; 1024];
+        let frame_size = vector1.len();
+        let mut min = vector1[0];
+        let mut max = vector1[0];
+        for e in vector1.iter(){
+            if e > &max { max = *e };
+            if e < &min { min = *e };
+        }
+        // Initialize the compressor
+        let mut c = FFT::new(frame_size, min, max);
+        // Convert the data
+        c.compress(&vector1);
+        let frequencies_total = c.frequencies.len();
+        let compressed_data = c.to_bytes();
+        let out = FFT::decompress(&compressed_data).to_data(frame_size);
+        assert_eq!(vector1, out);
+        assert_eq!(frequencies_total, 0);
     }
 }

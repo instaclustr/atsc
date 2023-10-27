@@ -63,6 +63,21 @@ pub fn error_mape(original: &[f64], generated: &[f64]) -> f64 {
     abs_error / original.len() as f64
 }
 
+/// Computes the Symmetric Mean Absolute Percentage Error between 2 signals
+/// # Panics:
+/// When the 2 arrays don't have the same size 
+pub fn error_smape(original: &[f64], generated: &[f64]) -> f64 {
+    if original.len() != generated.len() { panic!("Can't compute error! Arrays with different lenghts.")}
+
+    let abs_error: f64 = original
+        .iter()
+        .zip(generated.iter())
+        .filter(|(&original, &generated)| !(original == 0.0 && generated == 0.0))
+        .map(|(original, generated)| ((generated - original).abs()/(original.abs() + generated.abs())))
+        .sum();
+    abs_error / original.len() as f64
+}
+
 
 
 

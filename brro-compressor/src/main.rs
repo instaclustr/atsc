@@ -7,7 +7,7 @@ use brro_compressor::utils::writers::wav_writer;
 use clap::{arg, command, Parser};
 use log::{debug, error};
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 /// Processes the given input based on the provided arguments.
 fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
@@ -16,7 +16,7 @@ fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
     // If the input path points to a single file
     if metadata.is_file() {
         debug!("Target is a file");
-        process_single_file(arguments)?;
+        process_single_file(&arguments.input, arguments)?;
     }
     // If the input path points to a directory
     else if metadata.is_dir() {
@@ -86,7 +86,7 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
 }
 
 /// Processes a single file.
-fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
+fn process_single_file(file_path: &Path, arguments: &Args) -> Result<(), Box<dyn Error>> {
     debug!("Processing single file...");
     if arguments.uncompress {
         //read
@@ -100,7 +100,7 @@ fn process_single_file(arguments: &Args) -> Result<(), Box<dyn Error>> {
         wav_writer::write_optimal_wav(arguments.input.clone(), decompressed_data, 1);
     } else {
         //read
-        let (vec, tag) = wav_reader::read_file(&arguments.input)?;
+        let (vec, tag) = wav_reader::read_file(file_path)?;
         if arguments.verbose {
             println!("Input={:?}", vec);
         }
