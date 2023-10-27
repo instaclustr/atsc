@@ -7,7 +7,7 @@ use brro_compressor::utils::writers::wav_writer;
 use clap::{arg, command, Parser};
 use log::{debug, error};
 use std::error::Error;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 /// Processes the given input based on the provided arguments.
 fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
@@ -197,5 +197,6 @@ fn main() {
 
     if let Err(e) = process_args(&arguments) {
         error!("{}", e);
+        std::process::exit(1);
     }
 }
