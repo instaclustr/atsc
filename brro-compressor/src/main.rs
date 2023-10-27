@@ -194,5 +194,6 @@ fn main() {
 
     if let Err(e) = process_args(&arguments) {
         error!("{}", e);
+        std::process::exit(1);
     }
 }
