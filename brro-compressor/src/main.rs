@@ -7,7 +7,7 @@ use brro_compressor::utils::writers::wav_writer;
 use clap::{arg, command, Parser};
 use log::{debug, error};
 use std::error::Error;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 /// Processes the given input based on the provided arguments.
 fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
@@ -42,16 +42,14 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
 
         std::fs::create_dir_all(&base_dir)?;
         //read
-        let files = bro_reader::dir_reader(&arguments.input)?;
-        // TODO: This should be calling `process_single_file` and avoid code duplication
 
-        for (index, data) in files.contents.iter().enumerate() {
-            let arr: &[u8] = data;
+        // TODO: This should be calling `process_single_file` and avoid code duplication
+        for file in bro_reader::dir_reader(&arguments.input)? {
             //decompress
-            let decompressed_data = decompress_data(arr);
+            let decompressed_data = decompress_data(&file.contents);
             //write
             let path = base_dir.join(
-                files.original_paths[index]
+                file.original_path
                     .file_name()
                     .ok_or("path has no file name")?,
             );
@@ -68,13 +66,12 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
         let base_dir = arguments.input.with_file_name(new_name);
 
         std::fs::create_dir_all(&base_dir)?;
-        //read
-        let files = wav_reader::dir_reader(&arguments.input)?;
 
-        for (index, (vec_data, tag)) in files.contents.into_iter().enumerate() {
-            let compressed_data = compress_data(&vec_data, &tag, arguments);
+        //read
+        for file in wav_reader::dir_reader(&arguments.input)? {
+            let compressed_data = compress_data(&file.contents, &file.tag, arguments);
             let mut path = base_dir.join(
-                files.original_paths[index]
+                file.original_path
                     .file_name()
                     .ok_or("path has no file name")?,
             );

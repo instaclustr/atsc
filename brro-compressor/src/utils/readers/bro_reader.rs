@@ -12,32 +12,33 @@ fn process_bro_file(file_path: &Path) -> io::Result<Vec<u8>> {
     Ok(contents)
 }
 
-pub struct Files {
-    pub contents: Vec<Vec<u8>>,
-    pub original_paths: Vec<PathBuf>,
+pub struct BroFile {
+    pub contents: Vec<u8>,
+    pub original_path: PathBuf,
 }
 
 // Function to read and process files in a directory
-pub fn dir_reader(directory_path: &Path) -> io::Result<Files> {
-    let mut contents: Vec<Vec<u8>> = Vec::new();
-    let mut original_paths: Vec<PathBuf> = Vec::new();
+pub fn dir_reader(directory_path: &Path) -> io::Result<Vec<BroFile>> {
+    let mut files = vec![];
 
     // Iterate through entries (files and subdirectories) in the given directory
     for entry in fs::read_dir(directory_path)? {
         let file_path = entry?.path();
 
-        contents.push(read_file(&file_path)?);
-        original_paths.push(file_path);
+        files.push(BroFile {
+            contents: read_file(&file_path)?,
+            original_path: file_path,
+        })
     }
-    Ok(Files {contents, original_paths})
+
+    Ok(files)
 }
 
 pub fn read_file(file_path: &Path) -> Result<Vec<u8>, Error> {
     if is_bro_file(file_path)? {
         // If it's a WAV file, process it using the process_wav_file function
         Ok(process_bro_file(file_path)?)
-    }
-    else {
+    } else {
         Err(Error::new(io::ErrorKind::Other, "File is not a bro file"))
     }
 }
@@ -50,7 +51,6 @@ fn is_bro_file(file_path: &Path) -> io::Result<bool> {
     Ok(header.starts_with(b"BRRO"))
 }
 
-
 /// Read a file by chunks and processes the chunks
 pub fn process_by_chunk(file_path: &Path) -> Result<(), std::io::Error> {
     let mut file = std::fs::File::open(file_path)?;
@@ -61,10 +61,17 @@ pub fn process_by_chunk(file_path: &Path) -> Result<(), std::io::Error> {
 
     loop {
         let mut chunk = Vec::with_capacity(chunk_size);
-        let n = file.by_ref().take(chunk_size as u64).read_to_end(&mut chunk)?;
-        if n == 0 { break; }
+        let n = file
+            .by_ref()
+            .take(chunk_size as u64)
+            .read_to_end(&mut chunk)?;
+        if n == 0 {
+            break;
+        }
         list_of_chunks.push(chunk);
-        if n < chunk_size { break; }
+        if n < chunk_size {
+            break;
+        }
     }
     Ok(())
 }
