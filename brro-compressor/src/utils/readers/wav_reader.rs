@@ -59,21 +59,6 @@ pub fn process_by_chunk(file_path: &Path) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-// Function to read and process files in a directory
-pub fn dir_reader(directory_path: &Path) -> io::Result<Vec<WavFile>> {
-    let mut files = vec!();
-    for entry in fs::read_dir(directory_path)? {
-        let file_path = entry?.path();
-
-        let (contents, tag) = read_file(&file_path)?;
-        files.push(WavFile {
-            contents,
-            tag,
-            original_path: file_path,
-        })
-    }
-    Ok(files)
-}
 
 pub fn read_file(file_path: &Path) -> Result<(Vec<f64>, MetricTag), Error> {
     if is_wav_file(file_path)? {

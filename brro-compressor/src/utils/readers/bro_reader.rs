@@ -17,23 +17,6 @@ pub struct BroFile {
     pub original_path: PathBuf,
 }
 
-// Function to read and process files in a directory
-pub fn dir_reader(directory_path: &Path) -> io::Result<Vec<BroFile>> {
-    let mut files = vec![];
-
-    // Iterate through entries (files and subdirectories) in the given directory
-    for entry in fs::read_dir(directory_path)? {
-        let file_path = entry?.path();
-
-        files.push(BroFile {
-            contents: read_file(&file_path)?,
-            original_path: file_path,
-        })
-    }
-
-    Ok(files)
-}
-
 pub fn read_file(file_path: &Path) -> Result<Vec<u8>, Error> {
     if is_bro_file(file_path)? {
         // If it's a WAV file, process it using the process_wav_file function
