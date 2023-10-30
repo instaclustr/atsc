@@ -17,12 +17,12 @@ pub struct BroFile {
     pub original_path: PathBuf,
 }
 
-pub fn read_file(file_path: &Path) -> Result<Vec<u8>, Error> {
+pub fn read_file(file_path: &Path) -> Result<Option<Vec<u8>>, Error> {
     if is_bro_file(file_path)? {
         // If it's a WAV file, process it using the process_wav_file function
-        Ok(process_bro_file(file_path)?)
+        Ok(Some(process_bro_file(file_path)?))
     } else {
-        Err(Error::new(io::ErrorKind::Other, "File is not a bro file"))
+        Ok(None)
     }
 }
 fn is_bro_file(file_path: &Path) -> io::Result<bool> {
