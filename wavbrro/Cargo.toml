@@ -1,6 +1,6 @@
 [package]
 name = "wavbrro"
-version = "0.1"
+version = "0.1.0"
 authors = ["Carlos Rolo <carlos.rolo@netapp.com>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -10,4 +10,4 @@ description = "An adaptation of the WAV format for use by the BRRO compressor"
 [dependencies]
 env_logger = "0.10.0"
 log = "0.4.0"
-hound = "3.5"
+rkyv = { version = "0.7.42", features = ["validation"] }
