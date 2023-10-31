@@ -48,7 +48,7 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
     debug!("Processing single file...");
     if arguments.uncompress {
         //read
-        if let Ok(Some(vec)) = bro_reader::read_file(&file_path){
+        if let Some(vec) = bro_reader::read_file(&file_path)?{
             let arr: &[u8] = &vec;
             //decompress
             let decompressed_data = decompress_data(arr);
@@ -60,7 +60,7 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
         }
     } else {
         //read
-        if let Ok(Some(data)) = wav_reader::read_file(&file_path) {
+        if let Some(data) = wav_reader::read_file(&file_path)? {
             let (vec, tag) = data;
             if arguments.verbose {
                 println!("Input={:?}", vec);

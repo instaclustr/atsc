@@ -1,7 +1,7 @@
 // Implement a streaming reader here
 use std::fs;
 use std::io::{self, Error, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use log::debug;
 use regex::Regex;
 use types::metric_tag::MetricTag;
@@ -31,15 +31,9 @@ fn process_wav_file(file_path: &Path) -> io::Result<Option<(Vec<f64>, MetricTag)
 }
 
 // Function to process a RAW file
-#[allow(unused_variables)]
 fn process_raw_file(file_path: &Path) -> io::Result<Option<(Vec<f64>, MetricTag)>> {
+    log::error!("Raw files not supported yet. File path: {:?}", file_path.display());
     Ok(None)
-}
-
-pub struct WavFile {
-    pub contents: Vec<f64>,
-    pub tag: MetricTag,
-    pub original_path: PathBuf,
 }
 
 /// Read a file by chunks and processes the chunks

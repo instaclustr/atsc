@@ -2,7 +2,7 @@
 use std::fs;
 use std::fs::File;
 use std::io::{self, Error, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 // Function to process a WAV file
 fn process_bro_file(file_path: &Path) -> io::Result<Vec<u8>> {
@@ -10,11 +10,6 @@ fn process_bro_file(file_path: &Path) -> io::Result<Vec<u8>> {
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
     Ok(contents)
-}
-
-pub struct BroFile {
-    pub contents: Vec<u8>,
-    pub original_path: PathBuf,
 }
 
 pub fn read_file(file_path: &Path) -> Result<Option<Vec<u8>>, Error> {
