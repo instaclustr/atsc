@@ -23,14 +23,13 @@ fn test_suite(compressor: &str) {
 fn compress_dir(compressor: &str) {
     let tmp_dir = tempdir().unwrap();
     let input = tmp_dir.path().join("input");
-    let output = tmp_dir.path().join("input-compressed");
     std::fs::create_dir(&input).unwrap();
     std::fs::copy("tests/wavs/memory_used.wav", input.join("1.wav")).unwrap();
     std::fs::copy("tests/wavs/uptime.wav", input.join("2.wav")).unwrap();
 
     run_compressor(&[input.to_str().unwrap(), "--compressor", compressor]);
-    assert!(output.join("1.bro").is_file());
-    assert!(output.join("2.bro").is_file());
+    assert!(input.join("1.bro").is_file());
+    assert!(input.join("2.bro").is_file());
 }
 
 fn compress_file(compressor: &str) {

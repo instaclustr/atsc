@@ -2,7 +2,7 @@
 use std::fs;
 use std::fs::File;
 use std::io::{self, Error, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 // Function to process a WAV file
 fn process_bro_file(file_path: &Path) -> io::Result<Vec<u8>> {
@@ -12,34 +12,12 @@ fn process_bro_file(file_path: &Path) -> io::Result<Vec<u8>> {
     Ok(contents)
 }
 
-pub struct BroFile {
-    pub contents: Vec<u8>,
-    pub original_path: PathBuf,
-}
-
-// Function to read and process files in a directory
-pub fn dir_reader(directory_path: &Path) -> io::Result<Vec<BroFile>> {
-    let mut files = vec![];
-
-    // Iterate through entries (files and subdirectories) in the given directory
-    for entry in fs::read_dir(directory_path)? {
-        let file_path = entry?.path();
-
-        files.push(BroFile {
-            contents: read_file(&file_path)?,
-            original_path: file_path,
-        })
-    }
-
-    Ok(files)
-}
-
-pub fn read_file(file_path: &Path) -> Result<Vec<u8>, Error> {
+pub fn read_file(file_path: &Path) -> Result<Option<Vec<u8>>, Error> {
     if is_bro_file(file_path)? {
         // If it's a WAV file, process it using the process_wav_file function
-        Ok(process_bro_file(file_path)?)
+        Ok(Some(process_bro_file(file_path)?))
     } else {
-        Err(Error::new(io::ErrorKind::Other, "File is not a bro file"))
+        Ok(None)
     }
 }
 fn is_bro_file(file_path: &Path) -> io::Result<bool> {
