@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{self, Error, Read};
 use std::path::Path;
 
-// Function to process a WAV file
+// Function to process a BRRO file
 fn process_bro_file(file_path: &Path) -> io::Result<Vec<u8>> {
     let mut file = File::open(file_path)?;
     let mut contents = Vec::new();
