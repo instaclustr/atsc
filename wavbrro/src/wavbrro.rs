@@ -18,9 +18,8 @@ const MAX_CHUNK_SIZE:usize = 2048;
 // Derives can be passed through to the generated type:
 #[archive_attr(derive(Debug))]
 pub struct WavBrro {
-    pub header: [u8; 12],
     // We can infer chunk count from here -> chunk count = ceil(sample_count/MAX_CHUNK_SIZE)
-    pub sample_count: i32,
+    pub sample_count: u32,
     // Bitdepth indicates the type of samples that is contained in the file
     // 0 -> u8, 1 -> i16, 2 -> i32, 3 -> i64, 4 -> f32, 5 -> f64
     // At version 0.1 only f64 is allowed, so any data will be converted to f64 and all data be output as f64
@@ -38,8 +37,7 @@ impl Default for WavBrro {
 impl WavBrro {
     pub fn new() -> WavBrro {
         WavBrro {
-            // We will update the header with the sample count later
-            header: *b"WBRO0000WBRO",
+            // It will duplicate with the header, but this allows to double check if the header matches.
             sample_count: 0,
             // Default to f64
             bitdepth: 5,
