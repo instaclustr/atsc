@@ -1,9 +1,8 @@
 use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer::OptimizerPlan;
-use brro_compressor::types::metric_tag::MetricTag;
-use brro_compressor::utils::readers::{bro_reader, wav_reader};
-use brro_compressor::utils::writers::wav_writer;
+use brro_compressor::utils::readers::bro_reader;
+use wavbrro::wavbrro::WavBrro;
 use clap::{arg, command, Parser};
 use log::{debug, error};
 use std::error::Error;
@@ -55,29 +54,27 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
             if arguments.verbose {
                 println!("Output={:?}", decompressed_data);
             }
-            // TODO: Decompression shouldn't optimize the WAV
-            wav_writer::write_optimal_wav(file_path, decompressed_data, 1);
+            file_path.set_extension("wbro");
+            WavBrro::to_file_with_data(&file_path, &decompressed_data)
         }
     } else {
-        //read
-        if let Some(data) = wav_reader::read_file(&file_path)? {
-            let (vec, tag) = data;
-            if arguments.verbose {
-                println!("Input={:?}", vec);
-            }
-            //compress
-            let compressed_data = compress_data(&vec, &tag, arguments);
-
-            //write
-            file_path.set_extension("bro");
-            std::fs::write(file_path, compressed_data)?;
+        // Read an WavBRRO file and compress it
+        let data = WavBrro::from_file(&file_path);
+        if arguments.verbose {
+            println!("Input={:?}", data);
         }
+        //compress
+        let compressed_data = compress_data(&data, arguments);
+
+        //write
+        file_path.set_extension("bro");
+        std::fs::write(file_path, compressed_data)?;
     }
     Ok(())
 }
 
 /// Compresses the data based on the provided tag and arguments.
-fn compress_data(vec: &[f64], _tag: &MetricTag, arguments: &Args) -> Vec<u8> {
+fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
     debug!("Compressing data!");
     //let optimizer_results = optimizer::process_data(vec, tag);
     // Create Optimization Plan and Stream for the data.

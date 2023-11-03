@@ -233,6 +233,7 @@ dependencies = [
  "regex",
  "rustfft",
  "tempfile",
+ "wavbrro",
 ]
 
 [[package]]

@@ -48,7 +48,11 @@ fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
         ((bits[3] as u64) << 48);
 
 
-    f64::from_bits(u64_bits)
+    let out = f64::from_bits(u64_bits);
+    if out.is_infinite() || out.is_nan() {
+        debug!("Found NaN/Infinite!");
+    }
+    out
 }
 // --- Legacy ends (I need to stop lying to myself...) ---
 
@@ -71,7 +75,8 @@ fn main() {
     assert!(is_wav_file(&arguments.input));
     let wav_data = read_metrics_from_wav(filename);
     let mut wb = WavBrro::new();
-    wav_data.iter().for_each(|x| wb.add_sample(*x));
+    // Clean NaN
+    wav_data.iter().for_each(|x| if !x.is_nan() {wb.add_sample(*x)});
     // Write the file
     let wavbrro_file = format!("{}wbro", filename.strip_suffix("wav").unwrap()); 
     wb.to_file(Path::new(&wavbrro_file));
@@ -79,5 +84,6 @@ fn main() {
     if arguments.validate {
         let brro_data = wb.get_samples();
         assert_eq!(wav_data, brro_data);
+        println!("File generated but data doesn't match! Tip: Check if NaN or Infinite is in the data.");
     }
 }

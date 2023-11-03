@@ -24,8 +24,8 @@ fn compress_dir(compressor: &str) {
     let tmp_dir = tempdir().unwrap();
     let input = tmp_dir.path().join("input");
     std::fs::create_dir(&input).unwrap();
-    std::fs::copy("tests/wavs/memory_used.wav", input.join("1.wav")).unwrap();
-    std::fs::copy("tests/wavs/uptime.wav", input.join("2.wav")).unwrap();
+    std::fs::copy("tests/wbros/memory_used.wbro", input.join("1.wbro")).unwrap();
+    std::fs::copy("tests/wbros/uptime.wbro", input.join("2.wbro")).unwrap();
 
     run_compressor(&[input.to_str().unwrap(), "--compressor", compressor]);
     assert!(input.join("1.bro").is_file());
@@ -35,10 +35,10 @@ fn compress_dir(compressor: &str) {
 fn compress_file(compressor: &str) {
     let tmp_dir = tempdir().unwrap();
     let path = tmp_dir.path();
-    std::fs::copy("tests/wavs/memory_used.wav", path.join("1.wav")).unwrap();
+    std::fs::copy("tests/wbros/memory_used.wbro", path.join("1.wbro")).unwrap();
 
     run_compressor(&[
-        path.join("1.wav").to_str().unwrap(),
+        path.join("1.wbro").to_str().unwrap(),
         "--compressor",
         compressor,
     ]);
