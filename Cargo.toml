@@ -4,6 +4,7 @@ members = [
     "optimizer",
     "prometheus-remote",
     "tools",
+    "wavbrro",
 ]
 resolver = "2"
 
