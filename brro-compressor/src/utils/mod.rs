@@ -1,9 +1,6 @@
 pub mod error;
 pub mod writers;
 pub mod readers;
-
-mod file_type_detector;
-
 // Is this the right place?
 pub fn prev_power_of_two(n: usize) -> usize {
     // n = 0 gives highest_bit_set_idx = 0.

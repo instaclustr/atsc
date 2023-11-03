@@ -1,25 +1,5 @@
-use std::path::PathBuf;
-use hound::{WavSpec, WavWriter};
-use log::info;
+use log::debug;
 
-// Function to create a streaming writer for a file
-pub fn write_optimal_wav(mut path: PathBuf, data: Vec<f64>, channels: i32) {
-    let (bitdepth, dc, _fractional) = analyze_data(&data);
-    // Make DC a float for operations
-    let fdc = dc as f64;
-    let header: WavSpec = generate_wav_header(Some(channels), bitdepth as u16, 8000);
-    path.set_extension("wav");
-    let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(path).unwrap();
-    let mut wav_writer = WavWriter::new(file, header).unwrap();
-    for sample in data {
-        let _ = match bitdepth {
-            8 =>  wav_writer.write_sample(as_i8(sample-fdc)),
-            16 => wav_writer.write_sample(as_i16(sample-fdc)),
-            _ => wav_writer.write_sample(as_i32(sample-fdc))
-        };
-    }
-    let _ = wav_writer.finalize();
-}
 fn as_i8(value: f64) -> i8 {
     split_n(value).0 as i8
 }
@@ -71,25 +51,6 @@ fn split_n(x: f64) -> (i64, f64) {
     }
 }
 
-fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
-    let u64_bits = (bits[0] as u64) |
-        ((bits[1] as u64) << 16) |
-        ((bits[2] as u64) << 32) |
-        ((bits[3] as u64) << 48);
-
-
-    f64::from_bits(u64_bits)
-}
-fn generate_wav_header(channels: Option<i32>, bitdepth: u16, samplerate: u32) -> WavSpec {
-
-    hound::WavSpec {
-        channels: channels.unwrap_or(4) as u16,
-        // TODO: Sample rate adaptations
-        sample_rate: samplerate,
-        bits_per_sample: bitdepth,
-        sample_format: hound::SampleFormat::Int
-    }
-}
 fn analyze_data(data: &Vec<f64>) -> (i32, i64, bool) {
     let mut min: f64 = 0.0;
     let mut max: f64 = 0.0;
@@ -112,9 +73,9 @@ fn analyze_data(data: &Vec<f64>) -> (i32, i64, bool) {
     // Finding the bitdepth without the DC component
     let recommended_bitdepth = find_bitdepth(max_int-min_int, min_int);
     if !fractional {
-        info!(" Recommended Bitdepth: {} ", recommended_bitdepth);
+        debug!(" Recommended Bitdepth: {} ", recommended_bitdepth);
     } else {
-        info!(" Fractional, Recommended Bitdepth: {}, Fractions max: {}", recommended_bitdepth, max_frac);
+        debug!(" Fractional, Recommended Bitdepth: {}, Fractions max: {}", recommended_bitdepth, max_frac);
     }
     (recommended_bitdepth, min_int, fractional)
 }
@@ -134,7 +95,6 @@ fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
         _ if min_int >= i32::MIN.into() => 32,
         _ => 64
     };
-
 
     bitdepth.max(bitdepth_signed)
 }

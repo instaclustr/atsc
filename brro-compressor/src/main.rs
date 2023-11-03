@@ -36,6 +36,7 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
     for entry in std::fs::read_dir(arguments.input.clone())? {
         let path = entry?.path();
         if path.is_file() {
+            // We need to make sure we skip anything but BRO and WBRO, this can be done on single file processors
             process_single_file(path, arguments)?;
         }
     }
