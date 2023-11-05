@@ -1,10 +1,12 @@
+pub mod frames_manager;
+
 use std::mem::size_of_val;
 use bincode::{Decode, Encode};
 use log::debug;
 use crate::compressor::Compressor;
 
 /// This is the structure of a compressor frame
-#[derive(Encode, Decode, Debug, Clone)]
+#[derive(Encode, Decode, Debug, Clone, Hash, PartialEq)]
 pub struct CompressorFrame{
     /// The frame size in bytes,
     frame_size: usize,

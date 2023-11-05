@@ -3,11 +3,12 @@ use log::debug;
 use crate::compressor::{Compressor, BinConfig};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
+use crate::frame::frames_manager::FramesManager;
 
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct CompressedStream {
     header: CompressorHeader,
-    data_frames: Vec<CompressorFrame>,
+    frame_manager: FramesManager,
 }
 
 impl CompressedStream {
@@ -15,7 +16,7 @@ impl CompressedStream {
     pub fn new() -> Self {
         CompressedStream {
             header: CompressorHeader::new(),
-            data_frames: Vec::new(),
+            frame_manager: FramesManager::new(),
         }
     }
 
@@ -24,7 +25,7 @@ impl CompressedStream {
         let mut compressor_frame = CompressorFrame::new(None);
         compressor_frame.compress(chunk);
         compressor_frame.close();
-        self.data_frames.push(compressor_frame);
+        self.frame_manager.add_frame(compressor_frame);
     }
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
@@ -32,7 +33,7 @@ impl CompressedStream {
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         compressor_frame.compress(chunk);
         compressor_frame.close();
-        self.data_frames.push(compressor_frame);
+        self.frame_manager.add_frame(compressor_frame);
     }
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
@@ -41,7 +42,7 @@ impl CompressedStream {
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         compressor_frame.compress_bounded(chunk, max_error);
         compressor_frame.close();
-        self.data_frames.push(compressor_frame);
+        self.frame_manager.add_frame(compressor_frame);
     }
 
     /// Transforms the whole CompressedStream into bytes to be written to a file
@@ -61,15 +62,15 @@ impl CompressedStream {
 
     /// Decompresses all the frames and returns a vector with the data
     pub fn decompress(&self) -> Vec<f64> {
-        self.data_frames.iter()
-                .flat_map(|f| f.decompress())
-                .collect()
+        self.frame_manager.get_all_frames().iter()
+            .flat_map(|f| f.decompress())
+            .collect()
     }
-
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use super::*;
 
     #[test]
@@ -77,7 +78,7 @@ mod tests {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
         let mut cs = CompressedStream::new();
         cs.compress_chunk(&vector1);
-        assert_eq!(cs.data_frames.len(), 1);
+        assert_eq!(cs.frame_manager.get_all_frames().len(), 1);
     }
 
     #[test]
@@ -85,7 +86,7 @@ mod tests {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
         let mut cs = CompressedStream::new();
         cs.compress_chunk_with(&vector1, Compressor::Constant);
-        assert_eq!(cs.data_frames.len(), 1);
+        assert_eq!(cs.frame_manager.get_all_frames().len(), 1);
     }
 
     #[test]
@@ -94,7 +95,7 @@ mod tests {
         let mut cs = CompressedStream::new();
         cs.compress_chunk_with(&vector1, Compressor::Constant);
         let b = cs.to_bytes();
-        assert_eq!(b, [66, 82, 82, 79, 0, 1, 41, 251, 0, 4, 3, 3, 0, 2, 0]);
+        assert_eq!(b, [66, 82, 82, 79, 0, 1, 41, 251, 0, 4, 3, 3, 0, 2, 0, 1, 253, 184, 80, 252, 43, 206, 253, 150, 101, 41, 251, 0, 4, 3, 3, 0, 2, 0]);
     }
 
     #[test]
@@ -102,10 +103,10 @@ mod tests {
         let vector1 = vec![1.0; 1024];
         let mut cs = CompressedStream::new();
         cs.compress_chunk_with(&vector1, Compressor::Constant);
-        let len = cs.data_frames.len();
+        let len = cs.frame_manager.get_all_frames().len();
         let b = cs.to_bytes();
         let cs2 = CompressedStream::from_bytes(&b);
-        assert_eq!(len, cs2.data_frames.len());
+        assert_eq!(len, cs2.frame_manager.get_all_frames().len());
     }
 
     #[test]
@@ -117,5 +118,61 @@ mod tests {
         let cs2 = CompressedStream::from_bytes(&b);
         let out = cs2.decompress();
         assert_eq!(vector1, out);
+    }
+
+    #[test]
+    fn test_constant_decompression_many_different_chunks() {
+        let vector1 = vec![1.0; 1024];
+        let vector2 = vec![5.0; 1024];
+        let mut cs = CompressedStream::new();
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        cs.compress_chunk_with(&vector2, Compressor::Constant);
+        let b = cs.to_bytes();
+        let cs2 = CompressedStream::from_bytes(&b);
+        let out = cs2.decompress();
+        assert_eq!([vector1, vector2].concat(), out);
+    }
+
+    #[test]
+    fn test_many_same_chunks() {
+        let vector1 = vec![1.0; 1];
+        let vector2 = vec![1.0; 1];
+        let mut cs = CompressedStream::new();
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        cs.compress_chunk_with(&vector2, Compressor::Constant);
+        assert_eq!(cs.frame_manager.get_all_frames().len(), 2);
+    }
+
+    #[test]
+    fn test_constant_decompression_many_same_chunks() {
+        let vector1 = vec![1.0; 1024];
+        let vector2 = vec![1.0; 1024];
+        let mut cs = CompressedStream::new();
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        cs.compress_chunk_with(&vector2, Compressor::Constant);
+        let b = cs.to_bytes();
+        let cs2 = CompressedStream::from_bytes(&b);
+        let out = cs2.decompress();
+        assert_eq!([vector1, vector2].concat(), out);
+    }
+    #[test]
+    fn ref_check_same_chunks() {
+        let vector1 = vec![1.0; 1024];
+        let vector2 = vec![1.0; 1024];
+        let mut cs = CompressedStream::new();
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        cs.compress_chunk_with(&vector2, Compressor::Constant);
+
+        assert!(Arc::ptr_eq(&cs.frame_manager.get_all_frames()[0], &cs.frame_manager.get_all_frames()[1]));
+    }
+    #[test]
+    fn ref_check_different_chunks() {
+        let vector1 = vec![1.0; 1024];
+        let vector2 = vec![5.0; 1024];
+        let mut cs = CompressedStream::new();
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        cs.compress_chunk_with(&vector2, Compressor::Constant);
+
+        assert!(!Arc::ptr_eq(&cs.frame_manager.get_all_frames()[0], &cs.frame_manager.get_all_frames()[1]));
     }
 }

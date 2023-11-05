@@ -9,7 +9,7 @@ pub mod noop;
 pub mod constant;
 pub mod fft;
 
-#[derive(Encode, Decode, Default, Debug, Clone)]
+#[derive(Encode, Hash, Decode, Default, Debug, Clone, PartialEq, Eq)]
 pub enum Compressor {
     #[default]
     Noop,
