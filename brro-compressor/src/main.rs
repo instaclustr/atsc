@@ -59,7 +59,7 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
         }
     } else {
         // Read an WavBRRO file and compress it
-        let data = WavBrro::from_file(&file_path);
+        let data = WavBrro::from_file(&file_path)?;
         if arguments.verbose {
             println!("Input={:?}", data);
         }

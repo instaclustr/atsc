@@ -1,4 +1,5 @@
 use rkyv::{Archive, Deserialize, Serialize};
+use std::{io, fmt, result, error};
 use std::path::Path;
 
 use crate::read::{is_wavbrro_file, read_wavbrro_file};
@@ -58,11 +59,13 @@ impl WavBrro {
     }
 
     // Receives a slice of f64 and writes in it's internal structure
-    fn load_slice(&mut self, data: &[f64]) {
-        let size = data.len();
-        let inner = data.chunks(MAX_CHUNK_SIZE).map(|s| s.into()).collect();
-        self.chunks = inner;
-        self.sample_count = size as u32;
+    fn from_slice(data: &[f64]) -> Self {
+        let sample_count = data.len();
+        WavBrro {
+                sample_count: sample_count as u32,
+                bitdepth: 5,
+                chunks: data.chunks(MAX_CHUNK_SIZE).map(|s| s.into()).collect()
+            }
     }
 
     pub fn add_sample(&mut self, sample: f64) {
@@ -81,18 +84,17 @@ impl WavBrro {
 
     // This should be generic, but first implementation is going to be Vec f64
     // TODO: This will panic left and right, make it right
-    pub fn from_file(file_path: &Path) -> Vec<f64> {
+    pub fn from_file(file_path: &Path) -> Result<Vec<f64>, Error> {
         // Check if the header is correct
-        assert!(is_wavbrro_file(file_path));
-        let bytes = read_wavbrro_file(file_path).unwrap();
+        if !is_wavbrro_file(file_path) {return Err(Error::FormatError);};
+        let bytes = read_wavbrro_file(file_path)?;
         let obj = WavBrro::from_bytes(&bytes);
-        obj.get_samples()
+        Ok(obj.get_samples())
     }
 
     // TODO: This will panic left and right, make it right
     pub fn to_file_with_data(file_path: &Path, data: &[f64]) {
-        let mut wb = WavBrro::new();
-        wb.load_slice(data);
+        let wb = WavBrro::from_slice(data);
         let bytes = wb.to_bytes();
         write_wavbrro_file(file_path, &bytes);
     }
@@ -111,6 +113,83 @@ impl WavBrro {
         rkyv::from_bytes::<WavBrro>(bytes).expect("Failed to deserialize data!")
     }
 
+}
+
+// Error class is based on https://codeberg.org/ruuda/hound/src/branch/master given the similarities 
+// between the formats (WAV and WAVBRRO).
+#[derive(Debug)]
+pub enum Error {
+    /// An IO error occured in the underlying reader or writer.
+    IoError(io::Error),
+    /// It's not WAVBRRO
+    FormatError,
+    /// The sample has more bits than the destination type.
+    ///
+    /// When iterating using the `samples` iterator, this means that the
+    /// destination type (produced by the iterator) is not wide enough to hold
+    /// the sample. When writing, this means that the sample cannot be written,
+    /// because it requires more bits than the bits per sample specified.
+    TooWide,
+    /// The format is not supported.
+    Unsupported,
+    /// The sample format is different than the destination format.
+    ///
+    /// When iterating using the `samples` iterator, this means the destination
+    /// type (produced by the iterator) has a different sample format than the
+    /// samples in the wav file.
+    ///
+    /// For example, this will occur if the user attempts to produce `i32`
+    /// samples (which have a `SampleFormat::Int`) from a wav file that
+    /// contains floating point data (`SampleFormat::Float`).
+    InvalidSampleFormat,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
+        match *self {
+            Error::IoError(ref err) => err.fmt(formatter),
+            Error::FormatError => {
+                formatter.write_str("Wrong WAVBRRO file!")
+            }
+            Error::TooWide => {
+                formatter.write_str("The sample has more bits than the destination type.")
+            }
+            Error::Unsupported => {
+                formatter.write_str("The WAVBRRO format of the file is not supported.")
+            }
+            Error::InvalidSampleFormat => {
+                formatter.write_str("The sample format differs from the destination format.")
+            }
+        }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IoError(err)
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::IoError(ref _err) => "IO Error",
+            Error::TooWide => "the sample has more bits than the destination type",
+            Error::Unsupported => "the wave format of the file is not supported",
+            Error::InvalidSampleFormat => "the sample format differs from the destination format",
+            Error::FormatError => "the file is not of the WAVBRRO format",
+        }
+    }
+
+    fn cause(&self) -> Option<&dyn error::Error> {
+        match *self {
+            Error::IoError(ref err) => Some(err),
+            Error::TooWide => None,
+            Error::Unsupported => None,
+            Error::InvalidSampleFormat => None,
+            Error::FormatError => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -164,7 +243,7 @@ mod tests {
         wb.add_sample(3.0);
         wb.to_file(path);
         let data = WavBrro::from_file(path);
-        assert_eq!(data, [1.0, 2.0, 3.0]);
+        assert_eq!(data.unwrap(), [1.0, 2.0, 3.0]);
         std::fs::remove_file(path).expect("Failed to remove temporary file");
     }
 }
