@@ -130,7 +130,7 @@ pub enum Error {
     /// the sample. When writing, this means that the sample cannot be written,
     /// because it requires more bits than the bits per sample specified.
     TooWide,
-    /// The format is not supported.
+    /// The Sample format is not supported.
     Unsupported,
     /// The sample format is different than the destination format.
     ///
@@ -173,6 +173,7 @@ impl From<io::Error> for Error {
 impl error::Error for Error {
     fn description(&self) -> &str {
         match *self {
+            // TODO: I don't know if this is actually the right way to do!
             Error::IoError(ref _err) => "IO Error",
             Error::TooWide => "the sample has more bits than the destination type",
             Error::Unsupported => "the wave format of the file is not supported",
