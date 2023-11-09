@@ -7,6 +7,7 @@ use super::BinConfig;
 use log::{error, debug, warn, info, trace};
 
 const FFT_COMPRESSOR_ID: u8 = 15;
+const DECIMAL_PRECISION: u8 = 5;
 
 /// Struct to store frequencies, since bincode can't encode num_complex Complex format, this one is compatible
 // This could be a Generic to support f64, integers, etc...
@@ -313,9 +314,8 @@ impl FFT {
         // We need this for normalization
         let len = frame_size as f32;
         // We only need the real part
-        // TODO: Only 1 decimal place is sketchy!
         let out_data = data.iter()
-                           .map(|&f| self.round(f.re/len, 1))
+                           .map(|&f| self.round(f.re/len, DECIMAL_PRECISION.into()))
                            .collect();
         out_data
     }
@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn test_to_lossy_data() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        let lossy_vec = vec![1.0, 1.9, 2.3, 1.0, 1.8, 1.7, 1.8, 1.0, 2.8, 1.2, 1.0, 3.3];
+        let lossy_vec = vec![1.0, 1.87201, 2.25, 1.0, 1.82735, 1.689, 1.82735, 1.0, 2.75, 1.189, 1.0, 3.311];
         let compressed_data = fft(&vector1);
         let out = fft_to_data(vector1.len(), &compressed_data);
         assert_eq!(lossy_vec, out);

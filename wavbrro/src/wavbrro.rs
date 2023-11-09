@@ -86,7 +86,7 @@ impl WavBrro {
     // TODO: This will panic left and right, make it right
     pub fn from_file(file_path: &Path) -> Result<Vec<f64>, Error> {
         // Check if the header is correct
-        if !is_wavbrro_file(file_path) {return Err(Error::FormatError);};
+        if !is_wavbrro_file(file_path)? {return Err(Error::FormatError);};
         let bytes = read_wavbrro_file(file_path)?;
         let obj = WavBrro::from_bytes(&bytes);
         Ok(obj.get_samples())
@@ -231,7 +231,7 @@ mod tests {
         wb.add_sample(3.0);
         wb.to_file(path);
         let result = is_wavbrro_file(path);
-        assert!(result);
+        assert!(result.unwrap());
         std::fs::remove_file(path).expect("Failed to remove temporary file");
     }
 
