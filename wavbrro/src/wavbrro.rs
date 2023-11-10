@@ -58,11 +58,13 @@ impl WavBrro {
     }
 
     // Receives a slice of f64 and writes in it's internal structure
-    fn load_slice(&mut self, data: &[f64]) {
-        let size = data.len();
-        let inner = data.chunks(MAX_CHUNK_SIZE).map(|s| s.into()).collect();
-        self.chunks = inner;
-        self.sample_count = size as u32;
+    fn from_slice(data: &[f64]) -> Self {
+        let sample_count = data.len();
+        WavBrro {
+                sample_count: sample_count as u32,
+                bitdepth: 5,
+                chunks: data.chunks(MAX_CHUNK_SIZE).map(|s| s.into()).collect()
+            }
     }
 
     pub fn add_sample(&mut self, sample: f64) {
@@ -91,8 +93,7 @@ impl WavBrro {
 
     // TODO: This will panic left and right, make it right
     pub fn to_file_with_data(file_path: &Path, data: &[f64]) {
-        let mut wb = WavBrro::new();
-        wb.load_slice(data);
+        let wb = WavBrro::from_slice(data);
         let bytes = wb.to_bytes();
         write_wavbrro_file(file_path, &bytes);
     }
