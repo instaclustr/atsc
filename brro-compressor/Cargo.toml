@@ -18,4 +18,5 @@ average = "0.14.1"
 regex = "1.9.1"
 hound = "3.5"
 median = "0.3.2"
+criterion ="0.5.1"
 wavbrro = { path = "../wavbrro" }
