@@ -4,7 +4,8 @@ use rand::Rng;
 
 // Function to generate random data of a given size
 fn generate_random_data(size: usize) -> Vec<f64> {
-    let mut rng = rand::thread_rng();
+    let thread_rng = rand::thread_rng();
+    let mut rng = thread_rng;
     (0..size)
         .map(|_| rng.gen_range(0.0..1.0))
         .collect()

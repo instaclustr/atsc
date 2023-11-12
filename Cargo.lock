@@ -237,6 +237,7 @@ dependencies = [
  "hound",
  "log",
  "median",
+ "rand",
  "regex",
  "rustfft",
  "tempfile",
