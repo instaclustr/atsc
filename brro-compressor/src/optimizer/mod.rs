@@ -2,6 +2,8 @@ use log::debug;
 use types::metric_tag::MetricTag;
 use crate::{types, utils::{prev_power_of_two, f64_to_u64}, compressor::Compressor};
 
+pub mod utils;
+
 /// Max Frame size, this can aprox. 36h of data at 1point/sec rate, a little more than 1 week at 1point/5sec
 /// and 1 month (30 days) at 1 point/20sec. 
 /// This would be aprox. 1MB of Raw data (131072 * 64bits).
