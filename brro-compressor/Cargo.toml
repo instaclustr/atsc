@@ -25,5 +25,5 @@ criterion = "0.5.1"
 rand ="0.8.5"
 
 [[bench]]
-name = "constant_bench"
+name = "fft_bench"
 harness= false
