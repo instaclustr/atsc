@@ -23,3 +23,7 @@ wavbrro = { path = "../wavbrro" }
 [dev-dependencies]
 criterion = "0.5.1"
 rand ="0.8.5"
+
+[[bench]]
+name = "constant_bench"
+harness= false
