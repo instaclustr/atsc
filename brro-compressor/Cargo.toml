@@ -19,3 +19,11 @@ regex = "1.9.1"
 hound = "3.5"
 median = "0.3.2"
 wavbrro = { path = "../wavbrro" }
+
+[dev-dependencies]
+criterion = "0.5.1"
+rand ="0.8.5"
+
+[[bench]]
+name = "constant_bench"
+harness= false
