@@ -130,18 +130,8 @@ fn multiple_compression_rounds_benchmark(c: &mut Criterion) {
         });
     });
 }
-//Memmory usage benchmark
-fn memory_usage_benchmark(c: &mut Criterion){
-    let data = vec![1.0; 1024];
 
-    c.bench_function("FFT Memory Usage", |b| {
-        b.iter(|| {
-            let _compressed_data = fft(black_box(&data));
-        });
-    });
-}
-
-// Criterion benchmark group
+//Criterion benchmark group
 criterion_group!(
     benches,
     fft_basic_benchmark,
@@ -153,6 +143,5 @@ criterion_group!(
     fft_varying_data_size_benchmark,
     compression_ratio_vs_time_benchmark,
     multiple_compression_rounds_benchmark,
-    memory_usage_benchmark,
 );
 criterion_main!(benches);
