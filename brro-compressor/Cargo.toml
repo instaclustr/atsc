@@ -27,3 +27,7 @@ rand ="0.8.5"
 [[bench]]
 name = "constant_bench"
 harness= false
+
+[[bench]]
+name = "fft_bench"
+harness= false
