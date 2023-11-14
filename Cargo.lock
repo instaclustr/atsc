@@ -2387,6 +2387,7 @@ dependencies = [
  "env_logger",
  "log",
  "rkyv",
+ "tempfile",
 ]
 
 [[package]]
