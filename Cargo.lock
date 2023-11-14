@@ -240,6 +240,7 @@ dependencies = [
  "rand",
  "regex",
  "rustfft",
+ "splines",
  "tempfile",
  "wavbrro",
 ]
@@ -1772,6 +1773,12 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+
+[[package]]
+name = "splines"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b71c74502daf438e97dc4eee0265c084cf76701992a4997f94d5b909498ad1d"
 
 [[package]]
 name = "strength_reduce"

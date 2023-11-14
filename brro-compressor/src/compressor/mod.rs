@@ -8,6 +8,7 @@ use self::noop::{noop, noop_to_data};
 pub mod noop;
 pub mod constant;
 pub mod fft;
+pub mod polynomial;
 
 #[derive(Encode, Decode, Default, Debug, Clone)]
 pub enum Compressor {
