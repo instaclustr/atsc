@@ -36,7 +36,6 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
     for entry in std::fs::read_dir(arguments.input.clone())? {
         let path = entry?.path();
         if path.is_file() {
- wavbrro-improvements
             match process_single_file(path.clone(), arguments)  {
                 Ok (_) => continue,
                 //TODO: Files are created while this walks the dir, gives a funny output
@@ -44,11 +43,9 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
                 //      before and then iterating. But that might lead to a MASSIVE array. So it keeps a `funny` output
                 //      output for the time beeing.
                 Err(err) => error!("{} File: {}", err, path.display()),
-            };
-=======
+            }
             // We need to make sure we skip anything but BRO and WBRO, this can be done on single file processors
             process_single_file(path, arguments)?;
->>>>>> main
         }
     }
     Ok(())
