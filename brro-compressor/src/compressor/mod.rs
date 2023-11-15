@@ -9,16 +9,16 @@ pub mod noop;
 pub mod constant;
 pub mod fft;
 pub mod polynomial;
+pub mod idw;
 
 #[derive(Encode, Decode, Default, Debug, Clone)]
 pub enum Compressor {
     #[default]
     Noop,
     FFT,
-    Wavelet,
+    Idw,
     Constant,
     Polynomial,
-    TopBottom,
 }
 
 impl Compressor {

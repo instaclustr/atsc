@@ -235,6 +235,7 @@ dependencies = [
  "criterion",
  "env_logger",
  "hound",
+ "inverse_distance_weight",
  "log",
  "median",
  "rand",
@@ -930,6 +931,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "inverse_distance_weight"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b05a1bdf10ad0027aedd344dc2430ce0a69aa06bdb549981f4be3d82073c9b0"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
