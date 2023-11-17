@@ -17,7 +17,7 @@ const IDW_COMPRESSOR_ID: u8 = 3;
 pub struct Idw {
     /// Compressor ID
     pub id: u8,
-    /// Stored frequencies
+    /// Stored Points
     pub data_points: Vec<f64>,
     /// The maximum numeric value of the points in the frame
     pub max_value: f32,
@@ -108,7 +108,6 @@ impl Idw {
             debug!("Same max and min, faster decompression!");
             return vec![self.max_value as f64; frame_size];
          }
-        //let data_len = self.data_points.len();
         // How many points I should have
         let point_count = if 3 >= (frame_size/100) { 3 } else { frame_size/100 };
         // If they differ, it means I added either max and/or min
