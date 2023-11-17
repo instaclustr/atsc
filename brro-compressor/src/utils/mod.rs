@@ -22,12 +22,11 @@ pub fn f64_to_u64(number: f64, precision: usize) -> u64 {
 
 pub fn round_f32(x: f32, decimals: u32) -> f64 {
     let y = 10i32.pow(decimals) as f64;
-    let out = (x as f64 * y).round() / y;
-    out
+    (x as f64 * y).round() / y    
 }
 
 pub fn round_f64(x: f64, decimals: u32) -> f64 {
     let y = 10i32.pow(decimals) as f64;
-    let out = (x * y).round() / y;
-    out
+    (x * y).round() / y
+
 }

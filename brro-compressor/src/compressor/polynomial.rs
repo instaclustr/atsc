@@ -128,14 +128,12 @@ impl Polynomial {
         debug!("{} {}", points.len(), self.data_points.len());
         // Create the interpolation
         let mut key_vec = Vec::with_capacity(points.len());
-        let mut current_key = 0;
-        for (point, value) in points.iter().zip(self.data_points.iter()) {
+        for (current_key, (point, value)) in points.iter().zip(self.data_points.iter()).enumerate() {
             // CatmullRom needs at least 1 key behind and 2 ahead so this check.
             let interpolation = 
                 if current_key > 0 && points.len() - current_key > 2 { Interpolation::CatmullRom }
                 else { Interpolation::Linear };
             key_vec.push(Key::new(*point, *value, interpolation));
-            current_key += 1;
         }
         let spline = Spline::from_vec(key_vec);
         // Build the data
