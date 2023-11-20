@@ -2,6 +2,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use std::{io, fmt, result, error};
 use std::path::Path;
 
+
 use crate::read::{is_wavbrro_file, read_wavbrro_file};
 use crate::write::write_wavbrro_file;
 
@@ -224,15 +225,16 @@ mod tests {
 
     #[test]
     fn test_write_wavbrro() {
-        let path = Path::new("test.wbro");
+        // Create a temporary directory for the test
+        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
+        let path = temp_dir.path().join("test.wbro");
         let mut wb = WavBrro::new();
         wb.add_sample(1.0);
         wb.add_sample(2.0);
         wb.add_sample(3.0);
-        wb.to_file(path);
-        let result = is_wavbrro_file(path);
+        wb.to_file(&path);
+        let result = is_wavbrro_file(&path);
         assert!(result.unwrap());
-        std::fs::remove_file(path).expect("Failed to remove temporary file");
     }
 
     #[test]
