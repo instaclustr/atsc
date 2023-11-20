@@ -93,4 +93,14 @@ mod tests {
         let n = noop(&vector1);
         assert_eq!(noop_to_data(vector1.len(), &n),vector1);
     }
+    
+    #[test]
+    fn test_optimize() {
+        // Test case with floating-point numbers that have fractional parts
+        let input_data = [1.5, 2.7, 3.3, 4.9];
+        let expected_output = [2, 3, 3, 5]; // Rounded to the nearest integer
+
+        let result = Noop::optimize(&input_data);
+        assert_eq!(result, expected_output);
+    }
 }
