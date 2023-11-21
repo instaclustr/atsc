@@ -4,12 +4,12 @@ use bincode::{Decode, Encode};
 use self::constant::{constant, constant_to_data};
 use self::fft::{fft, fft_to_data, fft_allowed_error};
 use self::noop::{noop, noop_to_data};
+use self::polynomial::polynomial;
 
 pub mod noop;
 pub mod constant;
 pub mod fft;
 pub mod polynomial;
-pub mod idw;
 
 #[derive(Encode, Decode, Default, Debug, Clone)]
 pub enum Compressor {
@@ -27,6 +27,8 @@ impl Compressor {
             Compressor::Noop => noop(data),
             Compressor::FFT => fft(data),
             Compressor::Constant => constant(data),
+            Compressor::Polynomial => polynomial(data, false),
+            Compressor::Idw => polynomial(data, true),
             _ => todo!(),
         }
     }
