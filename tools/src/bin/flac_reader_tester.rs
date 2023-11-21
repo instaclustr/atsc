@@ -33,25 +33,38 @@ fn read_metrics_from_flac(filename: &str) -> Vec<u16> {
 fn read_metrics_from_flac_by_bloc(filename: &str) -> Vec<u16> {
     let mut sample_vec: Vec<u16> = Vec::new();
     let mut reader = claxon::FlacReader::open(filename).unwrap();
-    let channels = reader.streaminfo().channels;
-    // TODO: Make this hold up to channel number
-    let _sample_channel_data: [u16; 4] = [0,0,0,0];
+    let channels = reader.streaminfo().channels as usize;
+    let mut sample_channel_data = vec![0u16; channels];
+
     let mut frame_reader = reader.blocks();
     let mut block = claxon::Block::empty();
+
     loop {
         // Read a single frame. Recycle the buffer from the previous frame to
         // avoid allocations as much as possible.
-        match frame_reader.read_next_or_eof(block.into_buffer()) {
+            match frame_reader.read_next_or_eof(block.into_buffer()) {
             Ok(Some(next_block)) => block = next_block,
             Ok(None) => break, // EOF.
             Err(error) => panic!("[DEBUG][READ][FLAC] {}", error),
         }
+
         for sample in 0..block.duration() {
             for channel in 0..channels {
-                sample_vec.push(block.sample(channel, sample) as u16);
-                println!("Sample {}/{}, Channel {}", sample,block.duration(), channel);
-            }   
-           //sample_vec.push(SimpleFlacReader::join_u16_into_f64(sample_channel_data));
+            sample_channel_data[channel] = block.sample(channel as u32, sample as u32) as u16;
+            }
+
+            // Process the sample_channel_data as needed
+            for &sample in &sample_channel_data {
+                sample_vec.push(sample);
+            }
+
+            // Optionally, can print debug information
+            println!(
+                "Sample {}/{}, Channels: {:?}",
+                sample,
+                block.duration(),
+                &sample_channel_data
+            );
         }
     }
     sample_vec
