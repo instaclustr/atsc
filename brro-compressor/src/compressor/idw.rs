@@ -1,4 +1,5 @@
 use crate::utils::{DECIMAL_PRECISION, round_f64};
+use crate::utils::error::error_smape;
 
 /// IDW - Inverse Distance Weight
 /// This could be a subset of polynomial, or a replacement altogether
@@ -8,7 +9,7 @@ use crate::utils::{DECIMAL_PRECISION, round_f64};
 
 use super::BinConfig;
 use bincode::{Decode, Encode};
-use log::{debug, info};
+use log::{debug, info, trace};
 use inverse_distance_weight::IDW;
 
 const IDW_COMPRESSOR_ID: u8 = 3;
@@ -54,6 +55,85 @@ impl Idw {
         self.data_points.iter().any(|&i| i==point)
     }
 
+    pub fn compress_bounded(&mut self, data: &[f64], max_err: f64) {
+        // TODO: Big one, read below
+        // To reduce error we add more points to the polynomial, but, we also might add residuals
+        // each residual is 1/data_lenght * 100% less compression, each jump is 5% less compression. 
+        // We can do the math and pick the one which fits better. 
+        
+        let data_len = data.len();
+        let baseline_points = if 3 >= (data_len/100) { 3 } else { data_len/100 };
+        
+        // Variables for the error control loop
+        let mut current_err = max_err + 1.0;
+        let mut jump: usize = 0;
+        let mut iterations = 0;
+        
+        while ((max_err * 1000.0) as i32) < ((current_err * 1000.0) as i32) {
+            iterations += 1;
+            self.compress_hinted(data, baseline_points+jump);
+            let out_data = self.to_data(data_len);
+            trace!("Calculated Values: {:?}", out_data);
+            trace!("Data Values: {:?}", data);
+            current_err = error_smape(data, &out_data);
+            trace!("Current Err: {}", current_err);
+            // Max iterations is 18 (We start at 10%, we can go to 95% and 1% at a time)
+            match iterations {
+                1..=17 => jump += baseline_points/2,
+                18..=22 => jump += baseline_points/10,
+                _ => break
+            }
+            if self.data_points.len() == data_len {
+                // Storing the whole thing anyway...
+                break;
+            }
+        }
+    } 
+
+    pub fn compress_hinted(&mut self, data: &[f64], points: usize) {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, we're done here!");
+            return
+         }
+        // The algorithm is simple, Select 10% of the data points, calculate the Polynomial based on those data points
+        // Plus the max and min
+        let data_len = data.len();
+        // Instead of calculation, we use the provided count
+        let point_count = points;
+        // I can calculate the positions from here
+        let points: Vec<f64> = (0..data_len).step_by(data_len/point_count).map(|f| f as f64).collect();
+        // I need to extract the values for those points
+        let mut values: Vec<f64> = points.iter().map(|&f| data[f as usize]).collect();
+        
+        debug!("Points: {:?}", points);
+        debug!("Values: {:?}", values);
+
+        // I need to insert MIN and MAX only if they don't belong to the values already.
+        let mut prev_pos = points[0];
+        for (array_position, position_value) in points.iter().enumerate() {
+            if self.min_position > (prev_pos.round() as usize) && self.min_position < (position_value.round() as usize) {
+                // We have to insert here
+                values.insert(array_position, self.min_value as f64);
+            }
+            if self.max_position > (prev_pos.round() as usize) && self.max_position < (position_value.round() as usize) {
+                // We have to insert here
+                values.insert(array_position, self.max_value as f64);
+                // And we are done
+            }
+            prev_pos = *position_value;
+        }
+        if self.min_position as f64 > *points.last().unwrap() {
+            // The position is behind the last point, so add it there
+            values.push(self.min_value as f64)
+        } 
+        if self.max_position as f64 > *points.last().unwrap() {
+            // The position is behind the last point, so add it there
+            values.push(self.max_value as f64)
+        }
+
+        self.data_points = values; 
+    }
+
     // --- MANDATORY METHODS ---
     pub fn compress(&mut self, data: &[f64]) {
         if self.max_value == self.min_value { 
@@ -70,21 +150,26 @@ impl Idw {
         // I need to extract the values for those points
         let mut values: Vec<f64> = points.iter().map(|&f| data[f as usize]).collect();
         
-        // I need to insert MIN and MAX only if they don't belong to the values already.
+        let mut prev_pos = points[0];
+        for (array_position, position_value) in points.iter().enumerate() {
+            if self.min_position > (prev_pos.round() as usize) && self.min_position < (position_value.round() as usize) {
+                // We have to insert here
+                values.insert(array_position, self.min_value as f64);
+            }
+            if self.max_position > (prev_pos.round() as usize) && self.max_position < (position_value.round() as usize) {
+                // We have to insert here
+                values.insert(array_position, self.max_value as f64);
+                // And we are done
+            }
+            prev_pos = *position_value;
+        }
         if self.min_position as f64 > *points.last().unwrap() {
             // The position is behind the last point, so add it there
             values.push(self.min_value as f64)
-        } else if !values.iter().any(|&i| i==self.min_value as f64) {
-            // Do the position exists already?
-            debug!("Min Inserted {} at index {}", self.min_value, self.min_position);
-            values.insert(self.min_position, self.min_value as f64);
-        }
+        } 
         if self.max_position as f64 > *points.last().unwrap() {
             // The position is behind the last point, so add it there
             values.push(self.max_value as f64)
-        } else if !values.iter().any(|&i| i==self.max_value as f64)  {
-            debug!("Max Inserted {} at index {}", self.max_value, self.max_position);
-            values.insert(self.max_position, self.max_value as f64);
         }
         debug!("Points: {:?}", points);
         debug!("Values: {:?}", values);
@@ -117,20 +202,30 @@ impl Idw {
         // Insert the position of min and max
         debug!("Points diff: {}", point_dif);
         if point_dif > 0 {
+            let mut prev_pos = points[0];
+            for (array_position, position_value) in points.clone().iter().enumerate() {
+                if self.min_position > (prev_pos.round() as usize) && self.min_position < (position_value.round() as usize) {
+                    // We have to insert here
+                    points.insert(array_position, self.min_position as f64);
+                }
+                if self.max_position > (prev_pos.round() as usize) && self.max_position < (position_value.round() as usize) {
+                    // We have to insert here
+                    points.insert(array_position, self.max_position as f64);
+                    // And we are done
+                }
+                prev_pos = *position_value;
+            }
             if self.min_position as f64 > *points.last().unwrap() {
                 // The position is behind the last point, so add it there
                 points.push(self.min_position as f64)
-            } else if !self.locate_in_data_points(self.min_value as f64) {
-                // Do the position exists already?
-                points.insert(self.min_position, self.min_position as f64);
-            }
+            } 
             if self.max_position as f64 > *points.last().unwrap() {
                 // The position is behind the last point, so add it there
                 points.push(self.max_position as f64)
-            } else if !self.locate_in_data_points(self.max_value as f64)  {
-                points.insert(self.max_position, self.max_position as f64);
             }
         }
+        debug!("Points: {:?}", points);
+        debug!("Out Values: {:?}", self.data_points);
         debug!("{} {}", points.len(), self.data_points.len());
         let idw = IDW::new(points, self.data_points.clone());
         // Build the data
@@ -158,6 +253,26 @@ pub fn idw(data: &[f64]) -> Vec<u8> {
     c.to_bytes()
 }
 
+pub fn idw_allowed_error(data: &[f64], allowed_error: f64) -> Vec<u8> {
+    info!("Initializing IDW Compressor");
+    let mut min = data[0];
+    let mut max = data[0];
+    let mut pmin = 0;
+    let mut pmax = 0;
+    // For these one we need to store where the min and max happens on the data, not only their values
+    for (position, value) in data.iter().enumerate(){
+        if value > &max { max = *value;  pmax = position;};
+        if value < &min { min = *value;  pmin = position; };
+    }
+    // Initialize the compressor
+    let mut c = Idw::new(data.len(), min, max);
+    c.set_pos(pmin, pmax);
+    // Convert the data
+    c.compress_bounded(data, allowed_error);
+    // Convert to bytes
+    c.to_bytes()
+}
+
 /// Uncompress a IDW data
 pub fn idw_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
     let c = Idw::decompress(compressed_data);
@@ -176,11 +291,11 @@ mod tests {
 
     #[test]
     fn test_idw_compression() {
-        let vector1 = vec![1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 1.0, 1.0, 6.0, 0.0, 1.0, 9.0];
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
         let idw_data = idw(&vector1);
         let out = Idw::decompress(&idw_data).to_data(frame_size);
-        assert_eq!(out, [1.0, 1.5279, 3.17159, 4.59747, 5.0, 4.79839, 4.62193, 4.94347, 6.0, 0.0, 4.65469, 9.0]);
+        assert_eq!(out, [1.0, 1.19967, 1.85513, 2.60163, 2.96743, 3.0, 3.19708, 4.0905, 5.45353, 7.0, 1.0, 2.15351, 2.41617, 1.91261, 1.23634, 1.0, 1.13107]);
     }
 
     #[test]
@@ -190,5 +305,15 @@ mod tests {
         let idw_data = idw(&vector1);
         let out = Idw::decompress(&idw_data).to_data(frame_size);
         assert_eq!(out, [1.0, 1.62873, 3.51429, 4.84995, 5.0, 5.40622, 7.05871, 8.64807, 9.0, 9.37719, 11.18119, 12.0]);
+    }
+
+    #[test]
+    fn test_to_allowed_error() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
+        let frame_size = vector1.len();
+        let compressed_data = idw_allowed_error(&vector1, 0.02);
+        let out = Idw::decompress(&compressed_data).to_data(frame_size);
+        let e = error_smape(&vector1, &out);
+        assert!(e <= 0.02);
     }
 }

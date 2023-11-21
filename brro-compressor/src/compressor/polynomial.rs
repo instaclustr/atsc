@@ -196,18 +196,26 @@ impl Polynomial {
         // Insert the position of min and max
         debug!("Points diff: {}", point_dif);
         if point_dif > 0 {
+            let mut prev_pos = points[0];
+            for (array_position, position_value) in points.clone().iter().enumerate() {
+                if self.min_position > (prev_pos.round() as usize) && self.min_position < (position_value.round() as usize) {
+                    // We have to insert here
+                    points.insert(array_position, self.min_position as f64);
+                }
+                if self.max_position > (prev_pos.round() as usize) && self.max_position < (position_value.round() as usize) {
+                    // We have to insert here
+                    points.insert(array_position, self.max_position as f64);
+                    // And we are done
+                }
+                prev_pos = *position_value;
+            }
             if self.min_position as f64 > *points.last().unwrap() {
                 // The position is behind the last point, so add it there
                 points.push(self.min_position as f64)
-            } else if !self.locate_in_data_points(self.min_value as f64) {
-                // Do the position exists already?
-                points.insert(self.min_position, self.min_position as f64);
-            }
+            } 
             if self.max_position as f64 > *points.last().unwrap() {
                 // The position is behind the last point, so add it there
                 points.push(self.max_position as f64)
-            } else if !self.locate_in_data_points(self.max_value as f64)  {
-                points.insert(self.max_position, self.max_position as f64);
             }
         }
         debug!("{} {}", points.len(), self.data_points.len());
@@ -289,7 +297,7 @@ mod tests {
         let frame_size = vector1.len();
         let idw_data = polynomial(&vector1);
         let out = Polynomial::decompress(&idw_data).to_data(frame_size);
-        assert_eq!(out, [1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 3.832, 4.936, 6.024, 6.808, 7.0, 5.8, 4.6, 3.4, 2.2, 1.0, 1.0]);
+        assert_eq!(out, [1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 4.075, 5.53333, 6.725, 7.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]);
     }
 
     #[test]
@@ -305,9 +313,9 @@ mod tests {
     fn test_to_allowed_error() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let compressed_data = polynomial_allowed_error(&vector1, 0.03);
+        let compressed_data = polynomial_allowed_error(&vector1, 0.02);
         let out = Polynomial::decompress(&compressed_data).to_data(frame_size);
         let e = error_smape(&vector1, &out);
-        assert!(e <= 0.03);
+        assert!(e <= 0.02);
     }
 }
