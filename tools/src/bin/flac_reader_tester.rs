@@ -35,7 +35,6 @@ fn read_metrics_from_flac_by_bloc(filename: &str) -> Vec<u16> {
     let mut reader = claxon::FlacReader::open(filename).unwrap();
     let channels = reader.streaminfo().channels as usize;
     let mut sample_channel_data = vec![0u16; channels];
-
     let mut frame_reader = reader.blocks();
     let mut block = claxon::Block::empty();
 
@@ -47,10 +46,10 @@ fn read_metrics_from_flac_by_bloc(filename: &str) -> Vec<u16> {
             Ok(None) => break, // EOF.
             Err(error) => panic!("[DEBUG][READ][FLAC] {}", error),
         }
-
         for sample in 0..block.duration() {
+            #[allow(clippy::needless_range_loop)]
             for channel in 0..channels {
-            sample_channel_data[channel] = block.sample(channel as u32, sample as u32) as u16;
+                sample_channel_data[channel] = block.sample(channel as u32, sample as u32) as u16;
             }
 
             // Process the sample_channel_data as needed
