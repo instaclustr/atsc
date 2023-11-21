@@ -66,16 +66,23 @@ pub fn error_mape(original: &[f64], generated: &[f64]) -> f64 {
 /// Computes the Symmetric Mean Absolute Percentage Error between 2 signals
 /// # Panics:
 /// When the 2 arrays don't have the same size 
+/// Output between 0 and 1 (1 is 100% error)
 pub fn error_smape(original: &[f64], generated: &[f64]) -> f64 {
     if original.len() != generated.len() { panic!("Can't compute error! Arrays with different lenghts.")}
 
-    let abs_error: f64 = original
+    let sum_up: f64 = original
         .iter()
         .zip(generated.iter())
         .filter(|(&original, &generated)| !(original == 0.0 && generated == 0.0))
-        .map(|(original, generated)| ((generated - original).abs()/(original.abs() + generated.abs())))
+        .map(|(original, generated)| ((generated - original).abs()))
         .sum();
-    abs_error / original.len() as f64
+    let sum_down: f64 = original
+        .iter()
+        .zip(generated.iter())
+        .filter(|(&original, &generated)| !(original == 0.0 && generated == 0.0))
+        .map(|(original, generated)| original.abs() + generated.abs())
+        .sum();
+        (sum_up / sum_down) / original.len() as f64
 }
 
 
@@ -122,5 +129,19 @@ mod tests {
         assert_eq!(error_mape(&vector1, &vector1), 0.0);
         assert_eq!(error_mape(&vector1, &vector2), 1.1);
         assert!(error_mape(&vector3, &vector4) < 0.101);
+    }
+
+    #[test]
+    fn test_calculate_smape() {
+        let vector1 = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let vector2 = vec![2.5, 4.0, 6.0, 8.0, 10.0];
+        let vector3 = vec![1.0];
+        let vector4 = vec![1.1];
+        let vector5 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
+
+        assert_eq!(error_smape(&vector1, &vector1), 0.0);
+        assert_eq!(error_smape(&vector5, &vector5), 0.0);
+        assert!(error_smape(&vector1, &vector2) < 0.353);
+        assert!(error_smape(&vector3, &vector4) < 0.101);
     }
 }
