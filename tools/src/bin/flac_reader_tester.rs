@@ -49,7 +49,7 @@ fn read_metrics_from_flac_by_bloc(filename: &str) -> Vec<u16> {
         for sample in 0..block.duration() {
             #[allow(clippy::needless_range_loop)]
             for channel in 0..channels {
-                sample_channel_data[channel] = block.sample(channel as u32, sample as u32) as u16;
+                sample_channel_data[channel] = block.sample(channel, sample) as u16;
             }
 
             // Process the sample_channel_data as needed
