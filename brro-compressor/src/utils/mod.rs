@@ -35,8 +35,8 @@ pub fn round_and_limit_f64(x: f64, min: f64, max: f64, decimals: u32) -> f64 {
     let y = 10i32.pow(decimals) as f64;
     let out = (x * y).round() / y;
     match out {
-        _ if out < min => return min,
-        _ if out > max => return max,
-        _ => return out
+        _ if out < min => min,
+        _ if out > max => max,
+        _ => out
     }
 }
