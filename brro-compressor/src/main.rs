@@ -102,7 +102,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
         debug!("Chunk size: {}", data.len());
         // If compressor is a losseless one, compress with the error defined, or default
         match arguments.compressor {
-            CompressorType::Fft => {
+            CompressorType::Fft |  CompressorType::Polynomial | CompressorType::Idw => {
                 cs.compress_chunk_bounded_with(data, cpr.to_owned(), arguments.error as f32 / 100.0)
             }
             _ => cs.compress_chunk_with(data, cpr.to_owned()),

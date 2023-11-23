@@ -190,29 +190,27 @@ impl Polynomial {
 
     /// Since IDW and Polynomial are the same code everywhere, this function prepares the data
     /// to be used by one of the polynomial decompression methods
-    fn get_positions(&self, frame_size: usize) -> Vec<f64> {
+    fn get_positions(&self, frame_size: usize) -> Vec<usize> {
         // How many points I should have
         let point_count = if 3 >= (frame_size/100) { 3 } else { frame_size/100 };
         // If they differ, it means I added either max and/or min
         let point_dif = self.data_points.len() - point_count;
         // I can calculate the positions from here
-        let mut points: Vec<f64> = (0..frame_size).step_by(frame_size/point_count).map(|f| f as f64).collect();
+        let mut points: Vec<usize> = (0..frame_size).step_by(frame_size/point_count).collect();
         // Also we always use the last point
-        points.push((frame_size-1) as f64);
-        // Insert the position of min and max
+        points.push(frame_size-1);
         debug!("Points diff: {}", point_dif);
         if point_dif > 0 {
             let mut prev_pos = points[0];
-            for (array_position, position_value) in points.clone().iter().enumerate() {
-                if self.min_position > (prev_pos.round() as usize) && self.min_position < (position_value.round() as usize) {
-                    // We have to insert here
-                    points.insert(array_position, self.min_position as f64);
+            for (array_position, &position_value) in points.clone().iter().enumerate() {
+                if self.min_position > prev_pos && self.min_position < position_value {
+                    // Inserting in the middle
+                    points.insert(array_position, self.min_position);
                 }
-                if self.max_position > (prev_pos.round() as usize) && self.max_position < (position_value.round() as usize) {
-                    // We have to insert here
-                    points.insert(array_position, self.max_position as f64);
+                if self.max_position > prev_pos && self.max_position < position_value {
+                    points.insert(array_position, self.max_position);
                 }
-                prev_pos = *position_value;
+                prev_pos = position_value;
             }
         }
         debug!("{} {}", points.len(), self.data_points.len());
@@ -234,7 +232,7 @@ impl Polynomial {
             let interpolation = 
                 if current_key > 0 && points.len() - current_key > 2 { Interpolation::CatmullRom }
                 else { Interpolation::Linear };
-            key_vec.push(Key::new(*point, *value, interpolation));
+            key_vec.push(Key::new(*point as f64, *value, interpolation));
         }
         let spline = Spline::from_vec(key_vec);
         // Build the data
@@ -245,10 +243,10 @@ impl Polynomial {
     }
 
     pub fn idw_to_data(&self, frame_size: usize) -> Vec<f64> {
-        let points = self.get_positions(frame_size);
+        // IDW needs f64 for points :(
+        let points = self.get_positions(frame_size).iter().map(|&f| f as f64).collect();
         let idw = IDW::new(points, self.data_points.clone());
         // Build the data
-        // TODO: It gives values below minimum
         (0..frame_size)
         .map(|f| round_and_limit_f64(idw.evaluate(f as f64), self.min_value.into(), self.max_value.into(), DECIMAL_PRECISION))
         .collect() 

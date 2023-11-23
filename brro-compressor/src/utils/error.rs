@@ -70,6 +70,16 @@ pub fn error_mape(original: &[f64], generated: &[f64]) -> f64 {
 pub fn error_smape(original: &[f64], generated: &[f64]) -> f64 {
     if original.len() != generated.len() { panic!("Can't compute error! Arrays with different lenghts.")}
 
+    let mut sum_up = 0.0;
+    let mut sum_down = 0.0;
+    for (&value_original, &value_generated) in original.iter().zip(generated) {
+
+        if value_generated == 0.0 && value_original == 0.0 { continue; }
+        sum_up += (value_generated - value_original).abs();
+        sum_down += value_original.abs() + value_generated.abs();
+    }
+    (sum_up / sum_down) / original.len() as f64
+    /*
     let sum_up: f64 = original
         .iter()
         .zip(generated.iter())
@@ -82,7 +92,8 @@ pub fn error_smape(original: &[f64], generated: &[f64]) -> f64 {
         .filter(|(&original, &generated)| !(original == 0.0 && generated == 0.0))
         .map(|(original, generated)| original.abs() + generated.abs())
         .sum();
-        (sum_up / sum_down) / original.len() as f64
+    
+        (sum_up / sum_down) / original.len() as f64*/
 }
 
 
@@ -143,5 +154,6 @@ mod tests {
         assert_eq!(error_smape(&vector5, &vector5), 0.0);
         assert!(error_smape(&vector1, &vector2) < 0.353);
         assert!(error_smape(&vector3, &vector4) < 0.101);
+        assert!(error_smape(&[1.0], &[2.0]) > 0.33);
     }
 }

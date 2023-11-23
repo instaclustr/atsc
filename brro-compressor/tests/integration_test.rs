@@ -15,6 +15,17 @@ fn test_fft() {
     test_suite("fft");
 }
 
+#[test]
+fn test_idw() {
+    test_suite("idw");
+}
+
+#[test]
+fn test_polynomial() {
+    test_suite("polynomial");
+}
+
+
 fn test_suite(compressor: &str) {
     compress_dir(compressor);
     compress_file(compressor);
