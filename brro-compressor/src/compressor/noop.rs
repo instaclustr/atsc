@@ -18,18 +18,16 @@ impl Noop {
             data: Vec::with_capacity(sample_count),
         }
     }
-
-    /// Currently the data is provided in f64, this compressor needs i64. So the optimizer needs
-    /// to get this out for the compressor
-    /// TODO: Make this work decently, right now is only doing a cast (And maybe that is it?)
+    ///Optimize
     pub fn optimize(data: &[f64]) -> Vec<i64> {
         let mut out_vec = Vec::with_capacity(data.len());
-        for element in data {
-            out_vec.push(*element as i64);
+        for &element in data {
+            // Round the floating-point number before casting to i64
+            out_vec.push(element.round() as i64);
         }
         out_vec
     }
-
+    
     /// "Compress"
     pub fn compress(&mut self, data: &[f64]) {
         self.data = Noop::optimize(data);
@@ -94,5 +92,15 @@ mod tests {
         let vector1 = vec![1.0, 2.0, 3.0, 4.0, 1.0];
         let n = noop(&vector1);
         assert_eq!(noop_to_data(vector1.len(), &n),vector1);
+    }
+    
+    #[test]
+    fn test_optimize() {
+        // Test case with floating-point numbers that have fractional parts
+        let input_data = [1.5, 2.7, 3.3, 4.9];
+        let expected_output = [2, 3, 3, 5]; // Rounded to the nearest integer
+
+        let result = Noop::optimize(&input_data);
+        assert_eq!(result, expected_output);
     }
 }

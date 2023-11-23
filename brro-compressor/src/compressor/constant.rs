@@ -40,15 +40,9 @@ impl Constant {
         self.residuals.len();
     }
 
-    /// Currently the data is provided in f64, this compressor needs i64. So the optimizer needs
-    /// to get this out for the compressor
-    /// TODO: Make this work decently, right now is only doing a cast (And maybe that is it?)
+    /// This method optimizes the data conversion from f64 to i64.
     pub fn optimize(data: &[f64]) -> Vec<i64> {
-        let mut out_vec = Vec::with_capacity(data.len());
-        for element in data {
-            out_vec.push(*element as i64);
-        }
-        out_vec
+        data.iter().map(|&x| x.round() as i64).collect()
     }
 
     /// Compresses the data. Walks the data array and sets one value as the constant.
@@ -174,5 +168,12 @@ mod tests {
         let compressed_data = constant(&vector1);
         let out = constant_to_data(frame_size, &compressed_data);
         assert_eq!(vector1, out);
+    }
+    
+    #[test]
+    fn test_optimize() {
+        let vector1 = vec![1.1, 2.5, 3.8, 4.2, 5.7];
+        let optimized_data = Constant::optimize(&vector1);
+        assert_eq!(optimized_data, vec![1, 3, 4, 4, 6]);
     }
 }
