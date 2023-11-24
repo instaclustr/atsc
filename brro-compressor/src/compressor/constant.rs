@@ -3,7 +3,7 @@ use bincode::{Decode, Encode};
 use log::{debug, info};
 use std::collections::HashMap;
 
-const CONSTANT_COMPRESSOR_ID: u8 = 0;
+const CONSTANT_COMPRESSOR_ID: u8 = 30;
 
 /// This is a temporary implementation, other implementations (FFT, Polynomial) might provide the same result
 /// as going through the data anyway.
@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn test_constant() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
-        assert_eq!(constant(&vector1), [0, 2, 0]);
+        assert_eq!(constant(&vector1), [30, 2, 0]);
     }
 
     #[test]
@@ -138,7 +138,7 @@ mod tests {
         let bin_data = c.to_bytes();
         let c2 = Constant::decompress(&bin_data);
 
-        assert_eq!(bin_data, [0, 2, 0]);
+        assert_eq!(bin_data, [30, 2, 0]);
         assert_eq!(c.clone(), c2);
     }
 

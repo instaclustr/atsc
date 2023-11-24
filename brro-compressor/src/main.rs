@@ -95,15 +95,14 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
         CompressorType::Constant => op.set_compressor(Compressor::Constant),
         CompressorType::Fft => op.set_compressor(Compressor::FFT),
         CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
-        CompressorType::TopBottom => op.set_compressor(Compressor::TopBottom),
-        CompressorType::Wavelet => op.set_compressor(Compressor::Wavelet),
+        CompressorType::Idw => op.set_compressor(Compressor::Idw),
         _ => todo!("Auto selection of compressor not yet implemented!"),
     }
     for (cpr, data) in op.get_execution().into_iter() {
         debug!("Chunk size: {}", data.len());
         // If compressor is a losseless one, compress with the error defined, or default
         match arguments.compressor {
-            CompressorType::Fft => {
+            CompressorType::Fft |  CompressorType::Polynomial | CompressorType::Idw => {
                 cs.compress_chunk_bounded_with(data, cpr.to_owned(), arguments.error as f32 / 100.0)
             }
             _ => cs.compress_chunk_with(data, cpr.to_owned()),
@@ -151,10 +150,9 @@ enum CompressorType {
     Auto,
     Noop,
     Fft,
-    Wavelet,
     Constant,
     Polynomial,
-    TopBottom,
+    Idw,
 }
 
 fn main() {

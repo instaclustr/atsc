@@ -236,7 +236,6 @@ impl FFT {
             match iterations {
                 1..=17 => jump += max_freq/2,
                 18..=22 => jump += max_freq/10,
-                23 => break,
                 _ => break
             }
         }
