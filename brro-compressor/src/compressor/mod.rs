@@ -4,20 +4,22 @@ use bincode::{Decode, Encode};
 use self::constant::{constant, constant_to_data};
 use self::fft::{fft, fft_to_data, fft_allowed_error};
 use self::noop::{noop, noop_to_data};
+use self::polynomial::{polynomial, to_data, PolynomialType};
 
 pub mod noop;
 pub mod constant;
 pub mod fft;
+pub mod polynomial;
 
 #[derive(Encode, Decode, Default, Debug, Clone)]
 pub enum Compressor {
     #[default]
     Noop,
     FFT,
-    Wavelet,
+    Idw,
     Constant,
     Polynomial,
-    TopBottom,
+    Auto
 }
 
 impl Compressor {
@@ -26,6 +28,8 @@ impl Compressor {
             Compressor::Noop => noop(data),
             Compressor::FFT => fft(data),
             Compressor::Constant => constant(data),
+            Compressor::Polynomial => polynomial(data, PolynomialType::Polynomial),
+            Compressor::Idw => polynomial(data, PolynomialType::Idw),
             _ => todo!(),
         }
     }
@@ -35,6 +39,8 @@ impl Compressor {
             Compressor::Noop => noop(data),
             Compressor::FFT => fft_allowed_error(data, max_error),
             Compressor::Constant => constant(data),
+            Compressor::Polynomial => polynomial(data, PolynomialType::Polynomial),
+            Compressor::Idw => polynomial(data, PolynomialType::Idw),
             _ => todo!(),
         }
     }
@@ -44,6 +50,8 @@ impl Compressor {
             Compressor::Noop => noop_to_data(samples, data),
             Compressor::FFT => fft_to_data(samples, data),
             Compressor::Constant => constant_to_data(samples, data),
+            Compressor::Polynomial => to_data(samples, data),
+            Compressor::Idw => to_data(samples, data),
             _ => todo!()
         }
     }
