@@ -73,7 +73,6 @@ impl Polynomial {
         let method = self.get_method();
         let data_len = data.len();
         let baseline_points = if 3 >= (data_len/100) { 3 } else { data_len/100 };
-        
         // Variables for the error control loop
         let mut current_err = max_err + 1.0;
         let mut jump: usize = 0;
@@ -142,38 +141,8 @@ impl Polynomial {
 
     // --- MANDATORY METHODS ---
     pub fn compress(&mut self, data: &[f64]) {
-        if self.max_value == self.min_value { 
-            debug!("Same max and min, we're done here!");
-            return
-         }
-        // The algorithm is simple, Select 10% of the data points, calculate the Polynomial based on those data points
-        // Plus the max and min
-        let data_len = data.len();
-        // The minimum is a 3 point interpolation, otherwise, 1% of the data is used
-        let point_count = if 3 >= (data_len/100) { 3 } else { data_len/100 };
-        // I can calculate the positions from here
-        let mut points: Vec<f64> = (0..data_len).step_by(data_len/point_count).map(|f| f as f64).collect();
-        // Also we always use the last point
-        points.push((data_len-1) as f64);
-        // I need to extract the values for those points
-        let mut values: Vec<f64> = points.iter().map(|&f| data[f as usize]).collect();
-        // I need to insert MIN and MAX only if they don't belong to the values already.
-        let mut prev_pos = points[0];
-        for (array_position, position_value) in points.iter().enumerate() {
-            if self.min_position > (prev_pos.round() as usize) && self.min_position < (position_value.round() as usize) {
-                // We have to insert here
-                values.insert(array_position, self.min_value as f64);
-            }
-            if self.max_position > (prev_pos.round() as usize) && self.max_position < (position_value.round() as usize) {
-                // We have to insert here
-                values.insert(array_position, self.max_value as f64);
-                // And we are done
-            }
-            prev_pos = *position_value;
-        }
-        debug!("Points: {:?}", points);
-        debug!("Values: {:?}", values);
-        self.data_points = values; 
+        let points = if 3 >= (data.len()/100) { 3 } else { data.len()/100 };
+        self.compress_hinted(data, points)
     }
 
     /// Decompresses data
@@ -190,6 +159,25 @@ impl Polynomial {
 
     /// Since IDW and Polynomial are the same code everywhere, this function prepares the data
     /// to be used by one of the polynomial decompression methods
+    /*
+    Trying to explain this:
+
+    1. For calculation a polynomial, we need the data points (Y) and the location of them in the function (X). 
+    2. To avoid storing two sets of points (X, Y) we only store one (Y), since the others we can infer (Or data always starts in `0`, and as an increment of `1`).
+    3. When we decompress, we look into how much data points we stored (size of Y, values), we also know the frame size.
+    4. From the frame size, we do the calculation how many points we should had stored.
+    5. if (3) and (4) doesn't match, we know we stored extra points, that means `min_value` and/or `max_value` where stored too.
+    6. Ok, then the infer we did in 2, might be wrong, we are missing 1 or 2 points in X.
+    7. We call `get_positions` to build X.
+    8. `get_positions` walks the X array, and checks if `min_position` and/or `max_position` (those are stored too) fit in between any interval, since we have regular intervals for X. If they fit, we push them there.
+
+    Example:
+
+    Let's say X is `[0, 5, 10, 15, 20]` and Y is `[3, 2, 3, 4, 5, 6, 3]`. `min_value = 2`, `max_value=6`. `min_position=2`, `max_position=17`.
+
+    Decompression starts, Len(x) = 5, Len(Y) = 7. We are missing 2 points in X.
+    Walk `X` and check every element if `min_position` is between current point and previous point, if so, insert it there. Continue, do it the same for `max_position`.
+     */
     fn get_positions(&self, frame_size: usize) -> Vec<usize> {
         // How many points I should have
         let point_count = if 3 >= (frame_size/100) { 3 } else { frame_size/100 };

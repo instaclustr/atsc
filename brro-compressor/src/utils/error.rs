@@ -79,25 +79,7 @@ pub fn error_smape(original: &[f64], generated: &[f64]) -> f64 {
         sum_down += value_original.abs() + value_generated.abs();
     }
     (sum_up / sum_down) / original.len() as f64
-    /*
-    let sum_up: f64 = original
-        .iter()
-        .zip(generated.iter())
-        .filter(|(&original, &generated)| !(original == 0.0 && generated == 0.0))
-        .map(|(original, generated)| ((generated - original).abs()))
-        .sum();
-    let sum_down: f64 = original
-        .iter()
-        .zip(generated.iter())
-        .filter(|(&original, &generated)| !(original == 0.0 && generated == 0.0))
-        .map(|(original, generated)| original.abs() + generated.abs())
-        .sum();
-    
-        (sum_up / sum_down) / original.len() as f64*/
 }
-
-
-
 
 #[cfg(test)]
 mod tests {

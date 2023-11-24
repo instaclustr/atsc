@@ -40,3 +40,16 @@ pub fn round_and_limit_f64(x: f64, min: f64, max: f64, decimals: u32) -> f64 {
         _ => out
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_round_and_limit_f64() {
+        assert_eq!(round_and_limit_f64(3.,2.,4.,1), 3.0);
+        assert_eq!(round_and_limit_f64(5.,2.,4.,1), 4.0);
+        assert_eq!(round_and_limit_f64(1.,2.,4.,1), 2.0);
+        assert_eq!(round_and_limit_f64(3.123452312,2.,4.,3), 3.123);
+    }
+}
