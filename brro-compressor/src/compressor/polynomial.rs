@@ -6,8 +6,15 @@ use inverse_distance_weight::IDW;
 use log::{debug, info, trace};
 use splines::{Interpolation, Key, Spline};
 
-const POLYNOMIAL_COMPRESSOR_ID: u8 = 2;
-const IDW_COMPRESSOR_ID: u8 = 3;
+const POLYNOMIAL_COMPRESSOR_ID: u8 = 0;
+const IDW_COMPRESSOR_ID: u8 = 1;
+
+#[derive(Encode, Decode, Default, Debug, Clone, PartialEq)]
+pub enum PolynomialType {
+    #[default]
+    Polynomial = 0,
+    Idw = 1
+}
 
 #[derive(Encode, Decode, Default, Debug, Clone)]
 pub enum Method {
@@ -19,7 +26,7 @@ pub enum Method {
 #[derive(Encode, Decode, PartialEq, Debug, Clone)]
 pub struct Polynomial {
     /// Compressor ID
-    pub id: u8,
+    pub id: PolynomialType,
     /// Stored Points
     pub data_points: Vec<f64>,
     /// The maximum numeric value of the points in the frame
@@ -33,10 +40,10 @@ pub struct Polynomial {
 }
 
 impl Polynomial {
-    pub fn new(sample_count: usize, min: f64, max: f64, idw: bool) -> Self {
-        debug!("Polynomial compressor: min:{} max:{}, idw: {}", min, max, idw);
+    pub fn new(sample_count: usize, min: f64, max: f64, ptype: PolynomialType) -> Self {
+        println!("Polynomial compressor: min:{} max:{}, idw: {:?}", min, max, ptype);
         Polynomial {
-            id: if idw { IDW_COMPRESSOR_ID } else { POLYNOMIAL_COMPRESSOR_ID },
+            id: ptype,
             data_points: Vec::with_capacity(sample_count),
             /// The maximum numeric value of the points in the frame
             max_value: max as f32,  
@@ -59,9 +66,8 @@ impl Polynomial {
 
     fn get_method(&self) -> Method {
         match self.id {
-            IDW_COMPRESSOR_ID => Method::Idw,
-            POLYNOMIAL_COMPRESSOR_ID => Method::CatmullRom,
-            _ => panic!("Unknown Compressor method!")
+            PolynomialType::Idw => Method::Idw,
+            PolynomialType::Polynomial => Method::CatmullRom,
         }
     }
 
@@ -242,15 +248,14 @@ impl Polynomial {
 
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
         match self.id {
-            IDW_COMPRESSOR_ID => self.idw_to_data(frame_size),
-            POLYNOMIAL_COMPRESSOR_ID => self.polynomial_to_data(frame_size),
-            _ => panic!("Unknown compressor method!")
+            PolynomialType::Idw => self.idw_to_data(frame_size),
+            PolynomialType::Polynomial => self.polynomial_to_data(frame_size),
         }
     }
 
 }
 
-pub fn polynomial(data: &[f64], idw: bool) -> Vec<u8> {
+pub fn polynomial(data: &[f64], idw: PolynomialType) -> Vec<u8> {
     info!("Initializing Polynomial Compressor");
     let mut min = data[0];
     let mut max = data[0];
@@ -270,7 +275,7 @@ pub fn polynomial(data: &[f64], idw: bool) -> Vec<u8> {
     c.to_bytes()
 }
 
-pub fn polynomial_allowed_error(data: &[f64], allowed_error: f64, idw: bool) -> Vec<u8> {
+pub fn polynomial_allowed_error(data: &[f64], allowed_error: f64, idw: PolynomialType) -> Vec<u8> {
     info!("Initializing Polynomial Compressor");
     let mut min = data[0];
     let mut max = data[0];
@@ -302,14 +307,14 @@ mod tests {
     #[test]
     fn test_polynomial() {
         let vector1 = vec![1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        assert_eq!(polynomial(&vector1, false), [2, 5, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0, 160, 64, 11, 0, 0, 0, 0, 1, 0]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 5, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0, 160, 64, 11, 0, 0, 0, 0, 1, 0]);
     }
 
     #[test]
     fn test_polynomial_compression() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let idw_data = polynomial(&vector1, false);
+        let idw_data = polynomial(&vector1, PolynomialType::Polynomial);
         let out = Polynomial::decompress(&idw_data).to_data(frame_size);
         assert_eq!(out, [1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 4.075, 5.53333, 6.725, 7.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 5.0]);
     }
@@ -318,7 +323,7 @@ mod tests {
     fn test_polynomial_linear_compression() {
         let vector1 = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0];
         let frame_size = vector1.len();
-        let idw_data = polynomial(&vector1, false);
+        let idw_data = polynomial(&vector1, PolynomialType::Polynomial);
         let out = Polynomial::decompress(&idw_data).to_data(frame_size);
         assert_eq!(out, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]);
     }
@@ -327,17 +332,23 @@ mod tests {
     fn test_to_allowed_error() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let compressed_data = polynomial_allowed_error(&vector1, 0.02, false);
+        let compressed_data = polynomial_allowed_error(&vector1, 0.02, PolynomialType::Polynomial);
         let out = Polynomial::decompress(&compressed_data).to_data(frame_size);
         let e = error_smape(&vector1, &out);
         assert!(e <= 0.02);
     }
 
     #[test]
+    fn test_idw() {
+        let vector1 = vec![1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
+        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 5, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0, 160, 64, 11, 0, 0, 0, 0, 1, 0]);
+    }
+
+    #[test]
     fn test_idw_compression() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let idw_data = polynomial(&vector1, true);
+        let idw_data = polynomial(&vector1, PolynomialType::Idw);
         let out = Polynomial::decompress(&idw_data).to_data(frame_size);
         assert_eq!(out, [1.0, 1.21502, 1.89444, 2.63525, 2.97975, 3.0, 3.21181, 4.10753, 5.44851, 7.0, 1.0, 2.23551, 2.70348, 2.5293, 1.92317, 1.0, 5.0]);
     }
@@ -346,7 +357,7 @@ mod tests {
     fn test_idw_linear_compression() {
         let vector1 = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0];
         let frame_size = vector1.len();
-        let idw_data = polynomial(&vector1, true);
+        let idw_data = polynomial(&vector1, PolynomialType::Idw);
         let out = Polynomial::decompress(&idw_data).to_data(frame_size);
         assert_eq!(out, [1.0, 1.62873, 3.51429, 4.84995, 5.0, 5.40622, 7.05871, 8.64807, 9.0, 9.37719, 11.18119, 12.0]);
     }
@@ -355,7 +366,7 @@ mod tests {
     fn test_idw_to_allowed_error() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let compressed_data = polynomial_allowed_error(&vector1, 0.02, true);
+        let compressed_data = polynomial_allowed_error(&vector1, 0.02, PolynomialType::Idw);
         let out = Polynomial::decompress(&compressed_data).to_data(frame_size);
         let e = error_smape(&vector1, &out);
         assert!(e <= 0.02);
