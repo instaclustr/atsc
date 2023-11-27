@@ -4,8 +4,8 @@ use std::cmp;
 pub enum ErrorMethod {
     Mse,
     Nmse,
-    #[default]
     Mae,
+    #[default]
     Mape,
     Smape,
 }
