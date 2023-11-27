@@ -123,8 +123,8 @@ impl Polynomial {
         let step = (data_len/point_count).max(1);
         // I can calculate the positions from here
         let mut points: Vec<f64> = (0..data_len).step_by(step).map(|f| f as f64).collect();
-        // Pushing the last value if needed
-        if points[points.len()-1] != data_len as f64 -1. { points.push(data_len as f64 - 1.); }
+        // Pushing the last value if needed (and if data is not empty)
+        if points.last() != Some(&(data_len as f64 -1.)) { points.push(data_len as f64 - 1.); }
         // I need to extract the values for those points
         let mut values: Vec<f64> = points.iter().map(|&f| data[f as usize]).collect();
         
@@ -193,7 +193,7 @@ impl Polynomial {
     fn get_positions(&self, frame_size: usize) -> Vec<usize> {
         // Build the point array with the saved step
         let mut points: Vec<usize> = (0..frame_size).step_by(self.point_step as usize).collect();
-        if points[points.len()-1] != frame_size-1 { points.push(frame_size-1); }
+        if  points.last() != Some(&(frame_size - 1)) { points.push(frame_size-1); }
         // If they differ, it means I added either max and/or min
         let point_dif = self.data_points.len() - points.len();
         // I can calculate the positions from here
