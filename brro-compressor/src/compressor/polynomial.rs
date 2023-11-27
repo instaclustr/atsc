@@ -230,10 +230,16 @@ impl Polynomial {
         }
         let spline = Spline::from_vec(key_vec);
         // Build the data
-        // TODO: It gives values below minimum
-        (0..frame_size)
-        .map(|f| round_and_limit_f64(spline.clamped_sample(f as f64).unwrap(), self.min_value.into(), self.max_value.into(), DECIMAL_PRECISION))
-        .collect() 
+        // There is a problem with the spline calculation, that it might get a value for all positions. In those cases
+        // we return the good value calculated. If that doesn't exist, we return the minimum value 
+        let mut out_vec = Vec::with_capacity(frame_size);
+        let mut prev = self.min_value as f64;
+        for value in 0..frame_size {
+            let spline_value = spline.clamped_sample(value as f64).unwrap_or(prev);
+            prev = spline_value;
+            out_vec.push(round_and_limit_f64(spline_value, self.min_value.into(), self.max_value.into(), DECIMAL_PRECISION));
+        }
+        out_vec
     }
 
     pub fn idw_to_data(&self, frame_size: usize) -> Vec<f64> {
