@@ -33,3 +33,7 @@ harness= false
 [[bench]]
 name = "fft_bench"
 harness= false
+
+[[bench]]
+name = "polynomial_bench"
+harness= false
