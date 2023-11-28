@@ -1,5 +1,40 @@
 use std::cmp;
 
+#[derive(Default, Debug, Clone)]
+pub enum ErrorMethod {
+    Mse,
+    Nmse,
+    Mae,
+    #[default]
+    Mape,
+    Smape,
+}
+
+impl ErrorMethod {
+    pub fn error(self, original: &[f64], generated: &[f64]) -> f64 {
+        match self {
+            ErrorMethod::Mse => error_mse(original, generated),
+            ErrorMethod::Nmse => error_nmsqe(original, generated),
+            ErrorMethod::Mae => error_mae(original, generated),
+            ErrorMethod::Mape => error_mape(original, generated),
+            ErrorMethod::Smape => error_smape(original, generated)
+        }
+    }
+}
+
+/// This function calculates the error between 2 arrays of f64. The results are from 0 to .. 
+/// Being 0, no error, 1 - 100% error and so on.
+/// This uses the default function to calculte it.
+pub fn calculate_error(original: &[f64], generated: &[f64]) -> f64 {
+    ErrorMethod::error(ErrorMethod::default(), original, generated)
+}
+
+/// This function calculates the error between 2 arrays of f64. The results are from 0 to .. 
+/// Being 0, no error, 1 - 100% error and so on.
+/// This uses the provided method to calculte it.
+pub fn calculate_error_method(original: &[f64], generated: &[f64], method: ErrorMethod) -> f64 {
+    ErrorMethod::error(method, original, generated)
+}
 /// Calculates the mean squared error between two vectors.
 ///
 /// # Arguments
@@ -10,7 +45,7 @@ use std::cmp;
 /// # Returns
 ///
 /// The mean squared error, or an error message if the vector lengths are different.
-pub fn error_mse(vec1: &[f64], vec2: &Vec<f64>) -> f64 {
+pub fn error_mse(vec1: &[f64], vec2: &[f64]) -> f64 {
     if vec1.len() != vec2.len() { panic!("Can't compute error! Arrays with different lenghts.")}
 
     let min_length = cmp::min(vec1.len(), vec2.len());

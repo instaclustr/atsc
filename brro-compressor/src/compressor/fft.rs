@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 use std::{collections::BinaryHeap, cmp::Ordering};
 use rustfft::{FftPlanner, num_complex::Complex};
-use crate::utils::error::error_smape;
+use crate::utils::error::calculate_error;
 
 use super::BinConfig;
 use log::{error, debug, warn, info, trace};
@@ -230,7 +230,7 @@ impl FFT {
             let out_data: Vec<f64> = idata.iter()
                            .map(|&f| self.round(f.re/len_f32, 2))
                            .collect();
-            current_err = error_smape(data, &out_data);
+            current_err = calculate_error(data, &out_data);
             trace!("Current Err: {}", current_err);
             // Max iterations is 18 (We start at 10%, we can go to 95% and 1% at a time)
             match iterations {
@@ -411,7 +411,7 @@ mod tests {
         let frame_size = vector1.len();
         let compressed_data = fft_allowed_error(&vector1, 0.01);
         let out = FFT::decompress(&compressed_data).to_data(frame_size);
-        let e = error_smape(&vector1, &out);
+        let e = calculate_error(&vector1, &out);
         assert!(e <= 0.01);
     }
 
