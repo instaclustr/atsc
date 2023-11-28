@@ -95,6 +95,7 @@ pub fn error_mape(original: &[f64], generated: &[f64]) -> f64 {
         .zip(generated.iter())
         .map(|(original, generated)| ((generated - original)/original).abs())
         .sum();
+    // TODO: NaN needs to be handled
     abs_error / original.len() as f64
 }
 

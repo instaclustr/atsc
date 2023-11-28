@@ -1,4 +1,4 @@
-use crate::utils::{DECIMAL_PRECISION, error::calculate_error, round_and_limit_f64};
+use crate::utils::{DECIMAL_PRECISION, error::calculate_error, round_and_limit_f64, round_f64};
 
 use super::BinConfig;
 use bincode::{Decode, Encode};
@@ -73,6 +73,10 @@ impl Polynomial {
     }
 
     pub fn compress_bounded(&mut self, data: &[f64], max_err: f64) {
+        if self.max_value == self.min_value { 
+            debug!("Same max and min, we're done here!");
+            return
+        }
         // TODO: Big one, read below
         // To reduce error we add more points to the polynomial, but, we also might add residuals
         // each residual is 1/data_lenght * 100% less compression, each jump is 5% less compression. 
@@ -84,8 +88,10 @@ impl Polynomial {
         let mut current_err = max_err + 1.0;
         let mut jump: usize = 0;
         let mut iterations = 0;
-        
-        while ((max_err * 1000.0) as i32) < ((current_err * 1000.0) as i32) {
+        // Locking max target error precision to 0.1%
+        let target_error = round_f64(max_err, 3);
+        while target_error < round_f64(current_err, 4) {
+            trace!("Method: {:?} Iterations: {} Error: {} Target: {}", method, iterations, current_err, target_error);
             iterations += 1;
             self.compress_hinted(data, baseline_points+jump);
             let out_data = match method {
@@ -98,22 +104,31 @@ impl Polynomial {
             trace!("Current Err: {}", current_err);
             // Max iterations is 18 (We start at 10%, we can go to 95% and 1% at a time)
             match iterations {
-                1..=17 => jump += baseline_points/2,
-                18..=22 => jump += baseline_points/10,
-                _ => break
+                // We should always increase by 1 in worst case
+                1..=17 => jump += (data_len/10).max(1),
+                18..=22 => jump += (data_len/100).max(1),
+                // No more jumping, but we landed right in the end
+                _ if target_error > round_f64(current_err, 4) => break,
+                // We can't hit the target, store everything
+                _ => {
+                    self.compress_hinted(data, data_len);
+                    break;
+                }
+                
             }
             if self.data_points.len() == data_len {
                 // Storing the whole thing anyway...
                 break;
             }
         }
+        debug!("Final Stored Data Lenght: {}", self.data_points.len());
     } 
 
     pub fn compress_hinted(&mut self, data: &[f64], points: usize) {
         if self.max_value == self.min_value { 
             debug!("Same max and min, we're done here!");
             return
-         }
+        }
         // The algorithm is simple, Select 10% of the data points, calculate the Polynomial based on those data points
         // Plus the max and min
         let data_len = data.len();
@@ -195,10 +210,7 @@ impl Polynomial {
         let mut points: Vec<usize> = (0..frame_size).step_by(self.point_step as usize).collect();
         if  points.last() != Some(&(frame_size - 1)) { points.push(frame_size-1); }
         // If they differ, it means I added either max and/or min
-        let point_dif = self.data_points.len() - points.len();
-        // I can calculate the positions from here
-        debug!("Points diff: {}", point_dif);
-        if point_dif > 0 {
+        if self.data_points.len() != points.len() {
             let mut prev_pos = points[0];
             for (array_position, &position_value) in points.clone().iter().enumerate() {
                 if self.min_position > prev_pos && self.min_position < position_value {
@@ -381,4 +393,17 @@ mod tests {
         let e = calculate_error(&vector1, &out);
         assert!(e <= 0.5);
     }
+
+    #[test]
+    fn test_line_polynomial() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0];
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 0, 0, 0, 128, 63, 0, 0, 0, 128, 63, 0, 1]);
+    }
+
+    #[test]
+    fn test_line_idw() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0];
+        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 0, 0, 0, 128, 63, 0, 0, 0, 128, 63, 0, 1]);
+    }
+
 }
