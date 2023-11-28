@@ -121,7 +121,7 @@ impl Polynomial {
                 break;
             }
         }
-        debug!("Final Stored Data Lenght: {}", self.data_points.len());
+        debug!("Final Stored Data Lenght: {} Iterations: {}", self.data_points.len(), iterations);
     } 
 
     pub fn compress_hinted(&mut self, data: &[f64], points: usize) {
@@ -206,26 +206,35 @@ impl Polynomial {
     Walk `X` and check every element if `min_position` is between current point and previous point, if so, insert it there. Continue, do it the same for `max_position`.
      */
     fn get_positions(&self, frame_size: usize) -> Vec<usize> {
-        // Build the point array with the saved step
-        let mut points: Vec<usize> = (0..frame_size).step_by(self.point_step as usize).collect();
-        if  points.last() != Some(&(frame_size - 1)) { points.push(frame_size-1); }
-        // If they differ, it means I added either max and/or min
-        if self.data_points.len() != points.len() {
-            let mut prev_pos = points[0];
-            for (array_position, &position_value) in points.clone().iter().enumerate() {
-                if self.min_position > prev_pos && self.min_position < position_value {
-                    // Inserting in the middle
-                    points.insert(array_position, self.min_position);
-                }
-                if self.max_position > prev_pos && self.max_position < position_value {
-                    points.insert(array_position, self.max_position);
-                }
+        let mut points = Vec::with_capacity(frame_size);
+        let mut prev_pos = 0;
+        for position_value in (0..frame_size).step_by(self.point_step as usize) {
+            // I always need to add the current position
+            // if min == current || max == current, push(0), continue
+            // if prev < min < current, push(min), push(current)
+            // if prev < max < current, push(max), push(current)
+            // push(current)
+            if self.min_position == position_value || self.max_position == position_value {
+                points.push(position_value);
                 prev_pos = position_value;
+                continue;
             }
+            if self.min_position > prev_pos && self.min_position < position_value {
+                // Inserting in the middle
+                points.push(self.min_position);
+            }
+            if self.max_position > prev_pos && self.max_position < position_value {
+                points.push(self.max_position);
+            }
+            points.push(position_value);
+            prev_pos = position_value;
         }
-        trace!("{} {}", points.len(), self.data_points.len());
-        debug!("Points: {:?}", points);
-        debug!("Out Values: {:?}", self.data_points);
+        // If max position is behind the last step, add it
+        if  points.last() < Some(&self.max_position) { points.push(self.max_position); }
+        // Always add the last position of the frame, if needed
+        if  points.last() != Some(&(frame_size - 1)) { points.push(frame_size-1); }
+        trace!("min p {} max p {} step {} data points {}", self.min_position, self.max_position, self.point_step, self.data_points.len());
+        trace!("points {:?}", points);
         points
     }
 
