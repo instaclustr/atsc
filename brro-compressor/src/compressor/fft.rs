@@ -232,10 +232,10 @@ impl FFT {
                            .collect();
             current_err = calculate_error(data, &out_data);
             trace!("Current Err: {}", current_err);
-            // Max iterations is 18 (We start at 10%, we can go to 95% and 1% at a time)
+            // Max iterations is 22 (We start at 10%, we can go to 95% and 1% at a time)
             match iterations {
-                1..=17 => jump += max_freq/2,
-                18..=22 => jump += max_freq/10,
+                1..=17 => jump += (max_freq/2).max(1),
+                18..=22 => jump += (max_freq/10).max(1),
                 _ => break
             }
         }
