@@ -28,7 +28,7 @@ fn polynomial_compress_bounded_speed_benchmark(c: &mut Criterion) {
 // Benchmark for the speed of decompression and conversion to data
 fn decompress_and_to_data_speed_benchmark(c: &mut Criterion) {
     // Compress the data once to use in decompression benchmark
-    let compressed_data = polynomial(SAMPLE_DATA, PolynomialType::Polynomial);
+    let compressed_data = black_box(polynomial(SAMPLE_DATA, PolynomialType::Polynomial));
 
     c.bench_function("decompress_and_to_data_speed", |b| {
         b.iter(|| {
@@ -58,7 +58,7 @@ fn polynomial_compress_bounded_idw_speed_benchmark(c: &mut Criterion) {
 // Benchmark for the speed of decompression and conversion to data with IDW type
 fn decompress_and_to_data_idw_speed_benchmark(c: &mut Criterion) {
     // Compress the data once to use in decompression benchmark
-    let compressed_data = polynomial(SAMPLE_DATA, PolynomialType::Idw);
+    let compressed_data = black_box(polynomial(SAMPLE_DATA, PolynomialType::Idw));
 
     c.bench_function("decompress_and_to_data_idw_speed", |b| {
         b.iter(|| {
@@ -71,7 +71,7 @@ fn decompress_and_to_data_idw_speed_benchmark(c: &mut Criterion) {
 fn polynomial_compress_memory_benchmark(c: &mut Criterion) {
     c.bench_function("polynomial_compress_memory", |b| {
         b.iter(|| {
-            let _compressed_data = polynomial(SAMPLE_DATA, PolynomialType::Polynomial);
+            let _compressed_data = black_box(polynomial(SAMPLE_DATA, PolynomialType::Polynomial));
         });
     });
 }
@@ -80,7 +80,7 @@ fn polynomial_compress_memory_benchmark(c: &mut Criterion) {
 fn polynomial_compress_bounded_memory_benchmark(c: &mut Criterion) {
     c.bench_function("polynomial_compress_bounded_memory", |b| {
         b.iter(|| {
-            let _compressed_data = polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Polynomial);
+            let _compressed_data = black_box(polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Polynomial));
         });
     });
 }
@@ -88,11 +88,11 @@ fn polynomial_compress_bounded_memory_benchmark(c: &mut Criterion) {
 // Benchmark for the memory usage of decompression and conversion to data
 fn decompress_and_to_data_memory_benchmark(c: &mut Criterion) {
     // Compress the data once to use in decompression benchmark
-    let compressed_data = polynomial(SAMPLE_DATA, PolynomialType::Polynomial);
+    let compressed_data = black_box(polynomial(SAMPLE_DATA, PolynomialType::Polynomial));
 
     c.bench_function("decompress_and_to_data_memory", |b| {
         b.iter(|| {
-            let _result = to_data(SAMPLE_DATA.len(), &compressed_data);
+            let _result = black_box(to_data(SAMPLE_DATA.len(), &compressed_data));
         });
     });
 }
@@ -101,7 +101,7 @@ fn decompress_and_to_data_memory_benchmark(c: &mut Criterion) {
 fn polynomial_compress_idw_memory_benchmark(c: &mut Criterion) {
     c.bench_function("polynomial_compress_idw_memory", |b| {
         b.iter(|| {
-            let _compressed_data = polynomial(SAMPLE_DATA, PolynomialType::Idw);
+            let _compressed_data = black_box(polynomial(SAMPLE_DATA, PolynomialType::Idw));
         });
     });
 }
@@ -110,7 +110,7 @@ fn polynomial_compress_idw_memory_benchmark(c: &mut Criterion) {
 fn polynomial_compress_bounded_idw_memory_benchmark(c: &mut Criterion) {
     c.bench_function("polynomial_compress_bounded_idw_memory", |b| {
         b.iter(|| {
-            let _compressed_data = polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Idw);
+            let _compressed_data = black_box(polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Idw));
         });
     });
 }
@@ -118,11 +118,11 @@ fn polynomial_compress_bounded_idw_memory_benchmark(c: &mut Criterion) {
 // Benchmark for the memory usage of decompression and conversion to data with IDW type
 fn decompress_and_to_data_idw_memory_benchmark(c: &mut Criterion) {
     // Compress the data once to use in decompression benchmark
-    let compressed_data = polynomial(SAMPLE_DATA, PolynomialType::Idw);
+    let compressed_data = black_box(polynomial(SAMPLE_DATA, PolynomialType::Idw));
 
     c.bench_function("decompress_and_to_data_idw_memory", |b| {
         b.iter(|| {
-            let _result = to_data(SAMPLE_DATA.len(), &compressed_data);
+            let _result = black_box(to_data(SAMPLE_DATA.len(), &compressed_data));
         });
     });
 }
@@ -149,7 +149,7 @@ fn idw_compress_bounded_speed_benchmark(c: &mut Criterion) {
 fn idw_compress_memory_benchmark(c: &mut Criterion) {
     c.bench_function("idw_compress_memory", |b| {
         b.iter(|| {
-            let _compressed_data = polynomial(SAMPLE_DATA, PolynomialType::Idw);
+            let _compressed_data = black_box(polynomial(SAMPLE_DATA, PolynomialType::Idw));
         });
     });
 }
@@ -158,7 +158,7 @@ fn idw_compress_memory_benchmark(c: &mut Criterion) {
 fn idw_compress_bounded_memory_benchmark(c: &mut Criterion) {
     c.bench_function("idw_compress_bounded_memory", |b| {
         b.iter(|| {
-            let _compressed_data = polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Idw);
+            let _compressed_data = black_box(polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Idw));
         });
     });
 }
