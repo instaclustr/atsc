@@ -226,7 +226,7 @@ impl Polynomial {
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
         if self.max == self.min { 
             debug!("Same max and min, faster decompression!");
-            return vec![self.max as f64; frame_size];
+            return vec![self.max; frame_size];
         }
         match self.id {
             PolynomialType::Idw => self.idw_to_data(frame_size),
