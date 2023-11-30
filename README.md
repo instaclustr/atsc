@@ -50,7 +50,7 @@ Needs a prometheus server. We need it to get our samples out. Supports read and 
 
 Launch the `flac-server` and set it as your remote endpoint for prometheus, example below.
 
-```
+```YAML
 # Remote read and Write
 remote_write:
    - url: "http://localhost:9201/api/write"
