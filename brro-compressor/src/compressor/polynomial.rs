@@ -29,12 +29,8 @@ pub struct Polynomial {
     pub id: PolynomialType,
     /// Stored Points
     pub data_points: Vec<f64>,
-    /// The maximum numeric value of the points in the frame
-    pub max_value: f32,
-    pub max_position: usize,
-    /// The minimum numeric value of the points in the frame
-    pub min_value: f32,  
-    pub min_position: usize,
+    pub min: f64,
+    pub max: f64,
     /// What is the base step between points
     pub point_step: u8,
 }
@@ -44,21 +40,12 @@ impl Polynomial {
         debug!("Polynomial compressor: min:{} max:{}, Type: {:?}", min, max, ptype);
         Polynomial {
             id: ptype,
+            min,
+            max,
             data_points: Vec::with_capacity(sample_count),
-            /// The maximum numeric value of the points in the frame
-            max_value: max as f32,  
-            /// The minimum numeric value of the points in the frame
-            min_value: min as f32,
-            min_position: 0,
-            max_position: 0,
             // Minimum step is always 1
             point_step: 1,
             }
-    }
-
-    pub fn set_pos(&mut self, pmin: usize, pmax: usize){
-        self.min_position = pmin;
-        self.max_position = pmax;
     }
 
     fn locate_in_data_points(&self, point: f64) -> bool {
@@ -73,7 +60,7 @@ impl Polynomial {
     }
 
     pub fn compress_bounded(&mut self, data: &[f64], max_err: f64) {
-        if self.max_value == self.min_value { 
+        if self.max == self.min { 
             debug!("Same max and min, we're done here!");
             return
         }
@@ -121,11 +108,11 @@ impl Polynomial {
                 break;
             }
         }
-        debug!("Final Stored Data Lenght: {}", self.data_points.len());
+        debug!("Final Stored Data Lenght: {} Iterations: {}", self.data_points.len(), iterations);
     } 
 
     pub fn compress_hinted(&mut self, data: &[f64], points: usize) {
-        if self.max_value == self.min_value { 
+        if self.max == self.min { 
             debug!("Same max and min, we're done here!");
             return
         }
@@ -141,25 +128,10 @@ impl Polynomial {
         // Pushing the last value if needed (and if data is not empty)
         if points.last() != Some(&(data_len as f64 -1.)) { points.push(data_len as f64 - 1.); }
         // I need to extract the values for those points
-        let mut values: Vec<f64> = points.iter().map(|&f| data[f as usize]).collect();
+        let values: Vec<f64> = points.iter().map(|&f| data[f as usize]).collect();
         
         debug!("Compressed Hinted Points: {:?}", points);
         debug!("Compressed Hinted Values: {:?}", values);
-
-        // I need to insert MIN and MAX only if they don't belong to the values already.
-        let mut prev_pos = points[0];
-        for (array_position, position_value) in points.iter().enumerate() {
-            if self.min_position > (prev_pos.round() as usize) && self.min_position < (position_value.round() as usize) {
-                // We have to insert here
-                values.insert(array_position, self.min_value as f64);
-            }
-            if self.max_position > (prev_pos.round() as usize) && self.max_position < (position_value.round() as usize) {
-                // We have to insert here
-                values.insert(array_position, self.max_value as f64);
-                // And we are done
-            }
-            prev_pos = *position_value;
-        }
 
         self.data_points = values; 
         self.point_step = step as u8;
@@ -206,34 +178,17 @@ impl Polynomial {
     Walk `X` and check every element if `min_position` is between current point and previous point, if so, insert it there. Continue, do it the same for `max_position`.
      */
     fn get_positions(&self, frame_size: usize) -> Vec<usize> {
-        // Build the point array with the saved step
-        let mut points: Vec<usize> = (0..frame_size).step_by(self.point_step as usize).collect();
-        if  points.last() != Some(&(frame_size - 1)) { points.push(frame_size-1); }
-        // If they differ, it means I added either max and/or min
-        if self.data_points.len() != points.len() {
-            let mut prev_pos = points[0];
-            for (array_position, &position_value) in points.clone().iter().enumerate() {
-                if self.min_position > prev_pos && self.min_position < position_value {
-                    // Inserting in the middle
-                    points.insert(array_position, self.min_position);
-                }
-                if self.max_position > prev_pos && self.max_position < position_value {
-                    points.insert(array_position, self.max_position);
-                }
-                prev_pos = position_value;
-            }
+        let mut points = Vec::with_capacity(frame_size);
+        for position_value in (0..frame_size).step_by(self.point_step as usize) {
+            points.push(position_value);
         }
-        trace!("{} {}", points.len(), self.data_points.len());
-        debug!("Points: {:?}", points);
-        debug!("Out Values: {:?}", self.data_points);
+        // Always add the last position of the frame, if needed
+        if  points.last() != Some(&(frame_size - 1)) { points.push(frame_size-1); }
+        trace!("points {:?}", points);
         points
     }
 
     pub fn polynomial_to_data(&self, frame_size: usize) -> Vec<f64> {
-        if self.max_value == self.min_value { 
-            debug!("Same max and min, faster decompression!");
-            return vec![self.max_value as f64; frame_size];
-         }
         // Create the interpolation
         let points = self.get_positions(frame_size);
         let mut key_vec = Vec::with_capacity(points.len());
@@ -249,11 +204,11 @@ impl Polynomial {
         // There is a problem with the spline calculation, that it might get a value for all positions. In those cases
         // we return the good value calculated. If that doesn't exist, we return the minimum value 
         let mut out_vec = Vec::with_capacity(frame_size);
-        let mut prev = self.min_value as f64;
+        let mut prev = self.min;
         for value in 0..frame_size {
             let spline_value = spline.clamped_sample(value as f64).unwrap_or(prev);
             prev = spline_value;
-            out_vec.push(round_and_limit_f64(spline_value, self.min_value.into(), self.max_value.into(), DECIMAL_PRECISION));
+            out_vec.push(round_and_limit_f64(spline_value, self.min, self.max, DECIMAL_PRECISION));
         }
         out_vec
     }
@@ -264,11 +219,15 @@ impl Polynomial {
         let idw = IDW::new(points, self.data_points.clone());
         // Build the data
         (0..frame_size)
-        .map(|f| round_and_limit_f64(idw.evaluate(f as f64), self.min_value.into(), self.max_value.into(), DECIMAL_PRECISION))
+        .map(|f| round_and_limit_f64(idw.evaluate(f as f64), self.min, self.max, DECIMAL_PRECISION))
         .collect() 
     }
 
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
+        if self.max == self.min { 
+            debug!("Same max and min, faster decompression!");
+            return vec![self.max; frame_size];
+        }
         match self.id {
             PolynomialType::Idw => self.idw_to_data(frame_size),
             PolynomialType::Polynomial => self.polynomial_to_data(frame_size),
@@ -281,16 +240,13 @@ pub fn polynomial(data: &[f64], idw: PolynomialType) -> Vec<u8> {
     info!("Initializing Polynomial Compressor");
     let mut min = data[0];
     let mut max = data[0];
-    let mut pmin = 0;
-    let mut pmax = 0;
     // For these one we need to store where the min and max happens on the data, not only their values
-    for (position, value) in data.iter().enumerate(){
-        if value > &max { max = *value;  pmax = position;};
-        if value < &min { min = *value;  pmin = position; };
+    for value in data.iter(){
+        if value > &max { max = *value; };
+        if value < &min { min = *value; };
     }
     // Initialize the compressor
     let mut c = Polynomial::new(data.len(), min, max, idw);
-    c.set_pos(pmin, pmax);
     // Convert the data
     c.compress(data);
     // Convert to bytes
@@ -301,16 +257,13 @@ pub fn polynomial_allowed_error(data: &[f64], allowed_error: f64, idw: Polynomia
     info!("Initializing Polynomial Compressor");
     let mut min = data[0];
     let mut max = data[0];
-    let mut pmin = 0;
-    let mut pmax = 0;
     // For these one we need to store where the min and max happens on the data, not only their values
-    for (position, value) in data.iter().enumerate(){
-        if value > &max { max = *value;  pmax = position;};
-        if value < &min { min = *value;  pmin = position; };
+    for value in data.iter(){
+        if value > &max { max = *value; };
+        if value < &min { min = *value; };
     }
     // Initialize the compressor
     let mut c = Polynomial::new(data.len(), min, max, idw);
-    c.set_pos(pmin, pmax);
     // Convert the data
     c.compress_bounded(data, allowed_error);
     // Convert to bytes
@@ -326,10 +279,11 @@ pub fn to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn test_polynomial() {
         let vector1 = vec![1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 5, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0, 160, 64, 11, 0, 0, 0, 0, 1, 4]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 4, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4]);
     }
 
     #[test]
@@ -338,7 +292,7 @@ mod tests {
         let frame_size = vector1.len();
         let idw_data = polynomial(&vector1, PolynomialType::Polynomial);
         let out = Polynomial::decompress(&idw_data).to_data(frame_size);
-        assert_eq!(out, [1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 4.075, 5.53333, 6.725, 7.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 5.0]);
+        assert_eq!(out, [1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 2.824, 2.392, 1.848, 1.336, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 5.0]);
     }
 
     #[test]
@@ -354,16 +308,16 @@ mod tests {
     fn test_to_allowed_error() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let compressed_data = polynomial_allowed_error(&vector1, 0.5, PolynomialType::Polynomial);
+        let compressed_data = polynomial_allowed_error(&vector1, 0.05, PolynomialType::Polynomial);
         let out = Polynomial::decompress(&compressed_data).to_data(frame_size);
         let e = calculate_error(&vector1, &out);
-        assert!(e <= 0.5);
+        assert!(e <= 0.05);
     }
 
     #[test]
     fn test_idw() {
         let vector1 = vec![1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 5, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0, 160, 64, 11, 0, 0, 0, 0, 1, 4]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 4, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4]);
     }
 
     #[test]
@@ -372,7 +326,7 @@ mod tests {
         let frame_size = vector1.len();
         let idw_data = polynomial(&vector1, PolynomialType::Idw);
         let out = Polynomial::decompress(&idw_data).to_data(frame_size);
-        assert_eq!(out, [1.0, 1.21502, 1.89444, 2.63525, 2.97975, 3.0, 3.21181, 4.10753, 5.44851, 7.0, 1.0, 2.23551, 2.70348, 2.5293, 1.92317, 1.0, 5.0]);
+        assert_eq!(out, [1.0, 1.13167, 1.62573, 2.32782, 2.83429, 3.0, 2.8335, 2.34163, 1.68979, 1.184, 1.0, 1.18933, 1.64488, 1.9634, 1.77047, 1.0, 5.0]);
     }
 
     #[test]
@@ -391,19 +345,19 @@ mod tests {
         let compressed_data = polynomial_allowed_error(&vector1, 0.02, PolynomialType::Idw);
         let out = Polynomial::decompress(&compressed_data).to_data(frame_size);
         let e = calculate_error(&vector1, &out);
-        assert!(e <= 0.5);
+        assert!(e <= 0.02);
     }
 
     #[test]
     fn test_line_polynomial() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0];
-        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 0, 0, 0, 128, 63, 0, 0, 0, 128, 63, 0, 1]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1]);
     }
 
     #[test]
     fn test_line_idw() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0];
-        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 0, 0, 0, 128, 63, 0, 0, 0, 128, 63, 0, 1]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1]);
     }
 
 }
