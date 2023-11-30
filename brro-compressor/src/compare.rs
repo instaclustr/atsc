@@ -40,21 +40,19 @@ impl CompressionDecision {
         // Use the decision to perform further actions
         match decision {
             CompressionDecision::Constant => {
-                // Do something with the constant compressed data
                 println!("Selected Constant Compressor");
             }
             CompressionDecision::Fft => {
-                // Do something with the FFT compressed data
                 println!("Selected FFT Compressor");
             }
             CompressionDecision::Polynomial => {
-                // Do something with the Polynomial compressed data
                 println!("Selected Polynomial Compressor");
             }
         }
 
         Ok(())
     }
+
 }
 fn get_compression_decision(
     result_constant: &[f64],
@@ -71,6 +69,15 @@ fn get_compression_decision(
 mod tests {
     use super::*;
     #[test]
+    fn test_comparison_logic_constant_wins() {
+        let result_constant = vec![1.0, 2.0, 3.0];
+        let result_fft = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let result_polynomial = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let decision = get_compression_decision(&result_constant, &result_fft, &result_polynomial);
+        assert_eq!(decision, CompressionDecision::Constant);
+    }
+
+    #[test]
     fn test_comparison_logic_fft_wins() {
         let result_constant = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let result_fft = vec![1.0, 2.0, 3.0];
@@ -86,15 +93,6 @@ mod tests {
         let result_polynomial = vec![1.0, 2.0, 3.0];
         let decision = get_compression_decision(&result_constant, &result_fft, &result_polynomial);
         assert_eq!(decision, CompressionDecision::Polynomial);
-    }
-    
-    #[test]
-    fn test_comparison_logic_constant_wins() {
-        let result_constant = vec![1.0, 2.0, 3.0];
-        let result_fft = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        let result_polynomial = vec![1.0, 2.0, 3.0];
-        let decision = get_compression_decision(&result_constant, &result_fft, &result_polynomial);
-        assert_eq!(decision, CompressionDecision::Constant);
     }
     
 }
