@@ -5,7 +5,7 @@ use std::thread;
 #[derive(PartialEq, Debug)]
 enum CompressionDecision {
     Constant,
-    FFT,
+    Fft,
     Polynomial,
 }
 
@@ -33,7 +33,7 @@ impl CompressionDecision {
         // Use the decision logic to determine the compression decision
         let decision = match (result_constant.len(), result_fft.len(), result_polynomial.len()) {
             (constant_len, fft_len, poly_len) if constant_len < fft_len && constant_len < poly_len => CompressionDecision::Constant,
-            (_, fft_len, poly_len) if fft_len < poly_len => CompressionDecision::FFT,
+            (_, fft_len, poly_len) if fft_len < poly_len => CompressionDecision::Fft,
             _ => CompressionDecision::Polynomial,
         };
 
@@ -43,7 +43,7 @@ impl CompressionDecision {
                 // Do something with the constant compressed data
                 println!("Selected Constant Compressor");
             }
-            CompressionDecision::FFT => {
+            CompressionDecision::Fft => {
                 // Do something with the FFT compressed data
                 println!("Selected FFT Compressor");
             }
@@ -63,7 +63,7 @@ fn get_compression_decision(
 ) -> CompressionDecision {
     match (result_constant.len(), result_fft.len(), result_polynomial.len()) {
         (constant_len, fft_len, poly_len) if constant_len < fft_len && constant_len < poly_len => CompressionDecision::Constant,
-        (_, fft_len, poly_len) if fft_len < poly_len => CompressionDecision::FFT,
+        (_, fft_len, poly_len) if fft_len < poly_len => CompressionDecision::Fft,
         _ => CompressionDecision::Polynomial,
     }
 }
@@ -76,7 +76,7 @@ mod tests {
         let result_fft = vec![1.0, 2.0, 3.0];
         let result_polynomial = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let decision = get_compression_decision(&result_constant, &result_fft, &result_polynomial);
-        assert_eq!(decision, CompressionDecision::FFT);
+        assert_eq!(decision, CompressionDecision::Fft);
     }
 
     #[test]
@@ -92,7 +92,7 @@ mod tests {
     fn test_comparison_logic_constant_wins() {
         let result_constant = vec![1.0, 2.0, 3.0];
         let result_fft = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        let result_polynomial = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let result_polynomial = vec![1.0, 2.0, 3.0];
         let decision = get_compression_decision(&result_constant, &result_fft, &result_polynomial);
         assert_eq!(decision, CompressionDecision::Constant);
     }
