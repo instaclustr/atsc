@@ -1,6 +1,16 @@
 # BRRO Compressor
 
-Version: 0.2 Released: 23/10/2023
+Version: 0.5 Released: 30/11/2023
+
+## Major Changes
+
+### 0.5
+
+- Added Polynomial Compressor (with 2 variants)
+- Created and Integrated a proper file type (wbro)
+- Benchmarks of the different compressors
+- Integration testing
+- Several fixes and cleanups
 
 ## Description
 
@@ -69,6 +79,9 @@ If you set the ENV Variable for Debug it will output what it is doing.
 
 Exploratory code. Should be removed.
 
-## TODO
+## Roadmap
 
-1. Update `flac-server` to read cBRRO files.
+1. Update `flac-server` to read/write WBRO/BRO files.
+2. Streaming compression/decompression
+3. Automated compressor selection
+4. Frame expansion (Allowing new data to be appended to existing frames)
