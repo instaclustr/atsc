@@ -41,7 +41,7 @@ do
     echo "plot(Input.*((100+$i)/100), 'color','#D95319');" >> $mfile
     echo "plot(Input.*((100-$i)/100), 'color','#D95319');" >> $mfile
     echo "legend('Data','FFT Compression', 'IDW Compression', 'Poly compression', 'Upper Error', 'Lower Error')" >> $mfile
-    echo "print -dpng comparion-$1.png" >> $mfile
+    echo "print -dpng comparison-$i.png" >> $mfile
 
 done
 
