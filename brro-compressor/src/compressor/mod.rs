@@ -22,6 +22,19 @@ pub enum Compressor {
     Auto
 }
 
+/// Struct to store the results of a compression round. Can be used later to pick the best one
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+pub struct CompressorResult {
+    pub compression_size: u64,
+    pub error: f64
+}
+
+impl CompressorResult {
+    pub fn new(compression_size: u64, error: f64) -> Self {
+        CompressorResult {compression_size, error}
+    }
+}
+
 impl Compressor {
     pub fn compress(&self, data: &[f64] ) -> Vec<u8> {
         match self {
