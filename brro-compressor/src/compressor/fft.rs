@@ -3,7 +3,7 @@ use std::{collections::BinaryHeap, cmp::Ordering};
 use rustfft::{FftPlanner, num_complex::Complex};
 use crate::utils::error::calculate_error;
 
-use super::BinConfig;
+use super::{BinConfig, CompressorResult};
 use log::{error, debug, warn, info, trace};
 
 const FFT_COMPRESSOR_ID: u8 = 15;
@@ -79,7 +79,7 @@ impl Ord for FrequencyPoint {
 }
 
 /// FFT Compressor. Applies FFT to a signal, picks the N best frequencies, discards the rest. Always LOSSY
-#[derive(Encode, Decode, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct FFT {
     /// Compressor ID
     pub id: u8,
@@ -88,7 +88,49 @@ pub struct FFT {
     /// The maximum numeric value of the points in the frame
     pub max_value: f32,  
     /// The minimum numeric value of the points in the frame
-    pub min_value: f32,  
+    pub min_value: f32,
+    /// Compression error
+    pub error: Option<f64>
+}
+
+// Implementing the Encode manually because we don't want to encode the Error field, less bytes used.
+impl Encode for FFT {
+    fn encode <__E: ::bincode::enc::Encoder> (&self, encoder: &mut __E) -> Result <(), ::bincode::error::EncodeError>
+    {
+        Encode::encode(&self.id, encoder)?;
+        Encode::encode(&self.frequencies, encoder)?;
+        Encode::encode(&self.max_value, encoder)?; 
+        Encode::encode(&self.min_value, encoder)?;
+        Ok(())
+    }
+}
+
+impl Decode for FFT {
+    fn decode <__D: ::bincode::de::Decoder>(decoder : & mut __D) -> Result<Self, ::bincode::error::DecodeError>
+    {
+        Ok(Self
+        {
+            id: Decode::decode(decoder)?,
+            frequencies: Decode::decode(decoder)?,
+            max_value : Decode::decode(decoder)?,
+            min_value : Decode::decode(decoder)?,
+            error: None,
+        })
+    }
+} 
+
+impl < '__de >::bincode::BorrowDecode< '__de > for FFT {
+    fn borrow_decode <__D: ::bincode::de::BorrowDecoder< '__de >>(decoder : &mut __D) -> Result <Self, ::bincode::error::DecodeError>
+    {
+        Ok(Self
+        {
+            id: ::bincode::BorrowDecode::borrow_decode(decoder)?,
+            frequencies: ::bincode::BorrowDecode::borrow_decode(decoder)?,
+            max_value: ::bincode::BorrowDecode::borrow_decode(decoder)?,
+            min_value: ::bincode::BorrowDecode::borrow_decode(decoder)?,
+            error: None, 
+        })
+    }
 }
 
 impl FFT {
@@ -102,6 +144,7 @@ impl FFT {
             max_value: FFT::f64_to_f32(max),  
             /// The minimum numeric value of the points in the frame
             min_value: FFT::f64_to_f32(min),  
+            error: None
             }
     }
 
@@ -228,7 +271,7 @@ impl FFT {
             // run the ifft
             ifft.process(&mut idata);
             let out_data: Vec<f64> = idata.iter()
-                           .map(|&f| self.round(f.re/len_f32, 2))
+                           .map(|&f| self.round(f.re/len_f32, DECIMAL_PRECISION.into()))
                            .collect();
             current_err = calculate_error(data, &out_data);
             trace!("Current Err: {}", current_err);
@@ -239,6 +282,7 @@ impl FFT {
                 _ => break
             }
         }
+        self.error = Some(current_err);
         debug!("Iterations to convergence: {}, Freqs P:{} S:{}, Error: {}", iterations, jump+max_freq, self.frequencies.len(), current_err);
     }
 
@@ -275,7 +319,7 @@ impl FFT {
         fft
     }
 
-    pub fn to_bytes(self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let config = BinConfig::get();
         bincode::encode_to_vec(self, config).unwrap()
     }
@@ -345,7 +389,7 @@ pub fn fft_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
 
 /// Compress targeting a specific max error allowed. This is very computational intensive,
 /// as the FFT will be calculated over and over until the specific error threshold is achived.
-pub fn fft_allowed_error(data: &[f64], allowed_error: f64) -> Vec<u8> {
+pub fn fft_allowed_error(data: &[f64], allowed_error: f64) -> CompressorResult {
     info!("Initializing FFT Compressor. Max error: {}", allowed_error);
     let mut min = data[0];
     let mut max = data[0];
@@ -358,7 +402,7 @@ pub fn fft_allowed_error(data: &[f64], allowed_error: f64) -> Vec<u8> {
     // Convert the data
     c.compress_bounded(data, allowed_error);
     // Convert to bytes
-    c.to_bytes()
+    CompressorResult::new(&c.to_bytes(), c.error.unwrap())
 }
 
 pub fn fft_set(data: &[f64], freqs: usize) -> Vec<u8> {
@@ -409,8 +453,8 @@ mod tests {
     fn test_to_allowed_error() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let compressed_data = fft_allowed_error(&vector1, 0.01);
-        let out = FFT::decompress(&compressed_data).to_data(frame_size);
+        let compressed_result = fft_allowed_error(&vector1, 0.01);
+        let out = FFT::decompress(&compressed_result.compressed_data).to_data(frame_size);
         let e = calculate_error(&vector1, &out);
         assert!(e <= 0.01);
     }

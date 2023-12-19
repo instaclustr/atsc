@@ -22,16 +22,19 @@ pub enum Compressor {
     Auto
 }
 
-/// Struct to store the results of a compression round. Can be used later to pick the best one
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+/// Struct to store the results of a compression round. Will be used to pick the best compressor.
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct CompressorResult {
-    pub compression_size: u64,
+    pub compressed_data: Vec<u8>,
     pub error: f64
 }
 
 impl CompressorResult {
-    pub fn new(compression_size: u64, error: f64) -> Self {
-        CompressorResult {compression_size, error}
+    pub fn new(compressed_data: &[u8], error: f64) -> Self {
+        CompressorResult {
+            compressed_data: compressed_data.to_vec(), 
+            error
+        }
     }
 }
 
@@ -50,8 +53,19 @@ impl Compressor {
     pub fn compress_bounded(&self, data: &[f64], max_error: f64 ) -> Vec<u8> {
         match self {
             Compressor::Noop => noop(data),
-            Compressor::FFT => fft_allowed_error(data, max_error),
+            Compressor::FFT => fft_allowed_error(data, max_error).compressed_data,
             Compressor::Constant => constant(data),
+            Compressor::Polynomial => polynomial_allowed_error(data, max_error, PolynomialType::Polynomial),
+            Compressor::Idw => polynomial_allowed_error(data, max_error, PolynomialType::Idw),
+            _ => todo!(),
+        }
+    }
+
+    pub fn get_compress_bounded_results(&self, data: &[f64], max_error: f64 ) -> CompressorResult {
+        match self {
+            Compressor::Noop => CompressorResult::new(noop(data), 0.0),
+            Compressor::FFT => fft_allowed_error(data, max_error),
+            Compressor::Constant => CompressorResult::new(constant(data), 0.0),
             Compressor::Polynomial => polynomial_allowed_error(data, max_error, PolynomialType::Polynomial),
             Compressor::Idw => polynomial_allowed_error(data, max_error, PolynomialType::Idw),
             _ => todo!(),

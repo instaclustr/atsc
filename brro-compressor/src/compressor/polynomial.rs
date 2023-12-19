@@ -33,6 +33,8 @@ pub struct Polynomial {
     pub max: f64,
     /// What is the base step between points
     pub point_step: u8,
+    /// Compression error
+    pub error: Option<f64>
 }
 
 impl Polynomial {
@@ -45,6 +47,7 @@ impl Polynomial {
             data_points: Vec::with_capacity(sample_count),
             // Minimum step is always 1
             point_step: 1,
+            error: None
             }
     }
 
@@ -158,25 +161,6 @@ impl Polynomial {
     // --- END OF MANDATORY METHODS ---
     /// Since IDW and Polynomial are the same code everywhere, this function prepares the data
     /// to be used by one of the polynomial decompression methods
-    /*
-    Trying to explain this:
-
-    1. For calculation a polynomial, we need the data points (Y) and the location of them in the function (X). 
-    2. To avoid storing two sets of points (X, Y) we only store one (Y), since the others we can infer (Or data always starts in `0`, and as an increment of `1`).
-    3. When we decompress, we look into how much data points we stored (size of Y, values), we also know the frame size.
-    4. From the frame size, we do the calculation how many points we should had stored.
-    5. if (3) and (4) doesn't match, we know we stored extra points, that means `min_value` and/or `max_value` where stored too.
-    6. Ok, then the infer we did in 2, might be wrong, we are missing 1 or 2 points in X.
-    7. We call `get_positions` to build X.
-    8. `get_positions` walks the X array, and checks if `min_position` and/or `max_position` (those are stored too) fit in between any interval, since we have regular intervals for X. If they fit, we push them there.
-
-    Example:
-
-    Let's say X is `[0, 5, 10, 15, 20]` and Y is `[3, 2, 3, 4, 5, 6, 3]`. `min_value = 2`, `max_value=6`. `min_position=2`, `max_position=17`.
-
-    Decompression starts, Len(x) = 5, Len(Y) = 7. We are missing 2 points in X.
-    Walk `X` and check every element if `min_position` is between current point and previous point, if so, insert it there. Continue, do it the same for `max_position`.
-     */
     fn get_positions(&self, frame_size: usize) -> Vec<usize> {
         let mut points = Vec::with_capacity(frame_size);
         for position_value in (0..frame_size).step_by(self.point_step as usize) {
