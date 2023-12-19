@@ -55,17 +55,17 @@ impl Compressor {
             Compressor::Noop => noop(data),
             Compressor::FFT => fft_allowed_error(data, max_error).compressed_data,
             Compressor::Constant => constant(data),
-            Compressor::Polynomial => polynomial_allowed_error(data, max_error, PolynomialType::Polynomial),
-            Compressor::Idw => polynomial_allowed_error(data, max_error, PolynomialType::Idw),
+            Compressor::Polynomial => polynomial_allowed_error(data, max_error, PolynomialType::Polynomial).compressed_data,
+            Compressor::Idw => polynomial_allowed_error(data, max_error, PolynomialType::Idw).compressed_data,
             _ => todo!(),
         }
     }
 
     pub fn get_compress_bounded_results(&self, data: &[f64], max_error: f64 ) -> CompressorResult {
         match self {
-            Compressor::Noop => CompressorResult::new(noop(data), 0.0),
+            Compressor::Noop => CompressorResult::new(&noop(data), 0.0),
             Compressor::FFT => fft_allowed_error(data, max_error),
-            Compressor::Constant => CompressorResult::new(constant(data), 0.0),
+            Compressor::Constant => CompressorResult::new(&constant(data), 0.0),
             Compressor::Polynomial => polynomial_allowed_error(data, max_error, PolynomialType::Polynomial),
             Compressor::Idw => polynomial_allowed_error(data, max_error, PolynomialType::Idw),
             _ => todo!(),
