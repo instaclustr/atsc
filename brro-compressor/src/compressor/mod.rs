@@ -30,9 +30,9 @@ pub struct CompressorResult {
 }
 
 impl CompressorResult {
-    pub fn new(compressed_data: &[u8], error: f64) -> Self {
+    pub fn new(compressed_data:  Vec<u8>, error: f64) -> Self {
         CompressorResult {
-            compressed_data: compressed_data.to_vec(), 
+            compressed_data, 
             error
         }
     }
@@ -63,9 +63,9 @@ impl Compressor {
 
     pub fn get_compress_bounded_results(&self, data: &[f64], max_error: f64 ) -> CompressorResult {
         match self {
-            Compressor::Noop => CompressorResult::new(&noop(data), 0.0),
+            Compressor::Noop => CompressorResult::new(noop(data), 0.0),
             Compressor::FFT => fft_allowed_error(data, max_error),
-            Compressor::Constant => CompressorResult::new(&constant(data), 0.0),
+            Compressor::Constant => CompressorResult::new(constant(data), 0.0),
             Compressor::Polynomial => polynomial_allowed_error(data, max_error, PolynomialType::Polynomial),
             Compressor::Idw => polynomial_allowed_error(data, max_error, PolynomialType::Idw),
             _ => todo!(),

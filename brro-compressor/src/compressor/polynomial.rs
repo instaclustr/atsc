@@ -297,7 +297,7 @@ pub fn polynomial_allowed_error(data: &[f64], allowed_error: f64, idw: Polynomia
     let mut c = Polynomial::new(data.len(), min, max, idw);
     // Convert the data
     c.compress_bounded(data, allowed_error);
-    CompressorResult::new(&c.to_bytes(), c.error.unwrap_or(0.0))
+    CompressorResult::new(c.to_bytes(), c.error.unwrap_or(0.0))
 }
 
 /// Uncompress 

@@ -1,7 +1,7 @@
-use std::{mem::size_of_val, collections::HashMap};
+use std::mem::size_of_val;
 use bincode::{Decode, Encode};
 use log::debug;
-use crate::compressor::{Compressor, CompressorResult};
+use crate::compressor::Compressor;
 
 /// This is the structure of a compressor frame
 #[derive(Encode, Decode, Debug, Clone)]
@@ -54,22 +54,26 @@ impl CompressorFrame {
     pub fn compress_best(&mut self, data: &[f64], max_error: f32) {
         self.sample_count = data.len();
         // Eligible compressors for use
-        let compressor_list = [Compressor::Constant,
-                                                Compressor::FFT,
-                                                Compressor::Polynomial];
-        let mut result_map = HashMap::<Compressor, CompressorResult>::with_capacity(3);
-        let mut c_size = [0; 3];
-        // Run all the eligible compressors
-        for (i, compressor) in compressor_list.iter().enumerate() {
-            let result = compressor.get_compress_bounded_results(data, max_error as f64);
-            c_size[i] = result.compressed_data.len();
-            result_map.insert(*compressor, result);
-        }
-        // Select the best
-        if c_size[0] <= c_size[1] && c_size[0] <= c_size[2] { self.compressor = compressor_list[0]; }
-        else if c_size[1] <= c_size[2] && c_size[1] <= c_size[0] { self.compressor = compressor_list[1]; }
-        else if c_size[2] <= c_size[1] && c_size[2] <= c_size[0] { self.compressor = compressor_list[2]; }
-        self.data = result_map.remove(&self.compressor).unwrap().compressed_data;
+        let compressor_list = [
+            Compressor::Constant,
+            Compressor::FFT,
+            Compressor::Polynomial,
+        ];
+
+        // Run all the eligible compressors and choose smallest
+        let (smallest_result, chosen_compressor) = compressor_list
+            .iter()
+            .map(|compressor| {
+                (
+                    compressor.get_compress_bounded_results(data, max_error as f64),
+                    compressor,
+                )
+            })
+            .min_by_key(|x| x.0.compressed_data.len())
+            .unwrap();
+
+        self.data = smallest_result.compressed_data;
+        self.compressor = *chosen_compressor;
         debug!("Auto Compressor Selection: {:?}", self.compressor);
     }
 

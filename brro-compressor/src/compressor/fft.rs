@@ -402,7 +402,7 @@ pub fn fft_allowed_error(data: &[f64], allowed_error: f64) -> CompressorResult {
     // Convert the data
     c.compress_bounded(data, allowed_error);
     // Convert to bytes
-    CompressorResult::new(&c.to_bytes(), c.error.unwrap_or(0.0))
+    CompressorResult::new(c.to_bytes(), c.error.unwrap_or(0.0))
 }
 
 pub fn fft_set(data: &[f64], freqs: usize) -> Vec<u8> {
