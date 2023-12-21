@@ -25,6 +25,10 @@ fn test_polynomial() {
     test_suite("polynomial");
 }
 
+#[test]
+fn test_auto() {
+    test_suite("auto");
+}
 
 fn test_suite(compressor: &str) {
     compress_dir(compressor);

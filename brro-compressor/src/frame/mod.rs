@@ -70,7 +70,7 @@ impl CompressorFrame {
         else if c_size[1] <= c_size[2] && c_size[1] <= c_size[0] { self.compressor = compressor_list[1]; }
         else if c_size[2] <= c_size[1] && c_size[2] <= c_size[0] { self.compressor = compressor_list[2]; }
         self.data = result_map.remove(&self.compressor).unwrap().compressed_data;
-        debug!("Frame compressed with: {:?}", self.compressor);
+        debug!("Auto Compressor Selection: {:?}", self.compressor);
     }
 
     /// Decompresses a frame and returns the resulting data array
