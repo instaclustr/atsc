@@ -96,13 +96,13 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
         CompressorType::Fft => op.set_compressor(Compressor::FFT),
         CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
         CompressorType::Idw => op.set_compressor(Compressor::Idw),
-        _ => todo!("Auto selection of compressor not yet implemented!"),
+        CompressorType::Auto => op.set_compressor(Compressor::Auto)
     }
     for (cpr, data) in op.get_execution().into_iter() {
         debug!("Chunk size: {}", data.len());
         // If compressor is a losseless one, compress with the error defined, or default
         match arguments.compressor {
-            CompressorType::Fft |  CompressorType::Polynomial | CompressorType::Idw => {
+            CompressorType::Fft |  CompressorType::Polynomial | CompressorType::Idw | CompressorType::Auto => {
                 cs.compress_chunk_bounded_with(data, cpr.to_owned(), arguments.error as f32 / 100.0)
             }
             _ => cs.compress_chunk_with(data, cpr.to_owned()),

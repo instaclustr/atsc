@@ -50,6 +50,33 @@ impl CompressorFrame {
         self.data = self.compressor.compress_bounded(data, max_error as f64);
     }
 
+    /// Run all compressor algorithms and pick the best one, mostly for auto
+    pub fn compress_best(&mut self, data: &[f64], max_error: f32) {
+        self.sample_count = data.len();
+        // Eligible compressors for use
+        let compressor_list = [
+            Compressor::Constant,
+            Compressor::FFT,
+            Compressor::Polynomial,
+        ];
+
+        // Run all the eligible compressors and choose smallest
+        let (smallest_result, chosen_compressor) = compressor_list
+            .iter()
+            .map(|compressor| {
+                (
+                    compressor.get_compress_bounded_results(data, max_error as f64),
+                    compressor,
+                )
+            })
+            .min_by_key(|x| x.0.compressed_data.len())
+            .unwrap();
+
+        self.data = smallest_result.compressed_data;
+        self.compressor = *chosen_compressor;
+        debug!("Auto Compressor Selection: {:?}", self.compressor);
+    }
+
     /// Decompresses a frame and returns the resulting data array
     pub fn decompress(&self) -> Vec<f64> {
         debug!("Decompressing Frame. Size: {}, Samples: {}", self.frame_size, self.sample_count);

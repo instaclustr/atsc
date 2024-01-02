@@ -1,6 +1,6 @@
 use crate::utils::{DECIMAL_PRECISION, error::calculate_error, round_and_limit_f64, round_f64};
 
-use super::BinConfig;
+use super::{BinConfig, CompressorResult};
 use bincode::{Decode, Encode};
 use inverse_distance_weight::IDW;
 use log::{debug, info, trace};
@@ -23,7 +23,7 @@ pub enum Method {
     Idw,
 }
 
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Polynomial {
     /// Compressor ID
     pub id: PolynomialType,
@@ -33,6 +33,50 @@ pub struct Polynomial {
     pub max: f64,
     /// What is the base step between points
     pub point_step: u8,
+    /// Compression error
+    pub error: Option<f64>
+}
+
+impl Encode for Polynomial {
+    fn encode <__E: ::bincode::enc::Encoder> (&self, encoder: &mut __E) -> Result <(), ::bincode::error::EncodeError>
+    {
+        Encode::encode(&self.id, encoder)?;
+        Encode::encode(&self.data_points, encoder)?;
+        Encode::encode(&self.min, encoder)?; 
+        Encode::encode(&self.max, encoder)?;
+        Encode::encode(&self.point_step, encoder)?;
+        Ok(())
+    }
+}
+
+impl Decode for Polynomial {
+    fn decode <__D: ::bincode::de::Decoder>(decoder : & mut __D) -> Result<Self, ::bincode::error::DecodeError>
+    {
+        Ok(Self
+        {
+            id: Decode::decode(decoder)?,
+            data_points: Decode::decode(decoder)?,
+            min : Decode::decode(decoder)?,
+            max : Decode::decode(decoder)?,
+            point_step : Decode::decode(decoder)?,
+            error: None,
+        })
+    }
+} 
+
+impl < '__de >::bincode::BorrowDecode< '__de > for Polynomial {
+    fn borrow_decode <__D: ::bincode::de::BorrowDecoder< '__de >>(decoder : &mut __D) -> Result <Self, ::bincode::error::DecodeError>
+    {
+        Ok(Self
+        {
+            id: ::bincode::BorrowDecode::borrow_decode(decoder)?,
+            data_points: ::bincode::BorrowDecode::borrow_decode(decoder)?,
+            min: ::bincode::BorrowDecode::borrow_decode(decoder)?,
+            max: ::bincode::BorrowDecode::borrow_decode(decoder)?,
+            point_step: ::bincode::BorrowDecode::borrow_decode(decoder)?,
+            error: None, 
+        })
+    }
 }
 
 impl Polynomial {
@@ -45,6 +89,7 @@ impl Polynomial {
             data_points: Vec::with_capacity(sample_count),
             // Minimum step is always 1
             point_step: 1,
+            error: None
             }
     }
 
@@ -99,15 +144,20 @@ impl Polynomial {
                 // We can't hit the target, store everything
                 _ => {
                     self.compress_hinted(data, data_len);
+                    // if we store everything, there is no error
+                    current_err = 0.0;
                     break;
                 }
                 
             }
             if self.data_points.len() == data_len {
                 // Storing the whole thing anyway...
+                // if we store everything, there is no error
+                current_err = 0.0;
                 break;
             }
         }
+        self.error = Some(current_err);
         debug!("Final Stored Data Lenght: {} Iterations: {}", self.data_points.len(), iterations);
     } 
 
@@ -150,7 +200,7 @@ impl Polynomial {
         poly
     }
 
-    pub fn to_bytes(self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let config = BinConfig::get();
         bincode::encode_to_vec(self, config).unwrap()
     }
@@ -158,25 +208,6 @@ impl Polynomial {
     // --- END OF MANDATORY METHODS ---
     /// Since IDW and Polynomial are the same code everywhere, this function prepares the data
     /// to be used by one of the polynomial decompression methods
-    /*
-    Trying to explain this:
-
-    1. For calculation a polynomial, we need the data points (Y) and the location of them in the function (X). 
-    2. To avoid storing two sets of points (X, Y) we only store one (Y), since the others we can infer (Or data always starts in `0`, and as an increment of `1`).
-    3. When we decompress, we look into how much data points we stored (size of Y, values), we also know the frame size.
-    4. From the frame size, we do the calculation how many points we should had stored.
-    5. if (3) and (4) doesn't match, we know we stored extra points, that means `min_value` and/or `max_value` where stored too.
-    6. Ok, then the infer we did in 2, might be wrong, we are missing 1 or 2 points in X.
-    7. We call `get_positions` to build X.
-    8. `get_positions` walks the X array, and checks if `min_position` and/or `max_position` (those are stored too) fit in between any interval, since we have regular intervals for X. If they fit, we push them there.
-
-    Example:
-
-    Let's say X is `[0, 5, 10, 15, 20]` and Y is `[3, 2, 3, 4, 5, 6, 3]`. `min_value = 2`, `max_value=6`. `min_position=2`, `max_position=17`.
-
-    Decompression starts, Len(x) = 5, Len(Y) = 7. We are missing 2 points in X.
-    Walk `X` and check every element if `min_position` is between current point and previous point, if so, insert it there. Continue, do it the same for `max_position`.
-     */
     fn get_positions(&self, frame_size: usize) -> Vec<usize> {
         let mut points = Vec::with_capacity(frame_size);
         for position_value in (0..frame_size).step_by(self.point_step as usize) {
@@ -253,7 +284,7 @@ pub fn polynomial(data: &[f64], idw: PolynomialType) -> Vec<u8> {
     c.to_bytes()
 }
 
-pub fn polynomial_allowed_error(data: &[f64], allowed_error: f64, idw: PolynomialType) -> Vec<u8> {
+pub fn polynomial_allowed_error(data: &[f64], allowed_error: f64, idw: PolynomialType) -> CompressorResult {
     info!("Initializing Polynomial Compressor");
     let mut min = data[0];
     let mut max = data[0];
@@ -266,8 +297,7 @@ pub fn polynomial_allowed_error(data: &[f64], allowed_error: f64, idw: Polynomia
     let mut c = Polynomial::new(data.len(), min, max, idw);
     // Convert the data
     c.compress_bounded(data, allowed_error);
-    // Convert to bytes
-    c.to_bytes()
+    CompressorResult::new(c.to_bytes(), c.error.unwrap_or(0.0))
 }
 
 /// Uncompress 
@@ -308,8 +338,8 @@ mod tests {
     fn test_to_allowed_error() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let compressed_data = polynomial_allowed_error(&vector1, 0.05, PolynomialType::Polynomial);
-        let out = Polynomial::decompress(&compressed_data).to_data(frame_size);
+        let cr = polynomial_allowed_error(&vector1, 0.05, PolynomialType::Polynomial);
+        let out = Polynomial::decompress(&cr.compressed_data).to_data(frame_size);
         let e = calculate_error(&vector1, &out);
         assert!(e <= 0.05);
     }
@@ -342,8 +372,8 @@ mod tests {
     fn test_idw_to_allowed_error() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         let frame_size = vector1.len();
-        let compressed_data = polynomial_allowed_error(&vector1, 0.02, PolynomialType::Idw);
-        let out = Polynomial::decompress(&compressed_data).to_data(frame_size);
+        let cr = polynomial_allowed_error(&vector1, 0.02, PolynomialType::Idw);
+        let out = Polynomial::decompress(&cr.compressed_data).to_data(frame_size);
         let e = calculate_error(&vector1, &out);
         assert!(e <= 0.02);
     }

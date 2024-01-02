@@ -2,7 +2,7 @@
 infilename=$1
 
 
-for i in 1 2 3 5 10; 
+for i in 1 3 5; 
 do 
     echo $i;
     mfile="comparison-$filename-error-$i.m"
@@ -27,6 +27,13 @@ do
     target/debug/brro-compressor -u --verbose tmp.bro >> ../../$mfile
 
     sed -i -e 's/Output/output_poly/g'  ../../$mfile
+
+    cp ../../wbro-july/$filename.wbro tmp.wbro 
+
+    target/debug/brro-compressor --error $i tmp.wbro > /dev/null
+    target/debug/brro-compressor -u --verbose tmp.bro >> ../../$mfile
+
+    sed -i -e 's/Output/output_auto/g'  ../../$mfile
 
     echo "plot(Input,'b', output_fft,'r', output_idw, 'g', output_poly, 'k')" >> ../../$mfile
     echo "print -dpng $filename.png" >> ../../$mfile
