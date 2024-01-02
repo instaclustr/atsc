@@ -1,4 +1,5 @@
 use crate::utils::{DECIMAL_PRECISION, error::calculate_error, round_and_limit_f64, round_f64};
+use crate::optimizer::utils::Bitdepth;
 
 use super::{BinConfig, CompressorResult};
 use bincode::{Decode, Encode};

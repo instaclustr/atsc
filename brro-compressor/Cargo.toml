@@ -21,6 +21,7 @@ median = "0.3.2"
 wavbrro = { path = "../wavbrro" }
 splines = "4.3.0"
 inverse_distance_weight = "0.1.1"
+num-traits = "0.2"
 
 [dev-dependencies]
 criterion = "0.5.1"
