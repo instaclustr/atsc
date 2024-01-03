@@ -47,22 +47,22 @@ impl Encode for Polynomial {
         Encode::encode(&self.bitdepth, encoder)?;
         match &self.bitdepth {
             Bitdepth::U8 =>  { 
-                println!("Encoding as u8");
+                debug!("Encoding as u8");
                 let vec_u8: Vec<u8> = self.data_points.iter().map(|f| *f as u8).collect();
                 Encode::encode(&vec_u8, encoder)?;
                  },
             Bitdepth::I16 => { 
-                println!("Encoding as i16");
+                debug!("Encoding as i16");
                 let vec_i16: Vec<i16> = self.data_points.iter().map(|f| *f as i16).collect();
                 Encode::encode(&vec_i16, encoder)?;
                  },
             Bitdepth::I32 => { 
-                println!("Encoding as i32");
+                debug!("Encoding as i32");
                 let vec_i32: Vec<i32> = self.data_points.iter().map(|f| *f as i32).collect();
                 Encode::encode(&vec_i32, encoder)?;
                  },
             Bitdepth::F64 => { 
-                println!("Encoding as f64");
+                debug!("Encoding as f64");
                 Encode::encode(&self.data_points, encoder)?; }
         }
         Encode::encode(&self.min, encoder)?; 
@@ -80,22 +80,22 @@ impl Decode for Polynomial {
         // Here is where the pig twists the tail
         let data_points: Vec<f64> = match bitdepth {
             Bitdepth::U8 =>  { 
-                println!("Decoding as u8");
+                debug!("Decoding as u8");
                 let vec_u8: Vec<u8> = Decode::decode(decoder)?;
                 vec_u8.iter().map(|f| *f as f64).collect()
                 },
             Bitdepth::I16 => { 
-                println!("Decoding as i16");
+                debug!("Decoding as i16");
                 let vec_i16: Vec<i16> = Decode::decode(decoder)?;
                 vec_i16.iter().map(|f| *f as f64).collect()
                 },
             Bitdepth::I32 => { 
-                println!("Decoding as i32");
+                debug!("Decoding as i32");
                 let vec_i32: Vec<i32> = Decode::decode(decoder)?;
                 vec_i32.iter().map(|f| *f as f64).collect()
                 },
             Bitdepth::F64 => { 
-                println!("Decoding as f64");
+                debug!("Decoding as f64");
                 let vec_f64: Vec<f64> = Decode::decode(decoder)?;
                 vec_f64
                 }
@@ -125,22 +125,22 @@ impl < '__de >::bincode::BorrowDecode< '__de > for Polynomial {
         // Here is where the pig twists the tail
         let data_points: Vec<f64> = match bitdepth {
             Bitdepth::U8 =>  { 
-                println!("Decoding as u8");
+                debug!("Decoding as u8");
                 let vec_u8: Vec<u8> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
                 vec_u8.iter().map(|f| *f as f64).collect()
                 },
             Bitdepth::I16 => { 
-                println!("Decoding as i16");
+                debug!("Decoding as i16");
                 let vec_i16: Vec<i16> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
                 vec_i16.iter().map(|f| *f as f64).collect()
                 },
             Bitdepth::I32 => { 
-                println!("Decoding as i32");
+                debug!("Decoding as i32");
                 let vec_i32: Vec<i32> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
                 vec_i32.iter().map(|f| *f as f64).collect()
                 },
             Bitdepth::F64 => { 
-                println!("Decoding as f64");
+                debug!("Decoding as f64");
                 let vec_f64: Vec<f64> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
                 vec_f64
                 }
@@ -159,18 +159,6 @@ impl < '__de >::bincode::BorrowDecode< '__de > for Polynomial {
             point_step,
             error: None,
         })
-        /* 
-        Ok(Self
-        {
-            id: ::bincode::BorrowDecode::borrow_decode(decoder)?,
-            data_points: ::bincode::BorrowDecode::borrow_decode(decoder)?,
-            min: ::bincode::BorrowDecode::borrow_decode(decoder)?,
-            max: ::bincode::BorrowDecode::borrow_decode(decoder)?,
-            point_step: ::bincode::BorrowDecode::borrow_decode(decoder)?,
-            error: None,
-            /// Always decode to f64
-            bitdepth: Bitdepth::F64 
-        })*/
     }
 }
 
@@ -415,7 +403,7 @@ mod tests {
     #[test]
     fn test_polynomial_f64() {
         let vector1 = vec![1.1, 0.1, 1.1, 1.1, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 3, 4, 1, 2, 3, 5, 154, 153, 153, 153, 153, 153, 185, 63, 0, 0, 0, 0, 0, 0, 20, 64, 4]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 0, 4, 154, 153, 153, 153, 153, 153, 241, 63, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 154, 153, 153, 153, 153, 153, 185, 63, 0, 0, 0, 0, 0, 0, 20, 64, 4]);
     }
 
     #[test]

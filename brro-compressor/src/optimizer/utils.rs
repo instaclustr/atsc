@@ -30,6 +30,7 @@ impl DataStats {
         let mut max: f64 = data[0];
         let mut max_loc = 0;
         let mut fractional = false;
+        let mut recommended_bitdepth = Bitdepth::F64;
         for (i, value) in data.iter().enumerate() {
             let t_value = *value;
             if split_n(t_value).1 != 0.0 { fractional = true;}
@@ -43,7 +44,9 @@ impl DataStats {
         let min_int = split_n(min).0;
     
         // Finding the bitdepth without the DC component
-        let recommended_bitdepth = DataStats::bitdepth(max_int, min_int);
+        if !fractional {
+            recommended_bitdepth = DataStats::bitdepth(max_int, min_int);
+        }
         debug!("Recommended Bitdepth: {:?}, Fractional: {}", recommended_bitdepth, fractional);
         DataStats {
             max,
