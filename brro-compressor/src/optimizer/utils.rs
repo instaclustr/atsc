@@ -1,6 +1,7 @@
+use bincode::{Encode, Decode};
 use log::debug;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy, Encode, Decode)]
 pub enum Bitdepth {
     F64,
     I32,
@@ -23,7 +24,7 @@ pub struct DataStats {
 } 
 
 impl DataStats {
-    pub fn new(data: &Vec<f64>) -> Self {
+    pub fn new(data: &[f64]) -> Self {
         let mut min: f64 = data[0];
         let mut min_loc = 0;
         let mut max: f64 = data[0];
@@ -77,19 +78,6 @@ impl DataStats {
         _ => Bitdepth::F64
        }
     }
-}
-
-pub fn chose_type<T>(value: f64, bitdepth: Bitdepth) -> T {
-    match bitdepth {
-        Bitdepth::U8 =>  as_i8(value),
-        Bitdepth::I16 => as_i16(value),
-        Bitdepth::I32 => as_i32(value),
-        Bitdepth::F64 => value
-    }
-}
-
-pub fn to_bitdepth<T>(data: &Vec<f64>, bitdepth: Bitdepth) -> Vec<T> {
-    data.iter().map(|f| chose_type(*f, bitdepth)).collect()
 }
 
 fn as_i8(value: f64) -> i8 {

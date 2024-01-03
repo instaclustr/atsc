@@ -1,5 +1,5 @@
 use crate::utils::{DECIMAL_PRECISION, error::calculate_error, round_and_limit_f64, round_f64};
-use crate::optimizer::utils::Bitdepth;
+use crate::optimizer::utils::{Bitdepth, DataStats};
 
 use super::{BinConfig, CompressorResult};
 use bincode::{Decode, Encode};
@@ -35,14 +35,36 @@ pub struct Polynomial {
     /// What is the base step between points
     pub point_step: u8,
     /// Compression error
-    pub error: Option<f64>
+    pub error: Option<f64>,
+    /// Target bitdepth
+    pub bitdepth: Bitdepth
 }
 
 impl Encode for Polynomial {
     fn encode <__E: ::bincode::enc::Encoder> (&self, encoder: &mut __E) -> Result <(), ::bincode::error::EncodeError>
     {
         Encode::encode(&self.id, encoder)?;
-        Encode::encode(&self.data_points, encoder)?;
+        Encode::encode(&self.bitdepth, encoder)?;
+        match &self.bitdepth {
+            Bitdepth::U8 =>  { 
+                println!("Encoding as u8");
+                let vec_u8: Vec<u8> = self.data_points.iter().map(|f| *f as u8).collect();
+                Encode::encode(&vec_u8, encoder)?;
+                 },
+            Bitdepth::I16 => { 
+                println!("Encoding as i16");
+                let vec_i16: Vec<i16> = self.data_points.iter().map(|f| *f as i16).collect();
+                Encode::encode(&vec_i16, encoder)?;
+                 },
+            Bitdepth::I32 => { 
+                println!("Encoding as i32");
+                let vec_i32: Vec<i32> = self.data_points.iter().map(|f| *f as i32).collect();
+                Encode::encode(&vec_i32, encoder)?;
+                 },
+            Bitdepth::F64 => { 
+                println!("Encoding as f64");
+                Encode::encode(&self.data_points, encoder)?; }
+        }
         Encode::encode(&self.min, encoder)?; 
         Encode::encode(&self.max, encoder)?;
         Encode::encode(&self.point_step, encoder)?;
@@ -53,13 +75,43 @@ impl Encode for Polynomial {
 impl Decode for Polynomial {
     fn decode <__D: ::bincode::de::Decoder>(decoder : & mut __D) -> Result<Self, ::bincode::error::DecodeError>
     {
+        let id = Decode::decode(decoder)?;
+        let bitdepth = Decode::decode(decoder)?;
+        // Here is where the pig twists the tail
+        let data_points: Vec<f64> = match bitdepth {
+            Bitdepth::U8 =>  { 
+                println!("Decoding as u8");
+                let vec_u8: Vec<u8> = Decode::decode(decoder)?;
+                vec_u8.iter().map(|f| *f as f64).collect()
+                },
+            Bitdepth::I16 => { 
+                println!("Decoding as i16");
+                let vec_i16: Vec<i16> = Decode::decode(decoder)?;
+                vec_i16.iter().map(|f| *f as f64).collect()
+                },
+            Bitdepth::I32 => { 
+                println!("Decoding as i32");
+                let vec_i32: Vec<i32> = Decode::decode(decoder)?;
+                vec_i32.iter().map(|f| *f as f64).collect()
+                },
+            Bitdepth::F64 => { 
+                println!("Decoding as f64");
+                let vec_f64: Vec<f64> = Decode::decode(decoder)?;
+                vec_f64
+                }
+            };
+        let min = Decode::decode(decoder)?;
+        let max = Decode::decode(decoder)?;
+        let point_step = Decode::decode(decoder)?;
+        
         Ok(Self
         {
-            id: Decode::decode(decoder)?,
-            data_points: Decode::decode(decoder)?,
-            min : Decode::decode(decoder)?,
-            max : Decode::decode(decoder)?,
-            point_step : Decode::decode(decoder)?,
+            id,
+            bitdepth,
+            data_points,
+            min,
+            max,
+            point_step,
             error: None,
         })
     }
@@ -68,6 +120,46 @@ impl Decode for Polynomial {
 impl < '__de >::bincode::BorrowDecode< '__de > for Polynomial {
     fn borrow_decode <__D: ::bincode::de::BorrowDecoder< '__de >>(decoder : &mut __D) -> Result <Self, ::bincode::error::DecodeError>
     {
+        let id = ::bincode::BorrowDecode::borrow_decode(decoder)?;
+        let bitdepth = ::bincode::BorrowDecode::borrow_decode(decoder)?;
+        // Here is where the pig twists the tail
+        let data_points: Vec<f64> = match bitdepth {
+            Bitdepth::U8 =>  { 
+                println!("Decoding as u8");
+                let vec_u8: Vec<u8> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
+                vec_u8.iter().map(|f| *f as f64).collect()
+                },
+            Bitdepth::I16 => { 
+                println!("Decoding as i16");
+                let vec_i16: Vec<i16> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
+                vec_i16.iter().map(|f| *f as f64).collect()
+                },
+            Bitdepth::I32 => { 
+                println!("Decoding as i32");
+                let vec_i32: Vec<i32> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
+                vec_i32.iter().map(|f| *f as f64).collect()
+                },
+            Bitdepth::F64 => { 
+                println!("Decoding as f64");
+                let vec_f64: Vec<f64> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
+                vec_f64
+                }
+            };
+        let min = Decode::decode(decoder)?;
+        let max = Decode::decode(decoder)?;
+        let point_step = Decode::decode(decoder)?;
+        
+        Ok(Self
+        {
+            id,
+            bitdepth,
+            data_points,
+            min,
+            max,
+            point_step,
+            error: None,
+        })
+        /* 
         Ok(Self
         {
             id: ::bincode::BorrowDecode::borrow_decode(decoder)?,
@@ -75,13 +167,15 @@ impl < '__de >::bincode::BorrowDecode< '__de > for Polynomial {
             min: ::bincode::BorrowDecode::borrow_decode(decoder)?,
             max: ::bincode::BorrowDecode::borrow_decode(decoder)?,
             point_step: ::bincode::BorrowDecode::borrow_decode(decoder)?,
-            error: None, 
-        })
+            error: None,
+            /// Always decode to f64
+            bitdepth: Bitdepth::F64 
+        })*/
     }
 }
 
 impl Polynomial {
-    pub fn new(sample_count: usize, min: f64, max: f64, ptype: PolynomialType) -> Self {
+    pub fn new(sample_count: usize, min: f64, max: f64, ptype: PolynomialType, bitdepth: Bitdepth) -> Self {
         debug!("Polynomial compressor: min:{} max:{}, Type: {:?}", min, max, ptype);
         Polynomial {
             id: ptype,
@@ -90,7 +184,8 @@ impl Polynomial {
             data_points: Vec::with_capacity(sample_count),
             // Minimum step is always 1
             point_step: 1,
-            error: None
+            error: None,
+            bitdepth
             }
     }
 
@@ -268,34 +363,22 @@ impl Polynomial {
 
 }
 
-pub fn polynomial(data: &[f64], idw: PolynomialType) -> Vec<u8> {
+pub fn polynomial(data: &[f64], p_type: PolynomialType) -> Vec<u8> {
     info!("Initializing Polynomial Compressor");
-    let mut min = data[0];
-    let mut max = data[0];
-    // For these one we need to store where the min and max happens on the data, not only their values
-    for value in data.iter(){
-        if value > &max { max = *value; };
-        if value < &min { min = *value; };
-    }
+    let stats = DataStats::new(data);
     // Initialize the compressor
-    let mut c = Polynomial::new(data.len(), min, max, idw);
+    let mut c = Polynomial::new(data.len(), stats.min, stats.max, p_type, stats.bitdepth);
     // Convert the data
     c.compress(data);
     // Convert to bytes
     c.to_bytes()
 }
 
-pub fn polynomial_allowed_error(data: &[f64], allowed_error: f64, idw: PolynomialType) -> CompressorResult {
+pub fn polynomial_allowed_error(data: &[f64], allowed_error: f64, p_type: PolynomialType) -> CompressorResult {
     info!("Initializing Polynomial Compressor");
-    let mut min = data[0];
-    let mut max = data[0];
-    // For these one we need to store where the min and max happens on the data, not only their values
-    for value in data.iter(){
-        if value > &max { max = *value; };
-        if value < &min { min = *value; };
-    }
+    let stats = DataStats::new(data);
     // Initialize the compressor
-    let mut c = Polynomial::new(data.len(), min, max, idw);
+    let mut c = Polynomial::new(data.len(), stats.min, stats.max, p_type, stats.bitdepth);
     // Convert the data
     c.compress_bounded(data, allowed_error);
     CompressorResult::new(c.to_bytes(), c.error.unwrap_or(0.0))
@@ -312,9 +395,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_polynomial() {
+    fn test_polynomial_u8() {
         let vector1 = vec![1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 4, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 3, 4, 1, 2, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4]);
+    }
+
+    #[test]
+    fn test_polynomial_i16() {
+        let vector1 = vec![1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 500.0];
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 2, 4, 2, 4, 6, 251, 232, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 127, 64, 4]);
+    }
+
+    #[test]
+    fn test_polynomial_i32() {
+        let vector1 = vec![40001.0, 40000.0, 40001.0, 40001.0, 40002.0, 40001.0, 40001.0, 40001.0, 40003.0, 40001.0, 40001.0, 40005.0];
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 1, 4, 252, 130, 56, 1, 0, 252, 132, 56, 1, 0, 252, 134, 56, 1, 0, 252, 138, 56, 1, 0, 0, 0, 0, 0, 0, 136, 227, 64, 0, 0, 0, 0, 160, 136, 227, 64, 4]);
+    }
+
+    #[test]
+    fn test_polynomial_f64() {
+        let vector1 = vec![1.1, 0.1, 1.1, 1.1, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 3, 4, 1, 2, 3, 5, 154, 153, 153, 153, 153, 153, 185, 63, 0, 0, 0, 0, 0, 0, 20, 64, 4]);
     }
 
     #[test]
@@ -348,7 +449,7 @@ mod tests {
     #[test]
     fn test_idw() {
         let vector1 = vec![1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
-        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 4, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 3, 4, 1, 2, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4]);
     }
 
     #[test]
@@ -382,13 +483,13 @@ mod tests {
     #[test]
     fn test_line_polynomial() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0];
-        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Polynomial), [0, 3, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1]);
     }
 
     #[test]
     fn test_line_idw() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0];
-        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1]);
+        assert_eq!(polynomial(&vector1, PolynomialType::Idw), [1, 3, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1]);
     }
 
 }
