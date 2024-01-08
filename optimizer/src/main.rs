@@ -1,45 +1,35 @@
 // Lucas - Once the project is far enough along I strongly reccomend reenabling dead code checks
 #![allow(dead_code)]
 
-use std::{fs::File, path::Path};
-use std::io::Write;
-use std::fs;
-use std::path::PathBuf;
+use clap::{arg, command, Parser};
 use hound::{WavSpec, WavWriter};
-use clap::{Parser, command, arg};
-use regex::Regex;
-use median::Filter;
 use log::{debug, error, info};
+use median::Filter;
+use regex::Regex;
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
+use std::{fs::File, path::Path};
 
 #[derive(Debug)]
 enum MetricTag {
-    Percent(i32), // If it is a percent reduce significant digits to 2
+    Percent(i32),  // If it is a percent reduce significant digits to 2
     Duration(i32), // if it is a duration reduce precision to 1 microsecond
     NotFloat, // A metric that has a float representation but shouldn't (Eg. Precision is not needed)
     QuasiRandom, // A metric that exhibits a quasi random sample behavior. (E.g. Network deltas, heap memory)
-    Bytes(i32), // Data that is in bytes... Make it MB, or KB
-    Other // Everything else
+    Bytes(i32),  // Data that is in bytes... Make it MB, or KB
+    Other,       // Everything else
 }
 
 impl MetricTag {
     #[allow(clippy::wrong_self_convention)]
     fn from_float(&self, x: f64) -> i64 {
         match self {
-            MetricTag::Other => {
-                0
-            }
-            MetricTag::NotFloat | MetricTag::QuasiRandom => {
-                x as i64
-            }
-            MetricTag::Percent(y) => {
-                to_multiply_and_truncate(x, *y)
-            }
-            MetricTag::Duration(y) => {
-                to_multiply_and_truncate(x, *y)
-            },
-            MetricTag::Bytes(y) => {
-                (x as i64)/(*y as i64)
-            }
+            MetricTag::Other => 0,
+            MetricTag::NotFloat | MetricTag::QuasiRandom => x as i64,
+            MetricTag::Percent(y) => to_multiply_and_truncate(x, *y),
+            MetricTag::Duration(y) => to_multiply_and_truncate(x, *y),
+            MetricTag::Bytes(y) => (x as i64) / (*y as i64),
         }
     }
 }
@@ -55,12 +45,14 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
     let r_reader = hound::WavReader::open(filename);
     let mut reader = match r_reader {
         Ok(reader) => reader,
-        Err(_err) => { return Vec::new();}
+        Err(_err) => {
+            return Vec::new();
+        }
     };
     let num_channels = reader.spec().channels as usize;
 
     let mut raw_data: Vec<f64> = Vec::new();
-    let mut u64_holder: [u16; 4] = [0,0,0,0];
+    let mut u64_holder: [u16; 4] = [0, 0, 0, 0];
 
     // Iterate over the samples and channels and push each sample to the vector
     let mut current_channel: usize = 0;
@@ -76,13 +68,12 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
 }
 
 fn generate_wav_header(channels: Option<i32>, bitdepth: u16, samplerate: u32) -> WavSpec {
-    
     hound::WavSpec {
         channels: channels.unwrap_or(4) as u16,
         // TODO: Sample rate adaptations
         sample_rate: samplerate,
         bits_per_sample: bitdepth,
-        sample_format: hound::SampleFormat::Int
+        sample_format: hound::SampleFormat::Int,
     }
 }
 
@@ -94,13 +85,18 @@ fn write_optimal_wav(filename: &str, data: Vec<f64>, bitdepth: i32, dc: i64, cha
     let mut file_path = filename.to_string();
     file_path.truncate(file_path.len() - 4);
     file_path = format!("{}_OPT.wav", file_path);
-    let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(file_path).unwrap();
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .read(true)
+        .open(file_path)
+        .unwrap();
     let mut wav_writer = WavWriter::new(file, header).unwrap();
     for sample in data {
         let _ = match bitdepth {
-            8 =>  wav_writer.write_sample(as_i8(sample-fdc)),
-            16 => wav_writer.write_sample(as_i16(sample-fdc)),
-            _ => wav_writer.write_sample(as_i32(sample-fdc))
+            8 => wav_writer.write_sample(as_i8(sample - fdc)),
+            16 => wav_writer.write_sample(as_i16(sample - fdc)),
+            _ => wav_writer.write_sample(as_i32(sample - fdc)),
         };
     }
     let _ = wav_writer.finalize();
@@ -111,13 +107,18 @@ fn write_optimal_int_wav(filename: &str, data: Vec<i64>, bitdepth: i32, dc: i64,
     let mut file_path = filename.to_string();
     file_path.truncate(file_path.len() - 4);
     file_path = format!("{}_OPT.wav", file_path);
-    let file = std::fs::OpenOptions::new().write(true).create(true).read(true).open(file_path).unwrap();
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .read(true)
+        .open(file_path)
+        .unwrap();
     let mut wav_writer = WavWriter::new(file, header).unwrap();
     for sample in data {
         let _ = match bitdepth {
-            8 =>  wav_writer.write_sample((sample-dc) as i8),
-            16 => wav_writer.write_sample((sample-dc) as i16),
-            _ => wav_writer.write_sample((sample-dc) as i32)
+            8 => wav_writer.write_sample((sample - dc) as i8),
+            16 => wav_writer.write_sample((sample - dc) as i16),
+            _ => wav_writer.write_sample((sample - dc) as i32),
         };
     }
     let _ = wav_writer.finalize();
@@ -151,37 +152,44 @@ fn split_n(x: f64) -> (i64, f64) {
     let exponent = ((bits >> STORED_MANTISSA_DIGITS) as u32 & EXPONENT_MASK) as i32;
 
     let mantissa = (bits & STORED_MANTISSA_MASK) | MANTISSA_MSB;
-    let mantissa = if is_negative { -(mantissa as i64) } else { mantissa as i64 };
+    let mantissa = if is_negative {
+        -(mantissa as i64)
+    } else {
+        mantissa as i64
+    };
 
     let shl = exponent + (64 - f64::MANTISSA_DIGITS as i32 - EXPONENT_BIAS + 1);
     if shl <= 0 {
         let shr = -shl;
-        if shr < 64 { // x >> 0..64
+        if shr < 64 {
+            // x >> 0..64
             let fraction = ((mantissa as u64) >> shr) as f64 * FRACT_SCALE;
             (0, fraction)
-        } else { // x >> 64..
+        } else {
+            // x >> 64..
             (0, 0.0)
         }
-    } 
-    else if shl < 64 { // x << 1..64
+    } else if shl < 64 {
+        // x << 1..64
         let int = mantissa >> (64 - shl);
         let fraction = ((mantissa as u64) << shl) as f64 * FRACT_SCALE;
         (int, fraction)
-    } else if shl < 128 { // x << 64..128
+    } else if shl < 128 {
+        // x << 64..128
         let int = mantissa << (shl - 64);
         (int, 0.0)
-    } else { // x << 128..
+    } else {
+        // x << 128..
         (0, 0.0)
     }
 }
 
 fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
-    let u64_bits = (bits[0] as u64) |
-        ((bits[1] as u64) << 16) |
-        ((bits[2] as u64) << 32) |
-        ((bits[3] as u64) << 48);
+    let u64_bits = (bits[0] as u64)
+        | ((bits[1] as u64) << 16)
+        | ((bits[2] as u64) << 32)
+        | ((bits[3] as u64) << 48);
 
-    
     f64::from_bits(u64_bits)
 }
 
@@ -191,7 +199,7 @@ fn get_max(a: i32, b: i32) -> i32 {
 
 /// Converts a float via multiplication and truncation
 fn to_multiply_and_truncate(number: f64, mul: i32) -> i64 {
-    (number*mul as f64) as i64
+    (number * mul as f64) as i64
 }
 
 fn to_median_filter(data: &Vec<f64>) -> Vec<i64> {
@@ -244,9 +252,15 @@ fn analyze_data(data: &Vec<f64>) -> (i32, i64, bool) {
     let mut fractional = false;
     for value in data {
         let t_value = *value;
-        if split_n(t_value).1 != 0.0 { fractional = true;}
-        if t_value > max { max = t_value};
-        if t_value < min { min = t_value};
+        if split_n(t_value).1 != 0.0 {
+            fractional = true;
+        }
+        if t_value > max {
+            max = t_value
+        };
+        if t_value < min {
+            min = t_value
+        };
     }
     // Check max size of values
     // For very large numbers (i32 and i64), it might be ideal to detect the dc component
@@ -258,11 +272,14 @@ fn analyze_data(data: &Vec<f64>) -> (i32, i64, bool) {
     let max_frac = split_n(max).1;
 
     // Finding the bitdepth without the DC component
-    let recommended_bitdepth = find_bitdepth(max_int-min_int, min_int);
+    let recommended_bitdepth = find_bitdepth(max_int - min_int, min_int);
     if !fractional {
         info!(" Recommended Bitdepth: {} ", recommended_bitdepth);
     } else {
-        info!(" Fractional, Recommended Bitdepth: {}, Fractions max: {}", recommended_bitdepth, max_frac);
+        info!(
+            " Fractional, Recommended Bitdepth: {}, Fractions max: {}",
+            recommended_bitdepth, max_frac
+        );
     }
     (recommended_bitdepth, min_int, fractional)
 }
@@ -272,11 +289,15 @@ fn analyze_int_data(data: &Vec<i64>) -> (i32, i64) {
     let mut max: i64 = 0;
     for value in data {
         let t_value = *value;
-        if t_value > max { max = t_value};
-        if t_value < min { min = t_value};
+        if t_value > max {
+            max = t_value
+        };
+        if t_value < min {
+            min = t_value
+        };
     }
 
-    let recommended_bitdepth = find_bitdepth(max-min, min);
+    let recommended_bitdepth = find_bitdepth(max - min, min);
     info!(" Recommended Bitdepth: {} ", recommended_bitdepth);
     (recommended_bitdepth, min)
 }
@@ -287,17 +308,16 @@ fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
         _ if max_int <= u8::MAX.into() => 8,
         _ if max_int <= i16::MAX.into() => 16,
         _ if max_int <= i32::MAX.into() => 32,
-        _ => 64
+        _ => 64,
     };
 
     let bitdepth_signed = match min_int {
         _ if min_int == 0 => 8,
         _ if min_int >= i16::MIN.into() => 16,
         _ if min_int >= i32::MIN.into() => 32,
-        _ => 64
+        _ => 64,
     };
 
-    
     get_max(bitdepth, bitdepth_signed)
 }
 
@@ -305,11 +325,11 @@ fn process_args(input_path: &str, arguments: &Args) {
     if arguments.directory {
         handle_directory(input_path, arguments);
     } else {
-        process_file( input_path.into(), arguments, None);
+        process_file(input_path.into(), arguments, None);
     }
 }
 
-fn handle_directory(input_path: &str, arguments: &Args){
+fn handle_directory(input_path: &str, arguments: &Args) {
     let new_directory = format!("new_{}", input_path);
 
     if fs::create_dir_all(&new_directory).is_err() {
@@ -321,7 +341,7 @@ fn handle_directory(input_path: &str, arguments: &Args){
         for entry_result in entries {
             match entry_result {
                 Ok(entry) if entry.path().is_file() => {
-                    process_file(entry.path(), arguments, Some(&new_directory), );
+                    process_file(entry.path(), arguments, Some(&new_directory));
                 }
                 Err(e) => error!("Error reading directory entry: {}", e),
                 _ => {}
@@ -333,7 +353,7 @@ fn handle_directory(input_path: &str, arguments: &Args){
 }
 fn process_file(full_path: PathBuf, arguments: &Args, new_directory: Option<&str>) {
     if let Some(filename) = full_path.file_name().and_then(|s| s.to_str()) {
-        let output_path = construct_output_path( filename, new_directory);
+        let output_path = construct_output_path(filename, new_directory);
         let mut file = match File::create(&output_path) {
             Ok(file) => file,
             Err(_) => {
@@ -360,24 +380,23 @@ fn process_data_and_write_output(full_path: &Path, file: &mut File, arguments: &
     let mut _dc_component: i64 = 0;
     let mut _fractional = true;
     let wav_data = read_metrics_from_wav(full_path_str);
-    if arguments.dump_raw { writeln!(file, "{:?}", wav_data).expect("Unable to write to file"); }
+    if arguments.dump_raw {
+        writeln!(file, "{:?}", wav_data).expect("Unable to write to file");
+    }
     // Depending on Metric Tag, apply a transformation
     let tag = tag_metric(full_path_str);
     debug!("Tag: {:?}", tag);
     let iwav_data = match tag {
         MetricTag::Other => Vec::new(),
         MetricTag::QuasiRandom => to_median_filter(&wav_data),
-        _ => {
-            wav_data
-                .iter()
-                .map(|x| tag.from_float(*x))
-                .collect()
-        }
+        _ => wav_data.iter().map(|x| tag.from_float(*x)).collect(),
     };
     // We split the code here
     if !iwav_data.is_empty() {
         _fractional = false;
-        if arguments.dump_optimized { writeln!(file, "{:?}", iwav_data).expect("Unable to write to file"); }
+        if arguments.dump_optimized {
+            writeln!(file, "{:?}", iwav_data).expect("Unable to write to file");
+        }
         (_bitdepth, _dc_component) = analyze_int_data(&iwav_data);
     } else {
         (_bitdepth, _dc_component, _fractional) = analyze_data(&wav_data);
@@ -389,7 +408,7 @@ fn process_data_and_write_output(full_path: &Path, file: &mut File, arguments: &
         debug!("Writing optimal file!");
         match iwav_data.len() {
             0 => write_optimal_wav(full_path_str, wav_data, _bitdepth, _dc_component, 1),
-            _ => write_optimal_int_wav(full_path_str, iwav_data, _bitdepth, _dc_component, 1)
+            _ => write_optimal_int_wav(full_path_str, iwav_data, _bitdepth, _dc_component, 1),
         }
     }
 }

@@ -1,13 +1,11 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use brro_compressor::compressor::constant::{constant, constant_to_data, Constant};
-use rand::{SeedableRng, Rng};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use rand::{Rng, SeedableRng};
 
 /// Generates random data of a given size with a fixed seed.
 fn generate_random_data_with_seed(size: usize, seed: u64) -> Vec<f64> {
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    (0..size)
-        .map(|_| rng.gen_range(0.0..1.0))
-        .collect()
+    (0..size).map(|_| rng.gen_range(0.0..1.0)).collect()
 }
 
 /// Benchmark for constant compression.

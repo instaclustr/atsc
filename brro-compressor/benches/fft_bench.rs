@@ -1,5 +1,5 @@
+use brro_compressor::compressor::fft::{fft, fft_allowed_error, fft_set, fft_to_data, FFT};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use brro_compressor::compressor::fft::{fft, fft_to_data, fft_allowed_error, fft_set, FFT};
 
 // Basic FFT compression benchmark
 fn fft_basic_benchmark(c: &mut Criterion) {
@@ -98,7 +98,6 @@ fn fft_varying_data_size_benchmark(c: &mut Criterion) {
     });
 }
 
-
 // Compression ratio vs. time benchmark
 fn compression_ratio_vs_time_benchmark(c: &mut Criterion) {
     let data = vec![1.0; 1024];
@@ -123,8 +122,7 @@ fn multiple_compression_rounds_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let mut compressed_data = fft(black_box(&data));
             for _ in 1..rounds {
-                compressed_data =
-                    fft(&FFT::decompress(&compressed_data).to_data(data.len()));
+                compressed_data = fft(&FFT::decompress(&compressed_data).to_data(data.len()));
             }
             black_box(compressed_data);
         });

@@ -17,19 +17,19 @@ impl ErrorMethod {
             ErrorMethod::Nmse => error_nmsqe(original, generated),
             ErrorMethod::Mae => error_mae(original, generated),
             ErrorMethod::Mape => error_mape(original, generated),
-            ErrorMethod::Smape => error_smape(original, generated)
+            ErrorMethod::Smape => error_smape(original, generated),
         }
     }
 }
 
-/// This function calculates the error between 2 arrays of f64. The results are from 0 to .. 
+/// This function calculates the error between 2 arrays of f64. The results are from 0 to ..
 /// Being 0, no error, 1 - 100% error and so on.
 /// This uses the default function to calculte it.
 pub fn calculate_error(original: &[f64], generated: &[f64]) -> f64 {
     ErrorMethod::error(ErrorMethod::default(), original, generated)
 }
 
-/// This function calculates the error between 2 arrays of f64. The results are from 0 to .. 
+/// This function calculates the error between 2 arrays of f64. The results are from 0 to ..
 /// Being 0, no error, 1 - 100% error and so on.
 /// This uses the provided method to calculte it.
 pub fn calculate_error_method(original: &[f64], generated: &[f64], method: ErrorMethod) -> f64 {
@@ -46,20 +46,22 @@ pub fn calculate_error_method(original: &[f64], generated: &[f64], method: Error
 ///
 /// The mean squared error, or an error message if the vector lengths are different.
 pub fn error_mse(vec1: &[f64], vec2: &[f64]) -> f64 {
-    if vec1.len() != vec2.len() { panic!("Can't compute error! Arrays with different lenghts.")}
+    if vec1.len() != vec2.len() {
+        panic!("Can't compute error! Arrays with different lenghts.")
+    }
 
     let min_length = cmp::min(vec1.len(), vec2.len());
-    let squared_error: f64 = (0..min_length)
-        .map(|i| (vec1[i] - vec2[i]).powi(2))
-        .sum();
+    let squared_error: f64 = (0..min_length).map(|i| (vec1[i] - vec2[i]).powi(2)).sum();
     squared_error / min_length as f64
 }
 
 /// Computes the Normalized Mean Square Error between 2 signals
 /// # Panics:
-/// When the 2 arrays don't have the same size 
+/// When the 2 arrays don't have the same size
 pub fn error_nmsqe(original: &[f64], generated: &[f64]) -> f64 {
-    if original.len() != generated.len() { panic!("Can't compute error! Arrays with different lenghts.")}
+    if original.len() != generated.len() {
+        panic!("Can't compute error! Arrays with different lenghts.")
+    }
 
     let squared_error: f64 = original
         .iter()
@@ -72,9 +74,11 @@ pub fn error_nmsqe(original: &[f64], generated: &[f64]) -> f64 {
 
 /// Computes the Mean Absolute Error between 2 signals
 /// # Panics:
-/// When the 2 arrays don't have the same size 
+/// When the 2 arrays don't have the same size
 pub fn error_mae(original: &[f64], generated: &[f64]) -> f64 {
-    if original.len() != generated.len() { panic!("Can't compute error! Arrays with different lenghts.")}
+    if original.len() != generated.len() {
+        panic!("Can't compute error! Arrays with different lenghts.")
+    }
 
     let abs_error: f64 = original
         .iter()
@@ -86,14 +90,16 @@ pub fn error_mae(original: &[f64], generated: &[f64]) -> f64 {
 
 /// Computes the Mean Absolute Percentage Error between 2 signals
 /// # Panics:
-/// When the 2 arrays don't have the same size 
+/// When the 2 arrays don't have the same size
 pub fn error_mape(original: &[f64], generated: &[f64]) -> f64 {
-    if original.len() != generated.len() { panic!("Can't compute error! Arrays with different lenghts.")}
+    if original.len() != generated.len() {
+        panic!("Can't compute error! Arrays with different lenghts.")
+    }
 
     let abs_error: f64 = original
         .iter()
         .zip(generated.iter())
-        .map(|(original, generated)| ((generated - original)/original).abs())
+        .map(|(original, generated)| ((generated - original) / original).abs())
         .sum();
     // TODO: NaN needs to be handled
     abs_error / original.len() as f64
@@ -101,16 +107,19 @@ pub fn error_mape(original: &[f64], generated: &[f64]) -> f64 {
 
 /// Computes the Symmetric Mean Absolute Percentage Error between 2 signals
 /// # Panics:
-/// When the 2 arrays don't have the same size 
+/// When the 2 arrays don't have the same size
 /// Output between 0 and 1 (1 is 100% error)
 pub fn error_smape(original: &[f64], generated: &[f64]) -> f64 {
-    if original.len() != generated.len() { panic!("Can't compute error! Arrays with different lenghts.")}
+    if original.len() != generated.len() {
+        panic!("Can't compute error! Arrays with different lenghts.")
+    }
 
     let mut sum_up = 0.0;
     let mut sum_down = 0.0;
     for (&value_original, &value_generated) in original.iter().zip(generated) {
-
-        if value_generated == 0.0 && value_original == 0.0 { continue; }
+        if value_generated == 0.0 && value_original == 0.0 {
+            continue;
+        }
         sum_up += (value_generated - value_original).abs();
         sum_down += value_original.abs() + value_generated.abs();
     }
@@ -166,7 +175,9 @@ mod tests {
         let vector2 = vec![2.5, 4.0, 6.0, 8.0, 10.0];
         let vector3 = vec![1.0];
         let vector4 = vec![1.1];
-        let vector5 = vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
+        let vector5 = vec![
+            1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 5.0, 1.0, 2.0, 7.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0,
+        ];
 
         assert_eq!(error_smape(&vector1, &vector1), 0.0);
         assert_eq!(error_smape(&vector5, &vector5), 0.0);

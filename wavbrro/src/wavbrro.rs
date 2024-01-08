@@ -1,12 +1,11 @@
 use rkyv::{Archive, Deserialize, Serialize};
-use std::{io, fmt, result, error};
 use std::path::Path;
-
+use std::{error, fmt, io, result};
 
 use crate::read::{is_wavbrro_file, read_wavbrro_file};
 use crate::write::write_wavbrro_file;
 
-const MAX_CHUNK_SIZE:usize = 2048;
+const MAX_CHUNK_SIZE: usize = 2048;
 
 #[derive(Archive, Deserialize, Serialize, Debug, PartialEq)]
 #[archive(
@@ -43,15 +42,15 @@ impl WavBrro {
             sample_count: 0,
             // Default to f64
             bitdepth: 5,
-            chunks: Vec::new()
+            chunks: Vec::new(),
         }
     }
 
     fn is_chunk_full(&self) -> bool {
         match self.chunks.last() {
-            Some(c) => { c.len() >= MAX_CHUNK_SIZE },
-            None => { true }
-        } 
+            Some(c) => c.len() >= MAX_CHUNK_SIZE,
+            None => true,
+        }
     }
 
     fn create_chunk(&mut self) {
@@ -63,14 +62,16 @@ impl WavBrro {
     fn from_slice(data: &[f64]) -> Self {
         let sample_count = data.len();
         WavBrro {
-                sample_count: sample_count as u32,
-                bitdepth: 5,
-                chunks: data.chunks(MAX_CHUNK_SIZE).map(|s| s.into()).collect()
-            }
+            sample_count: sample_count as u32,
+            bitdepth: 5,
+            chunks: data.chunks(MAX_CHUNK_SIZE).map(|s| s.into()).collect(),
+        }
     }
 
     pub fn add_sample(&mut self, sample: f64) {
-        if self.is_chunk_full() { self.create_chunk() }
+        if self.is_chunk_full() {
+            self.create_chunk()
+        }
         self.chunks.last_mut().unwrap().push(sample);
         self.sample_count += 1;
     }
@@ -78,16 +79,16 @@ impl WavBrro {
     // This should be generic, but first implementation is going to be Vec f64
     // This consumes self!
     pub fn get_samples(self) -> Vec<f64> {
-        self.chunks.into_iter()
-                   .flatten()
-                   .collect::<Vec<f64>>()
+        self.chunks.into_iter().flatten().collect::<Vec<f64>>()
     }
 
     // This should be generic, but first implementation is going to be Vec f64
     // TODO: This will panic left and right, make it right
     pub fn from_file(file_path: &Path) -> Result<Vec<f64>, Error> {
         // Check if the header is correct
-        if !is_wavbrro_file(file_path)? {return Err(Error::FormatError);};
+        if !is_wavbrro_file(file_path)? {
+            return Err(Error::FormatError);
+        };
         let bytes = read_wavbrro_file(file_path)?;
         let obj = WavBrro::from_bytes(&bytes);
         Ok(obj.get_samples())
@@ -110,13 +111,12 @@ impl WavBrro {
         rkyv::to_bytes::<_, 1024>(self).expect("Failed to serialize data!")
     }
 
-    pub fn from_bytes(bytes: &[u8] ) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Self {
         rkyv::from_bytes::<WavBrro>(bytes).expect("Failed to deserialize data!")
     }
-
 }
 
-// Error class is based on https://codeberg.org/ruuda/hound/src/branch/master given the similarities 
+// Error class is based on https://codeberg.org/ruuda/hound/src/branch/master given the similarities
 // between the formats (WAV and WAVBRRO).
 #[derive(Debug)]
 pub enum Error {
@@ -149,9 +149,7 @@ impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
         match *self {
             Error::IoError(ref err) => err.fmt(formatter),
-            Error::FormatError => {
-                formatter.write_str("Wrong WAVBRRO file!")
-            }
+            Error::FormatError => formatter.write_str("Wrong WAVBRRO file!"),
             Error::TooWide => {
                 formatter.write_str("The sample has more bits than the destination type.")
             }
@@ -209,7 +207,13 @@ mod tests {
     fn test_serialization() {
         let mut wb = WavBrro::new();
         wb.add_sample(1.0);
-        assert_eq!(wb.to_bytes().as_slice(), &[0, 0, 0, 0, 0, 0, 240, 63, 248, 255, 255, 255, 1, 0, 0, 0, 248, 255, 255, 255, 1, 0, 0, 0, 1, 0, 0, 0, 5, 0, 0, 0]);
+        assert_eq!(
+            wb.to_bytes().as_slice(),
+            &[
+                0, 0, 0, 0, 0, 0, 240, 63, 248, 255, 255, 255, 1, 0, 0, 0, 248, 255, 255, 255, 1,
+                0, 0, 0, 1, 0, 0, 0, 5, 0, 0, 0
+            ]
+        );
     }
 
     #[test]

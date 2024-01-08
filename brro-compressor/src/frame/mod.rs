@@ -1,11 +1,11 @@
-use std::mem::size_of_val;
+use crate::compressor::Compressor;
 use bincode::{Decode, Encode};
 use log::debug;
-use crate::compressor::Compressor;
+use std::mem::size_of_val;
 
 /// This is the structure of a compressor frame
 #[derive(Encode, Decode, Debug, Clone)]
-pub struct CompressorFrame{
+pub struct CompressorFrame {
     /// The frame size in bytes,
     frame_size: usize,
     /// The number of samples in this frame,
@@ -17,15 +17,16 @@ pub struct CompressorFrame{
 }
 
 impl CompressorFrame {
-    ///  Creates a compressor frame, if a compressor is provided, it forces that compressor, otherwise is selected 
+    ///  Creates a compressor frame, if a compressor is provided, it forces that compressor, otherwise is selected
     /// by the optimizer
     /// compressor: None to allow BRRO to chose, or force one
     pub fn new(provided_compressor: Option<Compressor>) -> Self {
-        CompressorFrame { 
+        CompressorFrame {
             frame_size: 0,
             sample_count: 0,
             compressor: provided_compressor.unwrap_or_default(),
-            data: Vec::new() }
+            data: Vec::new(),
+        }
     }
 
     /// Calculates the size of the Frame and "closes it"
@@ -79,8 +80,10 @@ impl CompressorFrame {
 
     /// Decompresses a frame and returns the resulting data array
     pub fn decompress(&self) -> Vec<f64> {
-        debug!("Decompressing Frame. Size: {}, Samples: {}", self.frame_size, self.sample_count);
+        debug!(
+            "Decompressing Frame. Size: {}, Samples: {}",
+            self.frame_size, self.sample_count
+        );
         self.compressor.decompress(self.sample_count, &self.data)
     }
-
 }

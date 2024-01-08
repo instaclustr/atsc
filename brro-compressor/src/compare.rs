@@ -1,4 +1,8 @@
-use crate::compressor::{constant::constant, fft::fft, polynomial::{polynomial, PolynomialType}};
+use crate::compressor::{
+    constant::constant,
+    fft::fft,
+    polynomial::{polynomial, PolynomialType},
+};
 use std::thread;
 
 /// Enum to represent the decision between compressors.
@@ -23,16 +27,31 @@ impl CompressionDecision {
         // Create threads for each compressor
         let thread_constant = thread::spawn(move || constant(&data_constant));
         let thread_fft = thread::spawn(move || fft(&data_fft));
-        let thread_polynomial = thread::spawn(move || polynomial(&data_polynomial, PolynomialType::Polynomial));
+        let thread_polynomial =
+            thread::spawn(move || polynomial(&data_polynomial, PolynomialType::Polynomial));
 
         // Wait for threads to finish and collect their results with error handling
-        let result_constant = thread_constant.join().map_err(|e| format!("Constant thread error: {:?}", e))?;
-        let result_fft = thread_fft.join().map_err(|e| format!("FFT thread error: {:?}", e))?;
-        let result_polynomial = thread_polynomial.join().map_err(|e| format!("Polynomial thread error: {:?}", e))?;
+        let result_constant = thread_constant
+            .join()
+            .map_err(|e| format!("Constant thread error: {:?}", e))?;
+        let result_fft = thread_fft
+            .join()
+            .map_err(|e| format!("FFT thread error: {:?}", e))?;
+        let result_polynomial = thread_polynomial
+            .join()
+            .map_err(|e| format!("Polynomial thread error: {:?}", e))?;
 
         // Use the decision logic to determine the compression decision
-        let decision = match (result_constant.len(), result_fft.len(), result_polynomial.len()) {
-            (constant_len, fft_len, poly_len) if constant_len < fft_len && constant_len < poly_len => CompressionDecision::Constant,
+        let decision = match (
+            result_constant.len(),
+            result_fft.len(),
+            result_polynomial.len(),
+        ) {
+            (constant_len, fft_len, poly_len)
+                if constant_len < fft_len && constant_len < poly_len =>
+            {
+                CompressionDecision::Constant
+            }
             (_, fft_len, poly_len) if fft_len < poly_len => CompressionDecision::Fft,
             _ => CompressionDecision::Polynomial,
         };
@@ -52,15 +71,20 @@ impl CompressionDecision {
 
         Ok(())
     }
-
 }
 fn get_compression_decision(
     result_constant: &[f64],
     result_fft: &[f64],
     result_polynomial: &[f64],
 ) -> CompressionDecision {
-    match (result_constant.len(), result_fft.len(), result_polynomial.len()) {
-        (constant_len, fft_len, poly_len) if constant_len < fft_len && constant_len < poly_len => CompressionDecision::Constant,
+    match (
+        result_constant.len(),
+        result_fft.len(),
+        result_polynomial.len(),
+    ) {
+        (constant_len, fft_len, poly_len) if constant_len < fft_len && constant_len < poly_len => {
+            CompressionDecision::Constant
+        }
         (_, fft_len, poly_len) if fft_len < poly_len => CompressionDecision::Fft,
         _ => CompressionDecision::Polynomial,
     }
@@ -94,5 +118,4 @@ mod tests {
         let decision = get_compression_decision(&result_constant, &result_fft, &result_polynomial);
         assert_eq!(decision, CompressionDecision::Polynomial);
     }
-    
 }

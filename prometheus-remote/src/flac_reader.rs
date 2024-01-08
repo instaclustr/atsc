@@ -1,12 +1,12 @@
 use std::fs::File;
 
 use symphonia::core::audio::SampleBuffer;
+use symphonia::core::codecs::{Decoder, DecoderOptions};
 use symphonia::core::errors::Error as SymphoniaError;
-use symphonia::core::codecs::{DecoderOptions, Decoder};
-use symphonia::core::formats::{FormatOptions,FormatReader};
+use symphonia::core::formats::{FormatOptions, FormatReader};
+use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
-use symphonia::core::io::MediaSourceStream;
 
 use chrono::{DateTime, Utc};
 
@@ -25,7 +25,7 @@ note: t=point in time, chan = channel, samples are the bytes for each channel.
 +------+------+------+------+------+------+------+------+-----
 | byte | byte | byte | byte | byte | byte | byte | byte |  etc
 +------+------+------+------+------+------+------+------+-----
- */ 
+ */
 // TODO: Read from WAV file
 // Flac metric is giving a ton of issues, trying to get something simpler
 pub struct SimpleFlacReader {
@@ -34,18 +34,20 @@ pub struct SimpleFlacReader {
 
 impl SimpleFlacReader {
     pub fn new(file: File, _start_ts: i64) -> Self {
-        SimpleFlacReader {
-                    file,
-                 }
+        SimpleFlacReader { file }
     }
 
-    pub fn get_samples(&self, start: Option<i32>, end: Option<i32>) -> std::result::Result<Vec<f64>, SymphoniaError> {
+    pub fn get_samples(
+        &self,
+        start: Option<i32>,
+        end: Option<i32>,
+    ) -> std::result::Result<Vec<f64>, SymphoniaError> {
         let mut sample_vec: Vec<f64> = Vec::new();
         let mut reader = claxon::FlacReader::new(&self.file).unwrap();
         let channels = reader.streaminfo().channels;
         let mut sample_count = 0;
         // TODO: Make this hold up to channel number
-        let mut sample_channel_data: [u16; 4] = [0,0,0,0];
+        let mut sample_channel_data: [u16; 4] = [0, 0, 0, 0];
         let mut frame_reader = reader.blocks();
         let mut block = claxon::Block::empty();
         loop {
@@ -56,9 +58,16 @@ impl SimpleFlacReader {
                 Ok(None) => break, // EOF.
                 Err(error) => panic!("[DEBUG][READ][FLAC] {}", error),
             }
-            debug!("[READ][SimpleFLaC] Processing block... Samples processed: {:?}", sample_count);
-            if sample_count < start.unwrap_or(0) { continue; }
-            if sample_count > end.unwrap_or(lib_vsri::MAX_INDEX_SAMPLES) { continue; }
+            debug!(
+                "[READ][SimpleFLaC] Processing block... Samples processed: {:?}",
+                sample_count
+            );
+            if sample_count < start.unwrap_or(0) {
+                continue;
+            }
+            if sample_count > end.unwrap_or(lib_vsri::MAX_INDEX_SAMPLES) {
+                continue;
+            }
             for sample in 0..block.duration() {
                 for channel in 0..channels {
                     sample_channel_data[channel as usize] = block.sample(channel, sample) as u16;
@@ -67,7 +76,12 @@ impl SimpleFlacReader {
                 sample_count += 1;
             }
         }
-        debug!("[READ][SimpleFLaC] Returning samples for interval: {} {} Sample count: {:?}", start.unwrap_or(0), end.unwrap_or(0), sample_count);
+        debug!(
+            "[READ][SimpleFLaC] Returning samples for interval: {} {} Sample count: {:?}",
+            start.unwrap_or(0),
+            end.unwrap_or(0),
+            sample_count
+        );
         Ok(sample_vec)
     }
 
@@ -76,42 +90,38 @@ impl SimpleFlacReader {
     }
 
     fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
-        let u64_bits = (bits[0] as u64) |
-                    ((bits[1] as u64) << 16) |
-                    ((bits[2] as u64) << 32) |
-                    ((bits[3] as u64) << 48);
-        
-        
+        let u64_bits = (bits[0] as u64)
+            | ((bits[1] as u64) << 16)
+            | ((bits[2] as u64) << 32)
+            | ((bits[3] as u64) << 48);
+
         f64::from_bits(u64_bits)
     }
-
 }
 
-
- 
- pub struct FlacMetric {
-    timeseries_data: Vec<(i64, f64)>, // Sample Data
-    file: File,                       // The File where the metric is
-    interval_start: i64,              // The start interval in timestamp with miliseconds
+pub struct FlacMetric {
+    timeseries_data: Vec<(i64, f64)>,             // Sample Data
+    file: File,                                   // The File where the metric is
+    interval_start: i64, // The start interval in timestamp with miliseconds
     decoder: Option<Box<dyn Decoder>>, // Flac decoder
-    format_reader: Option<Box<dyn FormatReader>> // Flac format reader
+    format_reader: Option<Box<dyn FormatReader>>, // Flac format reader
 }
 
 impl FlacMetric {
     pub fn new(file: File, start_ts: i64) -> Self {
         FlacMetric {
-                    timeseries_data: Vec::new(),
-                    file,
-                    interval_start: start_ts,
-                    decoder: None,
-                    format_reader: None
-                 }
+            timeseries_data: Vec::new(),
+            file,
+            interval_start: start_ts,
+            decoder: None,
+            format_reader: None,
+        }
     }
 
     fn datetime_from_ms(real_time: i64) -> String {
         // Time is in ms, convert it to seconds
         let datetime = DateTime::<Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(real_time/ 1000, 0).unwrap(),
+            chrono::NaiveDateTime::from_timestamp_opt(real_time / 1000, 0).unwrap(),
             Utc,
         );
         // Transform datetime to string with the format YYYY-MM-DD
@@ -127,7 +137,7 @@ impl FlacMetric {
     fn get_format_reader(&self) -> Box<dyn FormatReader> {
         // TODO: One more unwrap to deal with
         let owned_file = self.file.try_clone().unwrap();
-        debug!("[READ][FLAC] Probing file: {:?}",owned_file);
+        debug!("[READ][FLAC] Probing file: {:?}", owned_file);
         let file = Box::new(owned_file);
         // Create the media source stream using the boxed media source from above.
         let mss = MediaSourceStream::new(file, Default::default());
@@ -135,24 +145,36 @@ impl FlacMetric {
         let format_opts: FormatOptions = Default::default();
         let metadata_opts: MetadataOptions = Default::default();
         // Probe the media source stream for a format.
-        let probed = symphonia::default::get_probe().format(Hint::new().mime_type("FLaC"), mss, &format_opts, &metadata_opts).unwrap();
+        let probed = symphonia::default::get_probe()
+            .format(
+                Hint::new().mime_type("FLaC"),
+                mss,
+                &format_opts,
+                &metadata_opts,
+            )
+            .unwrap();
         // Get the format reader yielded by the probe operation.
         probed.format
     }
 
-    fn get_decoder(&self) ->  Box<dyn Decoder> {
+    fn get_decoder(&self) -> Box<dyn Decoder> {
         let decoder_opts: DecoderOptions = Default::default();
         let format = self.get_format_reader();
         // Get the default track.
         let track = format.default_track().unwrap();
         // Create a decoder for the track.
-        let decoder = symphonia::default::get_codecs().make(&track.codec_params, &decoder_opts).unwrap();
+        let decoder = symphonia::default::get_codecs()
+            .make(&track.codec_params, &decoder_opts)
+            .unwrap();
         decoder
     }
 
-
     /// Read samples from a file with an optional start and end point.
-    pub fn get_samples(&self, start: Option<i32>, end: Option<i32>) -> std::result::Result<Vec<f64>, SymphoniaError> {
+    pub fn get_samples(
+        &self,
+        start: Option<i32>,
+        end: Option<i32>,
+    ) -> std::result::Result<Vec<f64>, SymphoniaError> {
         let mut sample_vec: Vec<f64> = Vec::new();
         let mut format_reader = self.get_format_reader();
         let mut decoder = self.get_decoder();
@@ -170,8 +192,8 @@ impl FlacMetric {
             // How many frames inside the packet
             let dur = packet.dur() as i32;
             // Check if we need to decode this packet or not
-            if !(start_frame < frame_counter+dur && end_frame > frame_counter+dur) { 
-                continue; 
+            if !(start_frame < frame_counter + dur && end_frame > frame_counter + dur) {
+                continue;
             }
             // Decode the packet into samples.
             // TODO: This is overly complex, split into its own code
@@ -189,9 +211,9 @@ impl FlacMetric {
                     // Each frame contains several samples, we need to get the frame not the sample. Since samples = frames * channels
                     if let Some(buf) = &mut sample_buf {
                         buf.copy_interleaved_ref(decoded);
-                        let mut i16_samples: [u16; 4] = [0,0,0,0];
+                        let mut i16_samples: [u16; 4] = [0, 0, 0, 0];
                         let mut i = 1; // Starting at 1, channel number is not 0 indexed...
-                        for  sample in buf.samples() {
+                        for sample in buf.samples() {
                             if i >= channels {
                                 frame_counter += 1;
                                 if frame_counter >= start_frame && frame_counter <= end_frame {
@@ -199,15 +221,15 @@ impl FlacMetric {
                                 }
                                 i = 1;
                             }
-                            i16_samples[i-1] = *sample as u16;
+                            i16_samples[i - 1] = *sample as u16;
                             i += 1;
                         }
                     }
-                },
+                }
                 Err(SymphoniaError::DecodeError(err)) => error!("[READ]Decode error: {}", err),
                 Err(err) => break error!("[READ]Unexpeted Decode error: {}", err),
             }
-        };
+        }
         Ok(sample_vec)
     }
 
@@ -238,35 +260,33 @@ impl FlacMetric {
                     }
                     if let Some(buf) = &mut sample_buf {
                         buf.copy_interleaved_ref(decoded);
-                        let mut i16_samples: [u16; 4] = [0,0,0,0];
+                        let mut i16_samples: [u16; 4] = [0, 0, 0, 0];
                         let mut i = 1; // Starting at 1, channel number is not 0 indexed...
-                        for  sample in buf.samples() {
+                        for sample in buf.samples() {
                             if i >= channels {
                                 sample_vec.push(FlacMetric::join_u16_into_f64(i16_samples));
                                 i = 1;
                             }
-                            i16_samples[i-1] = *sample as u16;
+                            i16_samples[i - 1] = *sample as u16;
                             i += 1;
                         }
                     }
-                },
+                }
                 Err(SymphoniaError::DecodeError(err)) => error!("[READ]Decode error: {}", err),
                 Err(err) => break error!("[READ]Unexpeted Decode error: {}", err),
             }
-        };
+        }
         // Just to make it compile
         Ok(sample_vec)
     }
 
     /// Recreate a f64
     fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
-    let u64_bits = (bits[0] as u64) |
-                ((bits[1] as u64) << 16) |
-                ((bits[2] as u64) << 32) |
-                ((bits[3] as u64) << 48);
-    
-    
-    
-    f64::from_bits(u64_bits)
+        let u64_bits = (bits[0] as u64)
+            | ((bits[1] as u64) << 16)
+            | ((bits[2] as u64) << 32)
+            | ((bits[3] as u64) << 48);
+
+        f64::from_bits(u64_bits)
     }
 }

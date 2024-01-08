@@ -8,16 +8,16 @@ pub struct CompressorHeader {
     frame_count: i16,
 }
 
-impl CompressorHeader{
+impl CompressorHeader {
     pub fn new() -> Self {
-        CompressorHeader{ 
+        CompressorHeader {
             initial_segment: *b"BRRO",
             // We have to limit the bytes of the header
-            frame_count: 0
+            frame_count: 0,
         }
     }
 
-    pub fn add_frame (&mut self) {
+    pub fn add_frame(&mut self) {
         self.frame_count += 1;
-    } 
+    }
 }

@@ -1,10 +1,9 @@
-use std::io::Read; 
-use std::path::{Path, PathBuf};
-use std::fs::File;
-use wavbrro::wavbrro::WavBrro;
-use log::debug;
 use clap::{arg, command, Parser};
-
+use log::debug;
+use std::fs::File;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use wavbrro::wavbrro::WavBrro;
 
 // --- Legacy stuff to read brro "wav" files ---
 fn is_wav_file(file_path: &Path) -> bool {
@@ -21,7 +20,9 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
     let r_reader = hound::WavReader::open(filename);
     let mut reader = match r_reader {
         Ok(reader) => reader,
-        Err(_err) => { return Vec::new(); }
+        Err(_err) => {
+            return Vec::new();
+        }
     };
     let num_channels = reader.spec().channels as usize;
 
@@ -42,11 +43,10 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
 }
 
 fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
-    let u64_bits = (bits[0] as u64) |
-        ((bits[1] as u64) << 16) |
-        ((bits[2] as u64) << 32) |
-        ((bits[3] as u64) << 48);
-
+    let u64_bits = (bits[0] as u64)
+        | ((bits[1] as u64) << 16)
+        | ((bits[2] as u64) << 32)
+        | ((bits[3] as u64) << 48);
 
     let out = f64::from_bits(u64_bits);
     if out.is_infinite() || out.is_nan() {
@@ -76,14 +76,20 @@ fn main() {
     let wav_data = read_metrics_from_wav(filename);
     let mut wb = WavBrro::new();
     // Clean NaN
-    wav_data.iter().for_each(|x| if !x.is_nan() {wb.add_sample(*x)});
+    wav_data.iter().for_each(|x| {
+        if !x.is_nan() {
+            wb.add_sample(*x)
+        }
+    });
     // Write the file
-    let wavbrro_file = format!("{}wbro", filename.strip_suffix("wav").unwrap()); 
+    let wavbrro_file = format!("{}wbro", filename.strip_suffix("wav").unwrap());
     wb.to_file(Path::new(&wavbrro_file));
     // Checking the results
     if arguments.validate {
         let brro_data = wb.get_samples();
         assert_eq!(wav_data, brro_data);
-        println!("File generated but data doesn't match! Tip: Check if NaN or Infinite is in the data.");
+        println!(
+            "File generated but data doesn't match! Tip: Check if NaN or Infinite is in the data."
+        );
     }
 }

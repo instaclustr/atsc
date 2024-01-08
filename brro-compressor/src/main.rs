@@ -2,11 +2,11 @@ use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer::OptimizerPlan;
 use brro_compressor::utils::readers::bro_reader;
-use wavbrro::wavbrro::WavBrro;
 use clap::{arg, command, Parser};
 use log::{debug, error};
 use std::error::Error;
 use std::path::PathBuf;
+use wavbrro::wavbrro::WavBrro;
 
 /// Processes the given input based on the provided arguments.
 fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
@@ -36,8 +36,8 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
     for entry in std::fs::read_dir(arguments.input.clone())? {
         let path = entry?.path();
         if path.is_file() {
-            match process_single_file(path.clone(), arguments)  {
-                Ok (_) => continue,
+            match process_single_file(path.clone(), arguments) {
+                Ok(_) => continue,
                 //TODO: Files are created while this walks the dir, gives a funny output
                 //NOTE: Due to the way read_dir works, it seems we can't do much about this except collecting
                 //      before and then iterating. But that might lead to a MASSIVE array. So it keeps a `funny` output
@@ -56,7 +56,7 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
     debug!("Processing single file...");
     if arguments.uncompress {
         //read
-        if let Some(vec) = bro_reader::read_file(&file_path)?{
+        if let Some(vec) = bro_reader::read_file(&file_path)? {
             let arr: &[u8] = &vec;
             //decompress
             let decompressed_data = decompress_data(arr);
@@ -96,13 +96,16 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
         CompressorType::Fft => op.set_compressor(Compressor::FFT),
         CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
         CompressorType::Idw => op.set_compressor(Compressor::Idw),
-        CompressorType::Auto => op.set_compressor(Compressor::Auto)
+        CompressorType::Auto => op.set_compressor(Compressor::Auto),
     }
     for (cpr, data) in op.get_execution().into_iter() {
         debug!("Chunk size: {}", data.len());
         // If compressor is a losseless one, compress with the error defined, or default
         match arguments.compressor {
-            CompressorType::Fft |  CompressorType::Polynomial | CompressorType::Idw | CompressorType::Auto => {
+            CompressorType::Fft
+            | CompressorType::Polynomial
+            | CompressorType::Idw
+            | CompressorType::Auto => {
                 cs.compress_chunk_bounded_with(data, cpr.to_owned(), arguments.error as f32 / 100.0)
             }
             _ => cs.compress_chunk_with(data, cpr.to_owned()),

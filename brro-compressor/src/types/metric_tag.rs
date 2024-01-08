@@ -19,21 +19,11 @@ impl MetricTag {
     #[allow(clippy::wrong_self_convention)]
     fn from_float(&self, x: f64) -> i64 {
         match self {
-            MetricTag::Other => {
-                0
-            }
-            MetricTag::NotFloat | MetricTag::QuasiRandom => {
-                x as i64
-            }
-            MetricTag::Percent(y) => {
-                Self::to_multiply_and_truncate(x, *y)
-            }
-            MetricTag::Duration(y) => {
-                Self::to_multiply_and_truncate(x, *y)
-            }
-            MetricTag::Bytes(y) => {
-                (x as i64) / (*y as i64)
-            }
+            MetricTag::Other => 0,
+            MetricTag::NotFloat | MetricTag::QuasiRandom => x as i64,
+            MetricTag::Percent(y) => Self::to_multiply_and_truncate(x, *y),
+            MetricTag::Duration(y) => Self::to_multiply_and_truncate(x, *y),
+            MetricTag::Bytes(y) => (x as i64) / (*y as i64),
         }
     }
 

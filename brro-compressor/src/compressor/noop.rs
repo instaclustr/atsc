@@ -27,11 +27,15 @@ impl Noop {
         }
         out_vec
     }
-    
+
     /// "Compress"
     pub fn compress(&mut self, data: &[f64]) {
         self.data = Noop::optimize(data);
-        debug!("Compressed {} elements into {} elements!",data.len(), self.data.len());
+        debug!(
+            "Compressed {} elements into {} elements!",
+            data.len(),
+            self.data.len()
+        );
     }
 
     /// Receives a data stream and generates a Noop
@@ -91,9 +95,9 @@ mod tests {
     fn test_decompression() {
         let vector1 = vec![1.0, 2.0, 3.0, 4.0, 1.0];
         let n = noop(&vector1);
-        assert_eq!(noop_to_data(vector1.len(), &n),vector1);
+        assert_eq!(noop_to_data(vector1.len(), &n), vector1);
     }
-    
+
     #[test]
     fn test_optimize() {
         // Test case with floating-point numbers that have fractional parts
