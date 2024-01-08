@@ -1,4 +1,87 @@
+use bincode::{Encode, Decode};
 use log::debug;
+
+#[derive(PartialEq, Debug, Clone, Copy, Encode, Decode)]
+pub enum Bitdepth {
+    F64,
+    I32,
+    I16,
+    U8
+}
+/// Data structure that holds statictical information about the data provided
+pub struct DataStats {
+    // Max value
+    pub max: f64,
+    // Max value location in the array
+    pub max_loc: usize,
+    // Min value
+    pub min: f64,
+    // Min value location in the array
+    pub min_loc: usize,
+    // Bitdepth that this data can be
+    pub bitdepth: Bitdepth,
+    pub fractional: bool    
+} 
+
+impl DataStats {
+    pub fn new(data: &[f64]) -> Self {
+        let mut min: f64 = data[0];
+        let mut min_loc = 0;
+        let mut max: f64 = data[0];
+        let mut max_loc = 0;
+        let mut fractional = false;
+        let mut recommended_bitdepth = Bitdepth::F64;
+        for (i, value) in data.iter().enumerate() {
+            let t_value = *value;
+            if split_n(t_value).1 != 0.0 { fractional = true;}
+            if t_value > max { max = t_value; max_loc = i; };
+            if t_value < min { min = t_value; min_loc = i; };
+        }
+        // Check max size of values
+        // For very large numbers (i32 and i64), it might be ideal to detect the dc component
+        // of the signal. And then remove it later
+        let max_int = split_n(max).0; // This is the DC component
+        let min_int = split_n(min).0;
+    
+        // Finding the bitdepth without the DC component
+        if !fractional {
+            recommended_bitdepth = DataStats::bitdepth(max_int, min_int);
+        }
+        debug!("Recommended Bitdepth: {:?}, Fractional: {}", recommended_bitdepth, fractional);
+        DataStats {
+            max,
+            max_loc,
+            min,
+            min_loc,
+            bitdepth: recommended_bitdepth,
+            fractional
+        }
+    }
+
+    fn bitdepth(max_int: i64, min_int: i64) -> Bitdepth {
+        // Check where those ints fall into
+        let bitdepth = match max_int {
+            _ if max_int <= u8::MAX.into() => 8,
+            _ if max_int <= i16::MAX.into() => 16,
+            _ if max_int <= i32::MAX.into() => 32,
+            _ => 64
+        };
+    
+        let bitdepth_signed = match min_int {
+            _ if min_int >= 0 &&  min_int <= u8::MAX.into() => 8,
+            _ if min_int >= i16::MIN.into() => 16,
+            _ if min_int >= i32::MIN.into() => 32,
+            _ => 64
+        };
+    
+       match bitdepth.max(bitdepth_signed) {
+        8 => Bitdepth::U8,
+        16 => Bitdepth::I16,
+        32 => Bitdepth::I32,
+        _ => Bitdepth::F64
+       }
+    }
+}
 
 fn as_i8(value: f64) -> i8 {
     split_n(value).0 as i8
@@ -67,16 +150,9 @@ fn analyze_data(data: &Vec<f64>) -> (i32, i64, bool) {
     let max_int = split_n(max).0; // This is the DC component
     let min_int = split_n(min).0;
 
-    // If fractional is it relevant?
-    let max_frac = split_n(max).1;
-
     // Finding the bitdepth without the DC component
     let recommended_bitdepth = find_bitdepth(max_int-min_int, min_int);
-    if !fractional {
-        debug!(" Recommended Bitdepth: {} ", recommended_bitdepth);
-    } else {
-        debug!(" Fractional, Recommended Bitdepth: {}, Fractions max: {}", recommended_bitdepth, max_frac);
-    }
+    debug!("Recommended Bitdepth: {}, Fractional: {}", recommended_bitdepth, fractional);
     (recommended_bitdepth, min_int, fractional)
 }
 
