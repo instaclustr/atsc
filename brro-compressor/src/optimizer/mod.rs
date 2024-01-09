@@ -1,11 +1,15 @@
+use crate::{
+    compressor::Compressor,
+    types,
+    utils::{f64_to_u64, prev_power_of_two},
+};
 use log::debug;
 use types::metric_tag::MetricTag;
-use crate::{types, utils::{prev_power_of_two, f64_to_u64}, compressor::Compressor};
 
 pub mod utils;
 
 /// Max Frame size, this can aprox. 36h of data at 1point/sec rate, a little more than 1 week at 1point/5sec
-/// and 1 month (30 days) at 1 point/20sec. 
+/// and 1 month (30 days) at 1 point/20sec.
 /// This would be aprox. 1MB of Raw data (131072 * 64bits).
 /// We wouldn't want to decompressed a ton of uncessary data, but for historical view of the data, looking into 1day/week/month at once is very reasonable
 const MAX_FRAME_SIZE: usize = 131072; // 2^17
@@ -27,15 +31,16 @@ pub struct OptimizerPlan {
 }
 
 impl OptimizerPlan {
-    
     /// Creates an optimal data compression plan
     pub fn plan(data: &[f64]) -> Self {
         let c_data = OptimizerPlan::clean_data(data);
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
         let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, None);
-        OptimizerPlan { data: c_data,
-                        chunk_sizes: chunks,
-                        compressors: optimizer }
+        OptimizerPlan {
+            data: c_data,
+            chunk_sizes: chunks,
+            compressors: optimizer,
+        }
     }
 
     /// Creates an optimal plan for compression for the data set provided bound by a given error
@@ -44,9 +49,11 @@ impl OptimizerPlan {
         let c_data = OptimizerPlan::clean_data(data);
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
         let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, Some(max_error));
-        OptimizerPlan { data: c_data,
-                        chunk_sizes: chunks,
-                        compressors: optimizer }
+        OptimizerPlan {
+            data: c_data,
+            chunk_sizes: chunks,
+            compressors: optimizer,
+        }
     }
 
     /// Sets a given compressor for all data chunks
@@ -58,7 +65,8 @@ impl OptimizerPlan {
     /// Removes NaN and infinite references from the data
     pub fn clean_data(wav_data: &[f64]) -> Vec<f64> {
         // Cleaning data, removing NaN, etc. This might reduce sample count
-        wav_data.iter()
+        wav_data
+            .iter()
             .filter(|x| !(x.is_nan() || x.is_infinite()))
             .copied()
             .collect()
@@ -76,11 +84,11 @@ impl OptimizerPlan {
                 _ if len >= MAX_FRAME_SIZE => {
                     chunk_sizes.push(MAX_FRAME_SIZE);
                     len -= MAX_FRAME_SIZE;
-                },
+                }
                 _ if len <= MIN_FRAME_SIZE => {
                     chunk_sizes.push(len);
                     len = 0;
-                },
+                }
                 _ => {
                     let size = prev_power_of_two(len);
                     chunk_sizes.push(size);
@@ -92,18 +100,18 @@ impl OptimizerPlan {
     }
 
     /// Returns a vector with the data slice and the compressor associated
-    pub fn get_execution(&self) ->  Vec<(&Compressor, &[f64])> {
+    pub fn get_execution(&self) -> Vec<(&Compressor, &[f64])> {
         let mut output = Vec::with_capacity(self.chunk_sizes.len());
         let mut s = 0;
-        for (i,size) in self.chunk_sizes.iter().enumerate() {
-            output.push((&self.compressors[i] ,&self.data[s..(s+*size)]));
+        for (i, size) in self.chunk_sizes.iter().enumerate() {
+            output.push((&self.compressors[i], &self.data[s..(s + *size)]));
             s += *size;
         }
         output
     }
 
     /// Walks the data, checks how much variability is in the data, and assigns a compressor based on that
-    /// NOTE: Is this any good? 
+    /// NOTE: Is this any good?
     fn get_compressor(data: &[f64]) -> Compressor {
         let _ = data.iter().map(|&f| f64_to_u64(f, 0));
         // For now, let's just return FFT
@@ -111,28 +119,32 @@ impl OptimizerPlan {
     }
 
     /// Assigns a compressor to a chunk of data
-    fn assign_compressor(clean_data: &[f64], chunks: &[usize], max_error: Option<f32>) -> Vec<Compressor> {
+    fn assign_compressor(
+        clean_data: &[f64],
+        chunks: &[usize],
+        max_error: Option<f32>,
+    ) -> Vec<Compressor> {
         let mut selection = Vec::with_capacity(chunks.len());
         match max_error {
             Some(_err) => todo!(),
             None => {
                 let mut s = 0;
                 for size in chunks.iter() {
-                    selection.push(OptimizerPlan::get_compressor(&clean_data[s..(s+*size)]));
+                    selection.push(OptimizerPlan::get_compressor(&clean_data[s..(s + *size)]));
                     s += *size;
                 }
-            },
+            }
         }
         selection
     }
-
 }
 
 /// This should look at the data and return an optimized dataset for a specific compressor,
 /// If a compressor is hand picked, this should be skipped.
 pub fn process_data(wav_data: &[f64], tag: &MetricTag) -> Vec<f64> {
     debug!("Tag: {:?} Len: {}", tag, wav_data.len());
-    wav_data.iter()
+    wav_data
+        .iter()
         .filter(|x| !(x.is_nan() || x.is_infinite()))
         .copied()
         .collect()
@@ -156,10 +168,16 @@ mod tests {
         let len_small: usize = 31;
         let len_right_sized: usize = 2048;
         let len_some_size: usize = 12032;
-        assert_eq!(OptimizerPlan::get_chunks_sizes(len_very_large), [131072, 131072, 131072, 1024, 512, 229]);
+        assert_eq!(
+            OptimizerPlan::get_chunks_sizes(len_very_large),
+            [131072, 131072, 131072, 1024, 512, 229]
+        );
         assert_eq!(OptimizerPlan::get_chunks_sizes(len_small), [31]);
         assert_eq!(OptimizerPlan::get_chunks_sizes(len_right_sized), [2048]);
-        assert_eq!(OptimizerPlan::get_chunks_sizes(len_some_size), [8192, 2048, 1024, 512, 256]);
+        assert_eq!(
+            OptimizerPlan::get_chunks_sizes(len_some_size),
+            [8192, 2048, 1024, 512, 256]
+        );
     }
 
     #[test]

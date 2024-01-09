@@ -76,7 +76,11 @@ impl Constant {
                 .map(|(k, v)| (k.try_into().unwrap(), *v))
                 .collect();
         }
-        debug!("Compressed {} elements into {} elements!",data.len(), self.residuals.len()+1);
+        debug!(
+            "Compressed {} elements into {} elements!",
+            data.len(),
+            self.residuals.len() + 1
+        );
     }
 
     /// Receives a data stream and generates a Constant
@@ -169,7 +173,7 @@ mod tests {
         let out = constant_to_data(frame_size, &compressed_data);
         assert_eq!(vector1, out);
     }
-    
+
     #[test]
     fn test_optimize() {
         let vector1 = vec![1.1, 2.5, 3.8, 4.2, 5.7];

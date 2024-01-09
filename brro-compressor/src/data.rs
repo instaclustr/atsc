@@ -1,8 +1,8 @@
-use bincode::{Decode, Encode};
-use log::debug;
-use crate::compressor::{Compressor, BinConfig};
+use crate::compressor::{BinConfig, Compressor};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
+use bincode::{Decode, Encode};
+use log::debug;
 
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct CompressedStream {
@@ -36,13 +36,21 @@ impl CompressedStream {
     }
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
-    pub fn compress_chunk_bounded_with(&mut self, chunk: &[f64], compressor: Compressor, max_error: f32) {
-        debug!("Compressing chunk bounded with a max error of {}", max_error);
+    pub fn compress_chunk_bounded_with(
+        &mut self,
+        chunk: &[f64],
+        compressor: Compressor,
+        max_error: f32,
+    ) {
+        debug!(
+            "Compressing chunk bounded with a max error of {}",
+            max_error
+        );
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         match compressor {
             // Auto means the frame will pick the best
-            Compressor::Auto => { compressor_frame.compress_best(chunk, max_error) },
-           _ => compressor_frame.compress_bounded(chunk, max_error)
+            Compressor::Auto => compressor_frame.compress_best(chunk, max_error),
+            _ => compressor_frame.compress_bounded(chunk, max_error),
         }
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
@@ -65,11 +73,11 @@ impl CompressedStream {
 
     /// Decompresses all the frames and returns a vector with the data
     pub fn decompress(&self) -> Vec<f64> {
-        self.data_frames.iter()
-                .flat_map(|f| f.decompress())
-                .collect()
+        self.data_frames
+            .iter()
+            .flat_map(|f| f.decompress())
+            .collect()
     }
-
 }
 
 #[cfg(test)]

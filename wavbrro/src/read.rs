@@ -1,6 +1,6 @@
-use std::io::{self, Read, Seek, SeekFrom};
 use std::fs;
 use std::fs::File;
+use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 
 // Function to check if a file is a WAV file

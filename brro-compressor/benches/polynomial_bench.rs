@@ -1,6 +1,8 @@
 // Import necessary libraries
-use criterion::{criterion_group, criterion_main, Criterion, black_box};
-use brro_compressor::compressor::polynomial::{polynomial, polynomial_allowed_error, to_data, PolynomialType};
+use brro_compressor::compressor::polynomial::{
+    polynomial, polynomial_allowed_error, to_data, PolynomialType,
+};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 // Define example sample data
 const SAMPLE_DATA: &[f64] = &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
@@ -20,7 +22,11 @@ fn polynomial_compress_speed_benchmark(c: &mut Criterion) {
 fn polynomial_compress_bounded_speed_benchmark(c: &mut Criterion) {
     c.bench_function("polynomial_compress_bounded_speed", |b| {
         b.iter(|| {
-            let _compressed_data = black_box(polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Polynomial));
+            let _compressed_data = black_box(polynomial_allowed_error(
+                SAMPLE_DATA,
+                0.5,
+                PolynomialType::Polynomial,
+            ));
         });
     });
 }
@@ -50,7 +56,11 @@ fn polynomial_compress_idw_speed_benchmark(c: &mut Criterion) {
 fn polynomial_compress_bounded_idw_speed_benchmark(c: &mut Criterion) {
     c.bench_function("polynomial_compress_bounded_idw_speed", |b| {
         b.iter(|| {
-            let _compressed_data = black_box(polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Idw));
+            let _compressed_data = black_box(polynomial_allowed_error(
+                SAMPLE_DATA,
+                0.5,
+                PolynomialType::Idw,
+            ));
         });
     });
 }
@@ -80,7 +90,11 @@ fn polynomial_compress_memory_benchmark(c: &mut Criterion) {
 fn polynomial_compress_bounded_memory_benchmark(c: &mut Criterion) {
     c.bench_function("polynomial_compress_bounded_memory", |b| {
         b.iter(|| {
-            let _compressed_data = black_box(polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Polynomial));
+            let _compressed_data = black_box(polynomial_allowed_error(
+                SAMPLE_DATA,
+                0.5,
+                PolynomialType::Polynomial,
+            ));
         });
     });
 }
@@ -110,7 +124,11 @@ fn polynomial_compress_idw_memory_benchmark(c: &mut Criterion) {
 fn polynomial_compress_bounded_idw_memory_benchmark(c: &mut Criterion) {
     c.bench_function("polynomial_compress_bounded_idw_memory", |b| {
         b.iter(|| {
-            let _compressed_data = black_box(polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Idw));
+            let _compressed_data = black_box(polynomial_allowed_error(
+                SAMPLE_DATA,
+                0.5,
+                PolynomialType::Idw,
+            ));
         });
     });
 }
@@ -140,7 +158,11 @@ fn idw_compress_speed_benchmark(c: &mut Criterion) {
 fn idw_compress_bounded_speed_benchmark(c: &mut Criterion) {
     c.bench_function("idw_compress_bounded_speed", |b| {
         b.iter(|| {
-            let _compressed_data = black_box(polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Idw));
+            let _compressed_data = black_box(polynomial_allowed_error(
+                SAMPLE_DATA,
+                0.5,
+                PolynomialType::Idw,
+            ));
         });
     });
 }
@@ -158,7 +180,11 @@ fn idw_compress_memory_benchmark(c: &mut Criterion) {
 fn idw_compress_bounded_memory_benchmark(c: &mut Criterion) {
     c.bench_function("idw_compress_bounded_memory", |b| {
         b.iter(|| {
-            let _compressed_data = black_box(polynomial_allowed_error(SAMPLE_DATA, 0.5, PolynomialType::Idw));
+            let _compressed_data = black_box(polynomial_allowed_error(
+                SAMPLE_DATA,
+                0.5,
+                PolynomialType::Idw,
+            ));
         });
     });
 }

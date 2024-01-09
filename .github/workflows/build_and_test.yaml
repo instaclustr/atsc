@@ -43,10 +43,8 @@ jobs:
       run: sudo apt-get install protobuf-compiler
     - name: Install cargo-hack
       run: cargo install cargo-hack --version 0.5.8
-    # lucas - I strongly reccomend reenabling this in the future,
-    # but I've disabled it for now so I dont trash this already large diff with formatting changes
-    #- name: Check `cargo fmt` was run
-    #  run: cargo fmt --all -- --check
+    - name: Check `cargo fmt` was run
+      run: cargo fmt --all -- --check
     - name: Ensure that all crates compile and have no warnings under every possible combination of features
       # some things to explicitly point out:
       # * clippy also reports rustc warnings and errors

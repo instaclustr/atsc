@@ -1,16 +1,18 @@
-use dtw_rs::{ParameterizedAlgorithm, DynamicTimeWarping, Algorithm};
 use clap::Parser;
+use dtw_rs::{Algorithm, DynamicTimeWarping, ParameterizedAlgorithm};
 
 fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
     let r_reader = hound::WavReader::open(filename);
     let mut reader = match r_reader {
         Ok(reader) => reader,
-        Err(_err) => { return Vec::new();}
+        Err(_err) => {
+            return Vec::new();
+        }
     };
     let num_channels = reader.spec().channels as usize;
 
     let mut raw_data: Vec<f64> = Vec::new();
-    let mut u64_holder: [u16; 4] = [0,0,0,0]; 
+    let mut u64_holder: [u16; 4] = [0, 0, 0, 0];
 
     // Iterate over the samples and channels and push each sample to the vector
     let mut current_channel: usize = 0;
@@ -26,16 +28,15 @@ fn read_metrics_from_wav(filename: &str) -> Vec<f64> {
 }
 
 fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
-    let u64_bits = (bits[0] as u64) |
-                ((bits[1] as u64) << 16) |
-                ((bits[2] as u64) << 32) |
-                ((bits[3] as u64) << 48);
+    let u64_bits = (bits[0] as u64)
+        | ((bits[1] as u64) << 16)
+        | ((bits[2] as u64) << 32)
+        | ((bits[3] as u64) << 48);
 
-    
     f64::from_bits(u64_bits)
 }
 
-#[derive(Parser,Default,Debug)]
+#[derive(Parser, Default, Debug)]
 struct Arguments {
     /// First wav file
     file_one: String,
@@ -44,7 +45,7 @@ struct Arguments {
     /// Distance
     distance: usize,
     /// Block size
-    block: usize
+    block: usize,
 }
 
 fn main() {
