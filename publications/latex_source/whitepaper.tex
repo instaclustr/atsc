@@ -53,8 +53,20 @@ Timeseries Compression, Function Approximation, Audio Compression, Data Storage,
 \end{IEEEkeywords}
 
 \section{Introduction}
-This document is a model and instructions for \LaTeX.
-Please observe the conference page limits. 
+The realm of computer systems monitoring, distinct from general time-series monitoring, is characterized by a unique set of challenges. Typically marked by very low-frequency sampling, ranging from 0.05Hz to 1~2Hz, this process focuses on capturing signals from various processes, such as database operations and the overall health of the operating system [10]. 
+ 
+An intriguing facet of this domain is the absence of periodicity or harmonic components in most signals. In many cases, these signals are treated as isolated samples or short sequences, employing compression techniques like XOR compression and delta-delta encoding. 
+However, a paradigm shift emerges by viewing these signals collectively. While the techniques themselves may not be novel, their application in this domain is ground-breaking. By harnessing audio packing and processing methodologies, we not only capitalize on compression benefits but also tap into the extensive streaming functionality embedded in audio formats. 
+ 
+The significance of data compression extends beyond storage concerns to encompass in-transit scenarios, especially with the rise of cloud computing. Sending monitoring data to external systems incurs egress costs, and stored data must be uncompressed and processed before transmission. Leveraging audio packing techniques allows us to seamlessly integrate with the broader ecosystem of software and hardware, ranging from servers to mobile devices, proficient in transporting and encoding/decoding such information. 
+
+% \begin{figure}[htbp]
+% \centerline{\includegraphics{fig1.png}}
+% \caption{Fig 1.}
+% \label{fig}
+% \end{figure}
+
+Our approach doesn't only yield savings in at-rest scenarios but also in transit and during compute processing. By leveraging client-side devices [9], we enable highly efficient processing, incorporating parallelization techniques [7], and exploiting System-on-a-Chip architectures [8] for enhanced performance. This holistic strategy positions our methodology at the forefront of efficient and resource-conscious computer systems monitoring. 
 
 \section{Ease of Use}
 
