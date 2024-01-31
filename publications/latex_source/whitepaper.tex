@@ -225,6 +225,70 @@ Existing segments are incremented if the sample timestamp is the next in sequenc
 
 
 
+\section{Results}
+
+In our quest to assess the efficiency and effectiveness of BRRO, a comprehensive testing methodology was employed. The ATSC server was configured as both a read and write backend for a Prometheus instance, establishing a practical and relevant testing environment. This Prometheus instance, in turn, was connected to an Instaclustr 3-node Cassandra cluster with a Prometheus endpoint enabled. The testing duration, as indicated in the results, spanned a defined period.
+
+\subsection*{ATSC Single: A Best-Case Scenario Analysis}
+
+Before delving into the detailed results, it is essential to address the ATSC single scenario. This represents an optimal output expected on a server running for an extended period, devoid of headers and enriched with substantial data conducive to efficient compression. Although this scenario does not reflect a realistic measure, it serves as a best-case scenario for the current test. The approach involves consolidating all data from every file into a single file, subsequently compressed.
+
+\subsection*{Data Overview}
+
+\textbf{Raw Data Size:} 261,370,032 bytes \\
+\textbf{Compression Statistics:}
+
+\begin{itemize}
+    \item \textbf{ATSC Compression:}
+    \begin{itemize}
+        \item Compressed Size: 4,558,363 bytes
+        \item Compression Ratio: 57.34 times
+    \end{itemize}
+    \item \textbf{LZ4 Compression:}
+    \begin{itemize}
+        \item Compressed Size: 30,634,699 bytes
+        \item Compression Ratio: 8.53 times
+    \end{itemize}
+    \item \textbf{FLAC Compression:}
+    \begin{itemize}
+        \item Compressed Size: 46,524,174 bytes
+        \item Compression Ratio: 5.62 times
+    \end{itemize}
+\end{itemize}
+
+\textbf{Signal Count:}
+
+\begin{itemize}
+    \item Total Signals: 5,860
+\end{itemize}
+
+\textbf{Compression Ratios Analysis:}
+
+\begin{itemize}
+    \item Median Compression Ratio: 1,653.82
+    \item Average Compression Ratio: 1,979.21
+\end{itemize}
+
+ % \begin{figure}[htbp]
+% \centerline{\includegraphics{fig1.png}}
+% \caption{Fig 5.}
+% \label{fig}
+% \end{figure}
+
+\vspace{10pt}
+These results offer a detailed insight into the performance of ATSC across various compression techniques. The data overview provides the baseline, while compression statistics and signal count shed light on the efficiency of ATSC's compression strategies. The analysis of compression ratios, both median and average, further quantifies the compression effectiveness across the tested scenarios. 
+ 
+
+ % \begin{figure}[htbp]
+% \centerline{\includegraphics{fig1.png}}
+% \caption{Fig 5.}
+% \label{fig}
+% \end{figure}
+
+\vspace{10pt}
+The ATSC Compression exhibited an impressive compression ratio of 57.34 times, showcasing the potential of BRRO in achieving substantial data reduction. Additionally, the LZ4 and FLAC Compression techniques demonstrated notable compression ratios of 8.53 and 5.62 times, respectively, highlighting the versatility of ATSC in adapting to different compression scenarios. 
+These results substantiate ATSC's capabilities in optimizing storage space, offering valuable insights into its potential impact on real-world applications. 
+
 
 
 % Please use ``soft'' (e.g., \verb|\eqref{Eq}|) cross references instead
