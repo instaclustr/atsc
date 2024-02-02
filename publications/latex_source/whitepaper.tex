@@ -59,7 +59,7 @@ The significance of data compression extends beyond storage concerns to encompas
   \label{Fig.1}
 \end{figure}
 
-Our approach doesn't only yield savings in at-rest scenarios but also in transit and during compute processing. By having the ability to leverage client-side devices [9], we enable efficient processing and transport of monitoring data. Integration in system-on-a-Chip architectures [8] could lead to further performance enhancements. This strategy positions our methodology at the forefront of efficient and resource-conscious computer systems monitoring. 
+Our approach doesn't only yield savings in at-rest scenarios but also in transit and during compute processing. By having the ability to leverage client-side devices [9], we enable efficient processing and transport of monitoring data. Integration in system-on-a-Chip architectures [8] could lead to further performance enhancements. This strategy positions our methodology at the forefront of efficient and resource-conscious computer systems monitoring. ATSC address this issues while keeping Compression and Decompression speed and resource consumption at a similar level as current existing compression algorithms.
 
 \section{Background}
 
@@ -90,7 +90,7 @@ Our comprehensive approach not only tackles the immediate challenges of high sto
 
 
 
-\section{Methodology}
+\section{Architecture}
 
 \subsection{ATSC Write Paths}
 
@@ -99,11 +99,12 @@ Ahead of compression, the signal undergoes a statistical pre-processing, calcula
 
 \vspace{10pt}
 \subsubsection{Packing the Signal in a Non-compressed Format (WAVBRO)}
-The uncompressed signal may then be packed into a non-compressed format. For this we created a new format heavily inspired by WAV. The signal can also be stored in the WAV format, but for this frequency might need to be converted, since WAV doesn't support >1 HZ frequencies. Additionally, the signal might be strategically split into integer and float types formatted to sizes compatible with audio sampling. Also, the signal might be split into different channels to reduce size. 
+The uncompressed signal may then be packed into a non-compressed format. For this we created a new format heavily inspired by WAV. The signal can also be stored in the WAV format, but for this frequency might need to be converted, since WAV doesn't support <1 HZ frequencies. Additionally, the signal might be strategically split into integer and float types formatted to sizes compatible with audio sampling. Also, the signal might be split into different channels to reduce size. 
 
 \vspace{10pt}
 \subsubsection{Identifying and Exploiting Local Opportunities within the signal}
-ATSC leverages its distinctive approach by identifying local opportunities that are more suitable for a mathematical approximation. By slicing the signal in a targeted way, this sets the stage for enhanced compression in the subsequent stages. One way of doing such slicing is via Wavelets transforms, so that high and low frequencie components are identified and the signal divided in different parts accordingly to its behaviour.
+ATSC leverages its distinctive approach by identifying local opportunities that are more suitable for a mathematical approximation. By slicing the signal in a targeted way, this sets the stage for enhanced compression in the subsequent stages. One way of doing such slicing is via Wavelets transforms, so that high and low frequencies components are identified and the signal divided in different parts accordingly to its behaviour.
+In case a clear opportunity for slicing the samples in optimal blocks are not identified, blocks are created with an optimal size for FFT processing (in the form of $slice = 2^n * 3^m$).
 
 \vspace{10pt}
 \subsubsection{Generate an Index for Precision Access}
@@ -124,39 +125,118 @@ Building upon the insights gained from steps 1 to 7, ATSC culminates the write p
 
 \subsection{ATSC Read Paths}
 
-Within the Read Path of ATSC, a ground-breaking methodology unfolds, emphasizing the unique utilization of indexing for precise data retrieval. Notably, ATSC distinguishes itself by eschewing the storage of timestamp information directly within the file, opting instead for a distinctive indexing approach that enables efficient streaming and targeted decompression of pertinent data segments.
+ATSC distinguishes itself by eschewing the storage of timestamp information directly within the file, opting instead for a distinctive indexing approach that enables efficient streaming and targeted decompression of pertinent data segments.
+Within the Read Path of ATSC, the samples are located via an indexing table, and then uncompressed, or the full content if requested. 
+Since speed is important in retrieval of metrics, the read stage, after the location of the samples, applies the mathematical formula defined for the sample segment plus any error correction, and the returns the samples. 
 
 \vspace{10pt}
-\subsubsection{Precise Streaming through Specialized Indexing}\label{SCM}
+\subsubsection{Precise Streaming through Specialized Indexing}\label{SCMA}
 The core innovation in the Read Path lies in the application of a specialized indexing mechanism. Unlike traditional methods, ATSC's indexing facilitates pinpointing the relevant portion of the file without the necessity of timestamp inclusion in the file itself. This precision in indexing empowers ATSC to streamline the streaming process, focusing exclusively on the required data, thereby optimizing resource utilization. 
 
 \vspace{10pt}
-\subsubsection{Breaking Ground in Monitoring Data Retrieval}\label{SCM}
-While the standard practice of streaming by blocks and subsequent decompression is commonplace in multimedia file handling, ATSC introduces a paradigm shift when applied to the distinct requirements of monitoring data. This unique approach sets ATSC apart, presenting an innovative means of handling time series data that has not been extensively documented or explored in the monitoring space. 
-\vspace{10pt}
-\subsubsection{Unveiling of the Read Path}\label{SCM}
+\subsubsection{Unveiling of the Read Path}\label{SCMC}
 \begin{itemize}
 
-\item{\textbf{\textit{Identifying the Metric to be Queried:}}} The Read Path initiation begins with the user specifying the metric of interest. This action triggers the subsequent retrieval process.
-\vspace{5pt}
+\item{\textbf{\textit{Identifying the Samples to be Retrieved:}}} The Read Path initiation begins with the user specifying time interval of metric of interest. If no interval is provided, all samples are returned.
 
-\item{\textbf{\textit{Locate Files and Corresponding Index:}}} ATSC efficiently locates pertinent file(s) and their corresponding indices. Leveraging the indexing system ensures accuracy in file identification.
 \vspace{5pt}
 \item{\textbf{\textit{Precision in Data Retrieval Using the Index:}}} The index plays a crucial role in ATSC's approach. It aids in precisely identifying the segment of the file essential for the query. This ensures focused and efficient data retrieval.
+
 \vspace{5pt}
-\item{\textbf{\textit{Streaming Blocks to the Client:}}} Once the relevant data segment is identified, ATSC initiates streaming of these blocks. Direct streaming optimizes data transfer, particularly beneficial in scenarios with limited bandwidth or transmission constraints.
-\vspace{5pt}
-\item{\textbf{\textit{Decompression and Extraction by the Client:}}} The client, equipped with the streamed data blocks, handles decompression and extraction. This decentralized approach enhances efficiency by distributing the computational load.
+\item{\textbf{\textit{Sample decompression:}}} Once the relevant data segment is identified, ATSC initiates the decompression of the data.
+For the located data samples, the correspondent formula translation is applied and any error correction.
+
 \vspace{5pt}
 \item{\textbf{\textit{Timestamp Integration Post-Decompression:}}} Following decompression, the samples, now in their extracted form, receive timestamp information from the index. This final step ensures temporal accuracy and relevance of the retrieved data.
+
+\vspace{5pt}
+\item{\textbf{\textit{Streaming/Writting data out:}}} Under a streaming process, samples are sent while being decompressed. ATSC also supports full file decompression where all the data is decompressed and then send out, or written out to a WAVBRO file.
 \end{itemize}
 
-\subsection{Indexing Samples with VRSI (Variable Rate Sampling Interval)}
+\section{Compression Methods}
 
+Mostly of the work is done in this step. After a statistical analysis the signal, the compressor stage decides which approach is best for a given block of samples.
+Things like first and second derivative analysis also allows a more precise selection of the compression form. 
+For example, a signal which is mostly stable (small variation) will be approximated by a Spline, a signal with a lot of variation will be better approximated by an Fast Fourier Transform or a Linear Predictive Coding.
+
+\vspace{10pt}
+\subsubsection{Fast Fourier Transforms (FFT)}
+
+Compression with FFT is done via a conversion of the signal to the frequency domain. Once in the frequency domain, we store a subset of frequencies.
+The number of frequencies selected depends on the error margin we want to store the signal with. Since the signals are always real, the worst case scenario (lossless compression) half the frequencies need to be stored.
+But since every frequency is represented by a pair of (Real, Imaginary) values, the lossless compression is next to none. 
+The frequency pairs are always represented by two floats, either 32 or 64 bits depending on the precision required.
+In a lossy scenario, and depending on the signal, 10x reduction in size is easily achievable within a 1\% to 3\% error margin.
+To decompress, the Inverse FFT is applied on the available frequencies, zeroing out the missing frequencies.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.5\textwidth]{FFT_Comparison.png}
+  \caption{Signal Fitting of the original data vs FFT Compression (8x compression) vs Average Sampled (2x) and Peak Hold (2x).}
+  \label{Fig.3}
+\end{figure}
+\vspace{5pt}
+
+\subsubsection{Spline Interpolation}
+
+Another compression method is via a Spline Interpolation. Currently using either linear for simple signals (near-linear signals like Disk usage) or Catmull-Rom interpolation for everything else.
+The method is similar to the FFT, where several points are stored and the corresponding outputs calculated via Spline Interpolation.
+Once a Spline is generated within the margin of error provided, the points that generated that spline are stored.
+An advantage of Spline Interpolation vs FFT is that the FFT always need to store the data as a pair of floats. 
+While the Spline Interpolation the points are the same as the data points, so a integer signal would be stored as integer with the same bit depth as the original signal.
+This could be something as small as 8bit per point.
+In the decompression process, we due the interpolation calculation and retrieve the points requested.
+No need even to calculate the whole spline, only the segments corresponding to the samples.
+
+\vspace{10pt}
+\subsubsection{Multivariate Interpolation}
+
+In an almost identical process to the Spline Interpolation, we used Inverse Distance Weighting as a method to approximate the signal.
+The results are solid, but almost the same as the spline interpolation, with the downside of a much slower decompression due to the complexity of the calculations.
+Since the approach is very similar, the results were very easy to compare, and in most of the cases the Spline Interpolation offers the same compression this method is used
+only in very rare cases.
+The similarity of the the two also makes it difficult to chose each one to pick in a given scenario, and given the already mentioned disadvantages, this is only used in an manual selection of compressor methods.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.5\textwidth]{IDW_Spline_Comparison.png}
+  \caption{Signal Fitting of the original data with IDW Compression and Spline Compression (Both 43x compression).}
+  \label{Fig.4}
+\end{figure}
+\vspace{5pt}
+
+\vspace{10pt}
+\subsubsection{Linear predictive coding (LPC)}
+
+A lot of lessons were learned from initial experiments with Audio compressors (mostly FLAC encoder).
+Good results were obtained and it was a natural approach to include the those within the available compressors.
+The approach is exactly the same as described in the FLAC format [11], but with a small change.
+The FLAC expects all samples to be integer, as such, floating point signals are discarded and not usable by definition.
+But for signals with a very small precision and bounded (e.g. 0.00 - 100.00) we can convert those to integer and use the LPC compressor.
+In practical testing, LPC offers worst compression than FFTs, so FFT is widely used, and in a similar case as the Inverse Distance Weighting, it is mostly relegated to a manual selection.
+The only case where LPC is used, is in lossless compression, where it offers a very solid compression averaging between 4x to 8x.
+
+\vspace{10pt}
+\section{Error Correction}
+
+All the methods described above generate lossy compression. 
+For reducing the error of the compression and/or remove artifacts from the generated signals the following process is used:
+
+\begin{itemize}
+    \item Error detection via Mean Absolute Percentage
+    \item Storing of the errors that are above the defined error threshold
+    \item Discard error points until the global error threshold is met. Since the biggest error points are discarded last, the biggest differences are eliminated.
+\end{itemize}
+
+For lossless compression all the point differences need to be stored. In a lot of cases this leads to almost no compression unless the signal has a perfect fitting with
+the mathematical representation.
+
+\section{Indexing Samples with VRSI (Variable Rate Sampling Interval)}
+\vspace{5pt}
 \subsubsection{Overview of VRSI Mechanism}
 
 In the methodology section, a critical aspect of the process involves indexing samples for efficient data retrieval. Variable Rate Sampling Interval (VRSI) is employed to manage the sampling intervals effectively. VRSI operates on the premise that samples occur at evenly spaced intervals, such as every 5 seconds, 20 seconds, or 60 seconds.
-
+\vspace{5pt}
 \subsubsection{Line Segment Representation}
 
 For each sampling interval, a line segment is created with specific fields:
@@ -167,23 +247,23 @@ For each sampling interval, a line segment is created with specific fields:
     \item \textbf{Starting Sample:} The index of the first sample within the segment.
     \item \textbf{Number of Samples:} The total number of samples within the segment.
 \end{itemize}
-
+\vspace{5pt}
 \subsubsection{File Structure}
 
 These line segments are then stored in a file, accompanied by the lowest and highest timestamps in the segments represented. This file structure allows for easy identification of whether a requested interval is present in the index. If the requested interval falls entirely outside the timestamps in the file header, no samples are available for that interval.
-
+\vspace{5pt}
 \subsubsection{Handling Temporal Gaps}
 
 In cases where a metric stops reporting for a period, a new line segment is generated, ensuring accurate representation of the sampled data over time.
-
+\vspace{5pt}
 \subsubsection{Example VRSI File Content}
 
-\begin{enumerate}
-    \item 55745
-    \item 59435
-    \item 15,0,55745,166
-    \item 15,166,58505,63
-\end{enumerate}
+\begin{verbatim}
+55745
+59435
+15,0,55745,166
+15,166,58505,63
+\end{verbatim}
 
 
 \begin{itemize}
@@ -195,11 +275,11 @@ In cases where a metric stops reporting for a period, a new line segment is gene
         \item The second line segment also has one sample every 15 seconds, starting at timestamp 58505, with 63 samples.
     \end{itemize}
 \end{itemize}
-
+\vspace{5pt}
 \subsubsection{Locating Samples (Read Path)}
 
 In the read path, when locating a sample in a file using the index, timestamps or timestamp ranges are specified (e.g., "All the samples from 3:30 PM to 4:30 PM"). The system checks if the requested timestamps are within the available timestamps in the file header. If found, the sequence of sample numbers is extracted, indicating the samples needed for decompression.
-
+\vspace{5pt}
 \subsubsection{Creating/Updating the Index (Write Path)}
 
 When a new sample is added, the index is updated. Since time progresses linearly, and samples occur in sequence, the system only needs to:
@@ -212,25 +292,14 @@ Existing segments are incremented if the sample timestamp is the next in sequenc
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.5\textwidth]{Fig3.png}
-  \caption{Your caption here.}
-  \label{Fig.3}
-\end{figure}
-
-
-\begin{figure}[h]
-  \centering
   \includegraphics[width=0.5\textwidth]{Fig4.png}
-  \caption{Your caption here.}
-  \label{Fig.4}
+  \caption{Internal Diagram of the ATSC Compressor.}
+  \label{Fig.5}
 \end{figure}
-
-
-
-
+%% Estou aqui!
 \section{Results}
 
-In our quest to assess the efficiency and effectiveness of BRRO, a comprehensive testing methodology was employed. The ATSC server was configured as both a read and write backend for a Prometheus instance, establishing a practical and relevant testing environment. This Prometheus instance, in turn, was connected to an Instaclustr 3-node Cassandra cluster with a Prometheus endpoint enabled. The testing duration, as indicated in the results, spanned a defined period.
+In our quest to assess the efficiency and effectiveness of ATSC, a comprehensive testing methodology was employed. The ATSC server was configured as both a read and write backend for a Prometheus instance, establishing a practical and relevant testing environment. This Prometheus instance, in turn, was connected to an Instaclustr 3-node Cassandra cluster with a Prometheus endpoint enabled. The testing duration, as indicated in the results, spanned a defined period.
 
 \subsection*{ATSC Single: A Best-Case Scenario Analysis}
 
@@ -276,7 +345,7 @@ Before delving into the detailed results, it is essential to address the ATSC si
   \centering
   \includegraphics[width=0.5\textwidth]{Fig5.png}
   \caption{Your caption here.}
-  \label{Fig.5}
+  \label{Fig.6}
 \end{figure}
 
 \vspace{10pt}
@@ -366,6 +435,8 @@ In summary, ATSC emerges as a promising solution that not only tackles current c
     \item Apache Cassandra. (n.d.). Operating Metrics. [Online]. Available: \url{https://cassandra.apache.org/doc/latest/cassandra/operating/metrics.html} [9]
 
     \item Free Patents Online. (n.d.). Data Compression Method and Apparatus. [Online]. Available: \url{https://www.freepatentsonline.com/5839100.html} [10]
+
+    \item Free Lossless Audio Codec \url{https://datatracker.ietf.org/doc/html/draft-ietf-cellar-flac-14#name-prediction} [11]
 \end{enumerate}
 
 \end{document}
