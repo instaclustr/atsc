@@ -33,13 +33,9 @@ u3227463@uni.canberra.edu.au}
 \maketitle
 
 \begin{abstract}
-    In this research, we present ATSC (Advanced Time Series Compressor), a ground-breaking approach to monitoring time-series compression. Time series data, representing observations of a single entity over varying time intervals, is a critical component in diverse domains such as climate monitoring and system performance analysis. Our methodology diverges from conventional compression strategies that focus on sample properties or small sequence segments. ATSC treats each time series as a digital signal and incorporates proven techniques from audio and signal compression, emphasizing a unique perspective on lossless compression. Notably, we leverage Function Approximation (FA), commonly used for lossy compression in time series, to address the compression challenge from a lossless standpoint.
-    Our research addresses the high-frequency monitoring of computer systems, where signals often lack periodicity or harmonic components. By treating signals holistically and applying audio compression techniques, we achieve not only compression benefits but also exploit the streaming functionality inherent in audio formats. This methodology extends beyond at-rest compression, encompassing in-transit scenarios, thereby reducing egress costs in cloud environments.
-    Motivated by the escalating costs of storage and data transfer, as well as the need for efficient computation in processing vast datasets, ATSC introduces innovative techniques in both the write and read paths. The write path involves signal pre-processing, unique packing methodologies, and novel signal identification, leading to a compressed file format. The read path stands out by employing a unique indexing system, enabling precise streaming to relevant sections of the file without storing timestamp information, a feature particularly suited for time-series data.
-    Preliminary testing against a Prometheus instance demonstrates significant space savings in the ATSC data directory compared to traditional storage methods. Future work involves exploring concepts such as mutual information and Kullback–Leibler divergence to further enhance compression efficiency.
-    In conclusion, ATSC emerges as a promising solution, offering substantial compression gains, efficient storage, and improved data accessibility for time series monitoring.
+    This research paper introduces an innovative approach to time series compression tailored for the complexities of computer systems monitoring. The Advanced Time Series Compression (ATSC) methodology, drawing inspiration from established audio compression techniques, achieves significant compression ratios, potentially resulting in space savings of up to 57.34 times. With a strong emphasis on precise data retrieval and efficient streaming capabilities, ATSC presents a promising solution for effectively managing high-frequency time series data within the realm of computer systems monitoring. The study underscores the critical importance of unique indexing for targeted decompression and showcases promising results from initial testing against traditional methods. Future research directions encompass exploring automated selections, integration with time series databases, and further optimization for enhanced efficiency. ATSC emerges as an innovative and forward-thinking solution that not only addresses current challenges in storage and data transfer but also propels advancements in time series monitoring and data compression within computer systems.
 \end{abstract}
-
+\vspace{5pt}
 \begin{IEEEkeywords}
 Timeseries Compression, Function Approximation, Audio Compression, Data Storage, Streaming, Indexing, Computer Systems Monitoring
 \end{IEEEkeywords}
@@ -55,7 +51,7 @@ The significance of data compression extends beyond storage concerns to encompas
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.5\textwidth]{Fig1.png}
-  \caption{Your caption here.}
+  \caption{Flow of data from monitored services to devices reading metrics.}
   \label{Fig.1}
 \end{figure}
 
@@ -82,7 +78,7 @@ Traditional approaches, such as point-walking algorithms, demand substantial com
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.5\textwidth]{Fig2.png}
-  \caption{Your caption here.}
+  \caption{Architecture of computer system.}
   \label{Fig.2}
 \end{figure}
 
@@ -344,7 +340,7 @@ Before delving into the detailed results, it is essential to address the ATSC si
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.5\textwidth]{Fig5.png}
-  \caption{Your caption here.}
+  \caption{Compression Ratio Histogram}
   \label{Fig.6}
 \end{figure}
 
@@ -355,21 +351,21 @@ These results offer a detailed insight into the performance of ATSC across vario
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.5\textwidth]{cpu.png}
-  \caption{Your caption here.}
+  \caption{CPU comparison Error}
   \label{cpu}
 \end{figure}
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.5\textwidth]{Disk.png}
-    \caption{Your caption here.}
+    \caption{Disk Comparison Error}
     \label{Disk}
   \end{figure}
 
   \begin{figure}[h]
     \centering
     \includegraphics[width=0.5\textwidth]{heap.png}
-    \caption{Your caption here.}
+    \caption{Heap Comparison Error}
     \label{heap}
   \end{figure}
 \vspace{10pt}
