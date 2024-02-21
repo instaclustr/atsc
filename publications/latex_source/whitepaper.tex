@@ -44,9 +44,9 @@ Timeseries Compression, Function Approximation, Audio Compression, Data Storage,
 The realm of computer systems monitoring, distinct from general time-series monitoring, is characterized by a unique set of challenges. Typically marked by very low-frequency sampling, ranging from 0.05Hz to 1~2Hz, this process focuses on capturing signals from various processes, such as database operations and the overall health of the operating system [10]. 
  
 An intriguing facet of this domain is the absence of periodicity or harmonic components in most signals. In many cases, these signals are treated as isolated samples or short sequences, employing compression techniques like XOR compression and delta-delta encoding. 
-However, a paradigm shift emerges by viewing these signals collectively. While the techniques themselves may not be novel, their application in this domain is ground-breaking. By harnessing audio packing and processing methodologies, we not only capitalize on compression benefits but also tap into the extensive streaming functionality embedded in audio formats. 
+However, a paradigm shift emerges by viewing these signals collectively. While the techniques themselves may not be novel, their application in this domain is ground-breaking. By harnessing audio packing and processing methodologies, we not only capitalize on compression benefits but also tap into the extensive streaming functionality embedded in audio formats..
  
-The significance of data compression extends beyond storage concerns to encompass in-transit scenarios, especially with the rise of cloud computing. Sending monitoring data to external systems incurs egress costs, and stored data must be uncompressed and processed before transmission. Leveraging audio packing techniques allows us to seamlessly integrate with the broader ecosystem of software and hardware, ranging from servers to mobile devices, proficient in transporting and encoding/decoding such information on demand. 
+The significance of data compression extends beyond storage concerns to encompass in-transit scenarios, especially with the rise of cloud computing. Sending monitoring data to external systems incurs egress costs, and stored data must be uncompressed and processed before transmission.ATSC compressor sits in  between Metrics Server and Metrics server(Fig1.) Leveraging audio packing techniques allows us to seamlessly integrate with the broader ecosystem of software and hardware, ranging from servers to mobile devices, proficient in transporting and encoding/decoding such information on demand. 
 
 \begin{figure}[h]
   \centering
@@ -78,7 +78,7 @@ Traditional approaches, such as point-walking algorithms, demand substantial com
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.5\textwidth]{Fig2.png}
-  \caption{Architecture of computer system.}
+  \caption{Internal Diagram of the ATSC Compressor}
   \label{Fig.2}
 \end{figure}
 
@@ -294,14 +294,14 @@ When a new sample is added, the index is updated. Since time progresses linearly
 
 Existing segments are incremented if the sample timestamp is the next in sequence. If a segment does not exist or the timestamp is not the next in sequence for the latest segment, a new segment is created. This approach ensures an efficient and organized index for managing variable rate sampling intervals.
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.5\textwidth]{Fig4.png}
-  \caption{Internal Diagram of the ATSC Compressor.}
-  \label{Fig.5}
-\end{figure}
-%% Estou aqui!
-\section{Results}
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=0.5\textwidth]{Fig4.png}
+%   \caption{Internal Diagram of the ATSC Compressor.}
+%   \label{Fig.5}
+% \end{figure}
+% %% Estou aqui!
+% \section{Results}
 
 In our quest to assess the efficiency and effectiveness of ATSC, a comprehensive testing methodology was employed. The ATSC server was configured as both a read and write backend for a Prometheus instance, establishing a practical and relevant testing environment. This Prometheus instance, in turn, was connected to an Instaclustr internal production 57-node Cassandra cluster with a Prometheus endpoint enabled. 
 The data flow was then collected at the node level, sent to prometheus endpoint that would then forward it to the ATSC server configured as previsously stated.
@@ -314,39 +314,39 @@ Before delving into the detailed results, it is essential to address the ATSC si
 
 \subsection*{Data Overview}
 
-\textbf{Raw Data Size:} 261,370,032 bytes \\
+\textbf{Raw Data Size:} 847,315,029 bytes \\
 \textbf{Compression Statistics:}
 
 \begin{itemize}
-    \item \textbf{ATSC Compression:}
+    \item \textbf{Gorilla Compression:}
     \begin{itemize}
-        \item Compressed Size: 4,558,363 bytes
-        \item Compression Ratio: 57.34 times
+        \item Compressed Size: 454,778,552 bytes
+        \item Compression Ratio: 1.86 times
     \end{itemize}
     \item \textbf{LZ4 Compression:}
     \begin{itemize}
-        \item Compressed Size: 30,634,699 bytes
-        \item Compression Ratio: 8.53 times
+        \item Compressed Size: 141,347,821 bytes
+        \item Compression Ratio: 5.99 times
     \end{itemize}
-    \item \textbf{FLAC Compression:}
+    \item \textbf{ATSC Compression:}
     \begin{itemize}
-        \item Compressed Size: 46,524,174 bytes
-        \item Compression Ratio: 5.62 times
+        \item Compressed Size: 14,276,544 bytes
+        \item Compression Ratio: 59.35 times
     \end{itemize}
 \end{itemize}
 
-\textbf{Signal Count:}
+% \textbf{Signal Count:}
 
-\begin{itemize}
-    \item Total Signals: 5,860
-\end{itemize}
+% \begin{itemize}
+%     \item Total Signals: 5,860
+% \end{itemize}
 
-\textbf{Compression Ratios Analysis:}
+% \textbf{Compression Ratios Analysis:}
 
-\begin{itemize}
-    \item Median Compression Ratio: 1,653.82
-    \item Average Compression Ratio: 1,979.21
-\end{itemize}
+% \begin{itemize}
+%     \item Median Compression Ratio: 1,653.82
+%     \item Average Compression Ratio: 1,979.21
+% \end{itemize}
 
 \begin{figure}[h]
   \centering
