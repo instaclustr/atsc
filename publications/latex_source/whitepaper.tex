@@ -102,6 +102,14 @@ The uncompressed signal may then be packed into a non-compressed format. For thi
 ATSC leverages its distinctive approach by identifying local opportunities that are more suitable for a mathematical approximation. By slicing the signal in a targeted way, this sets the stage for enhanced compression in the subsequent stages. One way of doing such slicing is via Wavelets transforms, so that high and low frequencies components are identified and the signal divided in different parts accordingly to its behaviour.
 In case a clear opportunity for slicing the samples in optimal blocks are not identified, blocks are created with an optimal size for FFT processing (in the form of $slice = 2^n * 3^m$).
 
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.5\textwidth]{wavelet_heap.png}
+  \caption{Example of wavelet detection of high frequency sections to slice the signal. Signal on top and Wavelet Analysis on bottom.}
+  \label{Fig.3}
+\end{figure}
+\vspace{5pt}
+
 \vspace{10pt}
 \subsubsection{Generate an Index for Precision Access}
 To facilitate precise access to samples without the need for full file seeking or decompression of the full file, ATSC generates a comprehensive index. This index ensures efficient retrieval of relevant portions of the signal, a critical aspect in the subsequent compression and decompression processes.
@@ -295,7 +303,10 @@ Existing segments are incremented if the sample timestamp is the next in sequenc
 %% Estou aqui!
 \section{Results}
 
-In our quest to assess the efficiency and effectiveness of ATSC, a comprehensive testing methodology was employed. The ATSC server was configured as both a read and write backend for a Prometheus instance, establishing a practical and relevant testing environment. This Prometheus instance, in turn, was connected to an Instaclustr 3-node Cassandra cluster with a Prometheus endpoint enabled. The testing duration, as indicated in the results, spanned a defined period.
+In our quest to assess the efficiency and effectiveness of ATSC, a comprehensive testing methodology was employed. The ATSC server was configured as both a read and write backend for a Prometheus instance, establishing a practical and relevant testing environment. This Prometheus instance, in turn, was connected to an Instaclustr internal production 57-node Cassandra cluster with a Prometheus endpoint enabled. 
+The data flow was then collected at the node level, sent to prometheus endpoint that would then forward it to the ATSC server configured as previsously stated.
+The server run for approximated 18h over 2 days. Collecting 1 point every 20 sec. This ended with a 5432 samples for each signal, for each node. For a total of 14386 signals processed.
+ATSC run with automatic compressor selection and a maximixum allowed error of 3\\%.
 
 \subsection*{ATSC Single: A Best-Case Scenario Analysis}
 
@@ -347,32 +358,36 @@ Before delving into the detailed results, it is essential to address the ATSC si
 \vspace{10pt}
 These results offer a detailed insight into the performance of ATSC across various compression techniques. The data overview provides the baseline, while compression statistics and signal count shed light on the efficiency of ATSC's compression strategies. The analysis of compression ratios, both median and average, further quantifies the compression effectiveness across the tested scenarios. 
  
+\subsection{Result validation}
+
+For validation of the results, the data was uncompressed
+
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.5\textwidth]{cpu.png}
-  \caption{CPU comparison Error}
+  \includegraphics[width=0.5\textwidth]{cpu-usage-validation.png}
+  \caption{CPU compression vs Original data}
   \label{cpu}
 \end{figure}
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.5\textwidth]{Disk.png}
-    \caption{Disk Comparison Error}
+    \includegraphics[width=0.5\textwidth]{disk-usage-validation.png}
+    \caption{Disk compression vs Original data}
     \label{Disk}
   \end{figure}
 
   \begin{figure}[h]
     \centering
-    \includegraphics[width=0.5\textwidth]{heap.png}
-    \caption{Heap Comparison Error}
+    \includegraphics[width=0.5\textwidth]{heap-usage-validation.png}
+    \caption{Heap Usage Compressed vs Original data}
     \label{heap}
   \end{figure}
 \vspace{10pt}
 The ATSC Compression exhibited an impressive compression ratio of 57.34 times, showcasing the potential of BRRO in achieving substantial data reduction. Additionally, the LZ4 and FLAC Compression techniques demonstrated notable compression ratios of 8.53 and 5.62 times, respectively, highlighting the versatility of ATSC in adapting to different compression scenarios. 
 These results substantiate ATSC's capabilities in optimizing storage space, offering valuable insights into its potential impact on real-world applications. 
 
-\section{FUTURE WORK}
+\section{Future Work}
 
 ATSC show a significant improval over existing compression for time-series. But there are several avenues of possible work to further expand its capabilities and/or use some of the opportunities it exposes.
 
@@ -408,7 +423,7 @@ or replaced. This opens a front worth exploring that is comparing compression ra
 %These future directions underscore ATSC's commitment to continuous improvement and adaptation to emerging technologies. By exploring automated selections, integrating with Time Series databases, and leveraging lessons from streaming experiences, ATSC aims to stay at the forefront of efficient and intelligent Time Series data compression. This forward-looking section sets the stage for ongoing advancements and ensures that ATSC remains a versatile and cutting-edge solution in the dynamic landscape of data compression.
 
 
-\section{CONCLUSION}
+\section{conclusion}
 
 In conclusion, the ATSC approach outlined in this research offers a novel solution for monitoring time series data compression, particularly in computer systems. By using a new approach, ATSC achieves impressive compression ratios, with a best-case scenario reaching over 1000x times compression. This innovative methodology not only addresses current storage and data transfer challenges but also sets the stage for future improvements.
 \vspace{5pt}
