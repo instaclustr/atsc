@@ -360,30 +360,38 @@ These results offer a detailed insight into the performance of ATSC across vario
  
 \subsection{Result validation}
 
-For validation of the results, the data was uncompressed
+For validation of the results, the data was uncompressed and compare with the original signal and see how was the fitting. Since the compressor was set to auto with an allowed error, the expectation is that there the compressor will pick lossy compression for best compression and that is visible in the fitting of the compressed signal vs the original data.
 
+In this section we are going to show some examples of those compressed signals.
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.5\textwidth]{cpu-usage-validation.png}
-  \caption{CPU compression vs Original data}
+  \caption{CPU compression (17x) vs Original data}
   \label{cpu}
 \end{figure}
+
+We start with the CPU usage
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.5\textwidth]{disk-usage-validation.png}
-    \caption{Disk compression vs Original data}
+    \caption{Disk compression (146x) vs Original data}
     \label{Disk}
   \end{figure}
+
+Then we go to disk usage. It is very important to take notice of the scale in this image.
 
   \begin{figure}[h]
     \centering
     \includegraphics[width=0.5\textwidth]{heap-usage-validation.png}
-    \caption{Heap Usage Compressed vs Original data}
+    \caption{Heap Usage Compressed (18x) vs Original data}
     \label{heap}
   \end{figure}
 \vspace{10pt}
+
+Heap usage was picked because it is normally a very difficult signal to fit.
+
 The ATSC Compression exhibited an impressive compression ratio of 57.34 times, showcasing the potential of BRRO in achieving substantial data reduction. Additionally, the LZ4 and FLAC Compression techniques demonstrated notable compression ratios of 8.53 and 5.62 times, respectively, highlighting the versatility of ATSC in adapting to different compression scenarios. 
 These results substantiate ATSC's capabilities in optimizing storage space, offering valuable insights into its potential impact on real-world applications. 
 
