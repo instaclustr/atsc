@@ -374,29 +374,38 @@ These results substantiate ATSC's capabilities in optimizing storage space, offe
 
 \section{FUTURE WORK}
 
-In the pursuit of continual improvement and innovation, the following avenues represent promising areas for future exploration within the context of ATSC.
+ATSC show a significant improval over existing compression for time-series. But there are several avenues of possible work to further expand its capabilities and/or use some of the opportunities it exposes.
 
-\subsection{Automated Selections: Embracing AI Advancements}
+%OLD - In the pursuit of continual improvement and innovation, the following avenues represent promising areas for future exploration within the context of ATSC.
 
-Enhancing User Experience: Investigate the potential benefits of incorporating automated selections, possibly powered by Artificial Intelligence (AI). This exploration aims to streamline user interactions and optimize compression choices intelligently.
+\subsection{AI for compressor selection and optimization}
 
-\subsection*{Integration with Time Series Databases/Services Seamless Integration}
+Currently ATSC has a small subset of fixed algorithms available to chose from. The choice is made based on a simplistic statistical analysis. With a growing number of signals analised it could be possible to use AI to make an optimal choice. 
+Also, AI could be used to make a more curated choice of algorithms available for compression.
 
-Extend ATSC's functionality by integrating seamlessly with Time Series databases and services. This integration holds the promise of providing users with a cohesive and efficient solution for managing Time Series data.
+%OLD - Enhancing User Experience: Investigate the potential benefits of incorporating automated selections, possibly powered by Artificial Intelligence (AI). This exploration aims to streamline user interactions and optimize compression choices intelligently.
 
-\subsection{Enhanced Functionality}
+\subsection*{Test further algorithms}
 
-Explore avenues to enhance ATSC's functionality within the realm of Time Series databases, ensuring that users experience a unified and effective solution for their data management needs.
+ATSC algorithm selection could be expanded alongside improved selection methods, that could further increase ATSC compression ratio.
 
-\subsection{Streaming: Leveraging Insights from FLAC Experiments}
+%OLD - Extend ATSC's functionality by integrating seamlessly with Time Series databases and services. This integration holds the promise of providing users with a cohesive and efficient solution for managing Time Series data.
 
-Building on Experience: Draw insights from early experiments, particularly those involving Free Lossless Audio Codec (FLAC). Utilize the lessons learned to inform and refine ATSC's performance in streaming scenarios.
+\subsection{Integration with other systems}
 
-\subsection{Optimizing Streaming Capabilities}
+while developing and researching we found that ATSC creates similar outputs for a lot of signals. Compression of a signal signal at a time doesn't allow us to benefit from this. By using ATSC integrated in a database/filesystem/etc it would be possible
+to identify such scenarios and avoid storing further once we know a particular output exists already, thus further increase space savings.
 
-Apply the knowledge gained from FLAC experiments to optimize ATSC's streaming capabilities. This involves fine-tuning the compression strategy to excel in scenarios where real-time or efficient streaming of Time Series data is paramount.
+%OLD - Building on Experience: Draw insights from early experiments, particularly those involving Free Lossless Audio Codec (FLAC). Utilize the lessons learned to inform and refine ATSC's performance in streaming scenarios.
 
-These future directions underscore ATSC's commitment to continuous improvement and adaptation to emerging technologies. By exploring automated selections, integrating with Time Series databases, and leveraging lessons from streaming experiences, ATSC aims to stay at the forefront of efficient and intelligent Time Series data compression. This forward-looking section sets the stage for ongoing advancements and ensures that ATSC remains a versatile and cutting-edge solution in the dynamic landscape of data compression.
+\subsection{Outlier detection}
+
+One characteristics that was noted during result analysis, as that for systems with a lot of nodes doing the same work (e.g. Cassandra database with multiple nodes), compression ratios for a given metric across all nodes would be mostly the same.
+In a couple of cases we found that some nodes had significant differences for some metrics (more than double, sometimes 10x worse compression). By looking into the detailed metrics we could find that the node was misbehaving and it should be fixed 
+or replaced. This opens a front worth exploring that is comparing compression ratios for outlier detection.
+
+%OLD - Apply the knowledge gained from FLAC experiments to optimize ATSC's streaming capabilities. This involves fine-tuning the compression strategy to excel in scenarios where real-time or efficient streaming of Time Series data is paramount.
+%These future directions underscore ATSC's commitment to continuous improvement and adaptation to emerging technologies. By exploring automated selections, integrating with Time Series databases, and leveraging lessons from streaming experiences, ATSC aims to stay at the forefront of efficient and intelligent Time Series data compression. This forward-looking section sets the stage for ongoing advancements and ensures that ATSC remains a versatile and cutting-edge solution in the dynamic landscape of data compression.
 
 
 \section{CONCLUSION}
