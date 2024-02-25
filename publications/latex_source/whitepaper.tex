@@ -77,8 +77,8 @@ Traditional approaches, such as point-walking algorithms, demand substantial com
   
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.5\textwidth]{Fig2.png}
-  \caption{Architecture of computer system.}
+  \includegraphics[width=0.5\textwidth]{Fig4.png}
+  \caption{Internal Diagram of the ATSC Compressor}
   \label{Fig.2}
 \end{figure}
 
@@ -294,14 +294,14 @@ When a new sample is added, the index is updated. Since time progresses linearly
 
 Existing segments are incremented if the sample timestamp is the next in sequence. If a segment does not exist or the timestamp is not the next in sequence for the latest segment, a new segment is created. This approach ensures an efficient and organized index for managing variable rate sampling intervals.
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.5\textwidth]{Fig4.png}
-  \caption{Internal Diagram of the ATSC Compressor.}
-  \label{Fig.5}
-\end{figure}
-%% Estou aqui!
-\section{Results}
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=0.5\textwidth]{Fig4.png}
+%   \caption{Internal Diagram of the ATSC Compressor.}
+%   \label{Fig.5}
+% \end{figure}
+% %% Estou aqui!
+% \section{Results}
 
 In our quest to assess the efficiency and effectiveness of ATSC, a comprehensive testing methodology was employed. The ATSC server was configured as both a read and write backend for a Prometheus instance, establishing a practical and relevant testing environment. This Prometheus instance, in turn, was connected to an Instaclustr internal production 57-node Cassandra cluster with a Prometheus endpoint enabled. 
 The data flow was then collected at the node level, sent to prometheus endpoint that would then forward it to the ATSC server configured as previsously stated.
