@@ -88,7 +88,7 @@ The exponential growth of data in computer systems monitoring has led to soaring
 Sending monitoring data to external systems, especially in cloud environments, incurs in egress costs. Our research recognises the financial implications of these expenses and aims to mitigate them through advanced compression methodologies. By optimising data before transmission, we not only reduce egress costs but also enhance the overall efficiency of data transfer. 
 
 \subsection{Balancing Data Reduction and Information Preservation}
-To manage overwhelming data volumes, conventional practices often resort to techniques like averaging, sub-sampling or by not collecting enough information via very low sampling. While effective in reducing data points, this approach comes at a cost – a loss of valuable information. Our research seeks to address this trade-off by proposing advanced time-series compression methods that achieve data reduction without sacrificing critical insights and information. 
+To manage overwhelming data volumes, conventional practices often resort to techniques like averaging, sub-sampling or by not collecting enough information via very low sample rates (1 sample per minute or every 2 minutes). While effective in reducing data points, this approach comes at a cost, the loss of valuable information. Our research seeks to address this trade-off by proposing advanced time-series compression methods that achieve data reduction without sacrificing critical insights and information. 
 
 \subsection{Computational Challenges in Traditional Monitoring Techniques}
 Traditional approaches, such as point-walking algorithms, demand substantial computational resources to process the vast amounts of monitoring data. Recognising the strain on computing capabilities, our research introduces a more resource-efficient paradigm. By exploring novel compression techniques inspired by audio processing, we aim to streamline the computational demands of data analysis in computer systems monitoring. 
@@ -178,9 +178,11 @@ For the located data samples, the correspondent formula translation is applied a
 
 \section{Compression Methods}
 
-Mostly of the work is done in this step. After a statistical analysis the signal, the compressor stage decides which approach is best for a given block of samples.
+Mostly of the work is done in this step. 
+After a statistical analysis the signal, the compressor stage decides which approach is best for a given block of samples.
 Things like first and second derivative analysis also allows a more precise selection of the compression form. 
-For example, a signal which is mostly stable (small variation) will be approximated by a Spline, a signal with a lot of variation will be better approximated by an Fast Fourier Transform or a Linear Predictive Coding.
+For example, a signal which is mostly stable (small variation) will be approximated by a Spline, a signal with a lot of variation will be better approximated by an Fast Fourier Transform or Linear Predictive Coding.
+Depending on the error allowed for the compression, a less optimal method might be selected trading off precision for space savings. 
 
 \vspace{10pt}
 \subsubsection{Fast Fourier Transforms (FFT)}
@@ -240,19 +242,35 @@ In practical testing, LPC offers worst compression than FFTs, so FFT is widely u
 The only case where LPC is used, is in lossless compression, where it offers a very solid compression averaging between 4x to 8x.
 
 \vspace{10pt}
-\section{Error Correction}
+\section{Artifact Detection and Correction}
 
-All the methods described above generate lossy compression. 
+All the methods described above generate almost always, a lossy compression. 
+This is as expected since is the core part of our work. 
+But sometimes, the methods above might generate artifacts that we need to remove. 
+Those artifacts are points that are generated from the mathematical aproximations and are far from the original data points.
+They constitute point errors bigger than any other points in the generated data.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.5\textwidth]{compression_artifact.png}
+  \caption{Compression artifact from the FFT approximation.}
+  \label{Fig.4}
+\end{figure}
+\vspace{5pt}
+
 For reducing the error of the compression and/or remove artifacts from the generated signals the following process is used:
 
 \begin{itemize}
-    \item Error detection via Mean Absolute Percentage
-    \item Storing of the errors that are above the defined error threshold
-    \item Discard error points until the global error threshold is met. Since the biggest error points are discarded last, the biggest differences are eliminated.
+    \item Error detection via Mean Absolute Percentage;
+    \item Storing of the errors that are above the defined error threshold;
+    \item Store the location of the biggest errors and the correspondent original data point;
+    \item When decompression happens, replace the generated points by the stored data.
 \end{itemize}
 
-For lossless compression all the point differences need to be stored. In a lot of cases this leads to almost no compression unless the signal has a perfect fitting with
-the mathematical representation.
+This approach not only removes the biggest artifacts from the data, it also lowers the error rate of the signal. On a good fitting, we can avoid storing any point, so the importance of the fitting.
+A tradeoff exists, since getter a better fitting need more data stored (e.g. More frequencies for FFT), and storing errors need space. But even a good fitting, needs artifacts removed.
+For lossless compression all the point differences need to be stored.
+In a lot of cases this leads to almost no compression unless the signal has a perfect fitting with the mathematical representation.
 
 \section{Indexing Samples with VRSI (Variable Rate Sampling Interval)}
 \vspace{5pt}
