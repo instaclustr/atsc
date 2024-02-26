@@ -28,12 +28,22 @@ carlos.rolo@netapp.com}
 \textit{Open SI(NetApp)}\\
 Canberra, Australia \\
 u3227463@uni.canberra.edu.au}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Ben Bromhead}
+\IEEEauthorblockA{\textit{Instaclustr (of Aff.)} \\
+\textit{NetApp(NetApp)}\\
+Canberra, Australia \\
+ben.bromhead@netapp.com}
 }
 
 \maketitle
 
 \begin{abstract}
-    This research paper introduces an innovative approach to time series compression tailored for the complexities of computer systems monitoring. The Advanced Time Series Compression (ATSC) methodology, drawing inspiration from established audio compression techniques, achieves significant compression ratios, potentially resulting in space savings of up to 57.34 times. With a strong emphasis on precise data retrieval and efficient streaming capabilities, ATSC presents a promising solution for effectively managing high-frequency time series data within the realm of computer systems monitoring. The study underscores the critical importance of unique indexing for targeted decompression and showcases promising results from initial testing against traditional methods. Future research directions encompass exploring automated selections, integration with time series databases, and further optimization for enhanced efficiency. ATSC emerges as an innovative and forward-thinking solution that not only addresses current challenges in storage and data transfer but also propels advancements in time series monitoring and data compression within computer systems.
+    This research paper introduces an novel approach to time series compression tailored for the complexities of computer systems monitoring.
+    The Advanced Time Series Compression (ATSC) methodology, drawing inspiration from established audio compression techniques, achieves significant compression ratios, potentially resulting in space savings of up to 60 times or more against raw data, about one order greater than state-of-the-art compression methods.
+    With a strong emphasis on precise data retrieval and efficient streaming capabilities, ATSC presents a promising solution for effectively managing high sample rate time series data within the realm of computer systems monitoring.
+    The study underscores the critical importance of unique indexing for targeted decompression and showcases promising results from initial testing against traditional methods.
+    Future research directions encompass exploring automated selections, integration with time series databases, and further optimization for enhanced efficiency.
 \end{abstract}
 \vspace{5pt}
 \begin{IEEEkeywords}
@@ -41,21 +51,30 @@ Timeseries Compression, Function Approximation, Audio Compression, Data Storage,
 \end{IEEEkeywords}
 
 \section{Introduction}
-The realm of computer systems monitoring, distinct from general time-series monitoring, is characterized by a unique set of challenges. Typically marked by very low-frequency sampling, ranging from 0.05Hz to 1~2Hz, this process focuses on capturing signals from various processes, such as database operations and the overall health of the operating system [10]. 
- 
-An intriguing facet of this domain is the absence of periodicity or harmonic components in most signals. In many cases, these signals are treated as isolated samples or short sequences, employing compression techniques like XOR compression and delta-delta encoding. 
-However, a paradigm shift emerges by viewing these signals collectively. While the techniques themselves may not be novel, their application in this domain is ground-breaking. By harnessing audio packing and processing methodologies, we not only capitalize on compression benefits but also tap into the extensive streaming functionality embedded in audio formats..
- 
-The significance of data compression extends beyond storage concerns to encompass in-transit scenarios, especially with the rise of cloud computing. Sending monitoring data to external systems incurs egress costs, and stored data must be uncompressed and processed before transmission.ATSC compressor sits in  between Metrics Server and Metrics server(Fig1.) Leveraging audio packing techniques allows us to seamlessly integrate with the broader ecosystem of software and hardware, ranging from servers to mobile devices, proficient in transporting and encoding/decoding such information on demand. 
+The realm of computer systems monitoring, distinct from general time-series monitoring, is characterized by a unique set of challenges. 
+Typically, current systems, monitor with sample rates ranges from 1 sample per second to 1 sample per 20 seconds (or more). 
+these process focuses on capturing signals from various processes, such as database operations and the overall health of the operating system [10]. 
+In many cases, these signals are treated as isolated samples or short sequences, employing compression techniques like XOR compression and delta-delta encoding. 
+Or, are treated as any other form of generic digital content and compressed via generic compressors (LZ4, ZIP, etc).
+However, a paradigm shift emerges by viewing these signals collectively. 
+While the techniques themselves may not be novel, their application in this domain is ground-breaking. 
+By learning from audio packing and processing methodologies, we not only capitalize on compression benefits but also tap into the benefits from the streaming functionality that exists in such formats.
+One of the first lessons learned was the use of lossy compression. 
+Not all data is needed as long as critical information is preserved.
+As such, we show that with a close approximation (1\% to 3\%) of the original data, we achieve high compression ratios. 
+This opens the possibility of keeping more data, for more time, and even for historical data, that is normally subsampled, we can keep sample-by-sample accuracy.
+The significance of data compression extends beyond storage concerns to encompass in-transit scenarios, especially with the rise of cloud computing.
+Sending monitoring data to external systems incurs egress costs, and stored data must be uncompressed and processed before transmission.
+ATSC compressor sits in  between Metrics Server and Metrics server(Fig1.) Leveraging audio packing techniques allows us to seamlessly integrate with the broader ecosystem of software and hardware, ranging from servers to mobile devices, proficient in transporting and encoding/decoding such information on demand. 
 
-\begin{figure}[h]
+\begin{figure}[ht]
   \centering
-  \includegraphics[width=0.5\textwidth]{Fig1.png}
-  \caption{Flow of data from monitored services to devices reading metrics.}
+  \includegraphics[width=0.5\textwidth]{math_approximation.png}
+  \caption{A disk usage metric approximated by an Fast Fourier Transform and a Catmull-Rom interpolation.}
   \label{Fig.1}
 \end{figure}
 
-Our approach doesn't only yield savings in at-rest scenarios but also in transit and during compute processing. By having the ability to leverage client-side devices [9], we enable efficient processing and transport of monitoring data. Integration in system-on-a-Chip architectures [8] could lead to further performance enhancements. This strategy positions our methodology at the forefront of efficient and resource-conscious computer systems monitoring. ATSC address this issues while keeping Compression and Decompression speed and resource consumption at a similar level as current existing compression algorithms.
+ATSC achieves a high compression ratio while keeping Compression and Decompression speed and resource consumption at a similar level as current existing compression algorithms.
 
 \section{Background}
 
@@ -430,6 +449,12 @@ or replaced. This opens a front worth exploring that is comparing compression ra
 %OLD - Apply the knowledge gained from FLAC experiments to optimize ATSC's streaming capabilities. This involves fine-tuning the compression strategy to excel in scenarios where real-time or efficient streaming of Time Series data is paramount.
 %These future directions underscore ATSC's commitment to continuous improvement and adaptation to emerging technologies. By exploring automated selections, integrating with Time Series databases, and leveraging lessons from streaming experiences, ATSC aims to stay at the forefront of efficient and intelligent Time Series data compression. This forward-looking section sets the stage for ongoing advancements and ensures that ATSC remains a versatile and cutting-edge solution in the dynamic landscape of data compression.
 
+\subsection{Use of hardware capacities}
+
+Our approach doesn't only yield savings in at-rest scenarios but also in transit and during compute processing.
+By having the ability to leverage client-side devices [9], we enable efficient processing and transport of monitoring data. 
+Integration in system-on-a-Chip architectures [8] could lead to further performance enhancements. 
+This strategy positions our methodology at the forefront of efficient and resource-conscious computer systems monitoring.
 
 \section{conclusion}
 
