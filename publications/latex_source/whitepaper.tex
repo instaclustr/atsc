@@ -29,7 +29,7 @@ carlos.rolo@netapp.com}
 Canberra, Australia \\
 u3227463@uni.canberra.edu.au}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Ben Bromhead}
+\IEEEauthorblockN{3\textsuperscript{nd} Ben Bromhead}
 \IEEEauthorblockA{\textit{Instaclustr (of Aff.)} \\
 \textit{NetApp(NetApp)}\\
 Canberra, Australia \\
@@ -337,25 +337,34 @@ Existing segments are incremented if the sample timestamp is the next in sequenc
 %   \caption{Internal Diagram of the ATSC Compressor.}
 %   \label{Fig.5}
 % \end{figure}
-% %% Estou aqui!
-% \section{Results}
 
-In our quest to assess the efficiency and effectiveness of ATSC, a comprehensive testing methodology was employed. The ATSC server was configured as both a read and write backend for a Prometheus instance, establishing a practical and relevant testing environment. This Prometheus instance, in turn, was connected to an Instaclustr internal production 57-node Cassandra cluster with a Prometheus endpoint enabled. 
+\section{Results}
+
+In our quest to assess the efficiency and effectiveness of ATSC, a comprehensive testing methodology was employed. 
+The ATSC server was configured as both a read and write backend for a Prometheus instance, establishing a practical and relevant testing environment. 
+This Prometheus instance, in turn, was connected to an Instaclustr internal production 57-node Cassandra cluster with a Prometheus endpoint enabled. 
 The data flow was then collected at the node level, sent to prometheus endpoint that would then forward it to the ATSC server configured as previsously stated.
-The server run for approximated 18h over 2 days. Collecting 1 point every 20 sec. This ended with a 5432 samples for each signal, for each node. For a total of 14386 signals processed.
-ATSC run with automatic compressor selection and a maximixum allowed error of 3\\%.
+The server run for approximated 18h over 2 days. Collecting 1 point every 20 sec. This ended with a 5432 samples for each signal, for each node.
+A total of 14,386 signals processed.
+Of this dataset, X are signals that represent aggregations (e.g. Histograms), so we removed those, and ended with 13,950 Signals.
+ATSC run with automatic compressor selection and a maximixum allowed error of 3\%.
 
-\subsection*{ATSC Single: A Best-Case Scenario Analysis}
+\subsection{ATSC Single: A Best-Case Scenario Analysis}
 
-Before delving into the detailed results, it is essential to address the ATSC single scenario. This represents an optimal output expected on a server running for an extended period, devoid of headers and enriched with substantial data conducive to efficient compression. Although this scenario does not reflect a realistic measure, it serves as a best-case scenario for the current test. The approach involves consolidating all data from every file into a single file, subsequently compressed.
+Before delving into the detailed results, it is essential to address the ATSC single scenario.
+The best case scenario for ATSC is a dataset that fits perfectly with a mathematical model.
+In such a case, even with a growing number of samples it is possible to store a massive ammount of data represented by only the mathematical formula, the sample number, and the index.
+In such circunstances it is possible to achive compression ratios of over 3000x.
+One can question if this is a realistic scenario, and we answer: yes! As shown in our data overview, there are always signals that are stale, or change very very infrequently, those fall in our best case scenario.
+In our production testing, approximate 13\% of the data falls into the best case scenario.
 
-\subsection*{Data Overview}
+\subsection{Data Overview}
 
 \textbf{Raw Data Size:} 847,315,029 bytes \\
 \textbf{Compression Statistics:}
 
 \begin{itemize}
-    \item \textbf{Gorilla Compression:}
+    \item \textbf{Prometheus Compression:}
     \begin{itemize}
         \item Compressed Size: 454,778,552 bytes
         \item Compression Ratio: 1.86 times
@@ -372,19 +381,6 @@ Before delving into the detailed results, it is essential to address the ATSC si
     \end{itemize}
 \end{itemize}
 
-% \textbf{Signal Count:}
-
-% \begin{itemize}
-%     \item Total Signals: 5,860
-% \end{itemize}
-
-% \textbf{Compression Ratios Analysis:}
-
-% \begin{itemize}
-%     \item Median Compression Ratio: 1,653.82
-%     \item Average Compression Ratio: 1,979.21
-% \end{itemize}
-
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.5\textwidth]{Fig5.png}
@@ -393,7 +389,9 @@ Before delving into the detailed results, it is essential to address the ATSC si
 \end{figure}
 
 \vspace{10pt}
-These results offer a detailed insight into the performance of ATSC across various compression techniques. The data overview provides the baseline, while compression statistics and signal count shed light on the efficiency of ATSC's compression strategies. The analysis of compression ratios, both median and average, further quantifies the compression effectiveness across the tested scenarios. 
+These results offer a detailed insight into the performance of ATSC across various compression techniques. 
+The data overview provides the baseline, while compression statistics and signal count shed light on the efficiency of ATSC's compression strategies. 
+The analysis of compression ratios average and the histogram of compression further quantifies the compression effectiveness across the tested scenario. 
  
 \subsection{Result validation}
 
@@ -408,7 +406,8 @@ In this section we are going to show some examples of those compressed signals.
   \label{cpu}
 \end{figure}
 
-We start with the CPU usage
+We start with the CPU usage, this is signal that is always collected. 
+The approximation is very close in the majority of the samples. 
 
 \begin{figure}[h]
     \centering
@@ -417,7 +416,9 @@ We start with the CPU usage
     \label{Disk}
   \end{figure}
 
-Then we go to disk usage. It is very important to take notice of the scale in this image.
+Disk usage is another metric that is stored all the time.
+And this signal show what could be a somewhat very wrong approximation.
+But by looking at the scale, we can clearly see that the approximation does a description of the disk usage with less than 3\% error.
 
   \begin{figure}[h]
     \centering
@@ -427,9 +428,10 @@ Then we go to disk usage. It is very important to take notice of the scale in th
   \end{figure}
 \vspace{10pt}
 
-Heap usage was picked because it is normally a very difficult signal to fit.
+Heap usage was picked because it is normally a very difficult signal to fit. But our approach tracks the signal with enough accuracy to capture the information. 
+As stated before, a reduction with compression could lead to a better approximation, but our review with real data shows that it wasn't significant.
 
-The ATSC Compression exhibited an impressive compression ratio of 57.34 times, showcasing the potential of BRRO in achieving substantial data reduction. Additionally, the LZ4 and FLAC Compression techniques demonstrated notable compression ratios of 8.53 and 5.62 times, respectively, highlighting the versatility of ATSC in adapting to different compression scenarios. 
+In conclusion, ATSC Compression exhibited an impressive compression ratio of 57.34 times, showcasing the potential of ATSC in achieving substantial data reduction. 
 These results substantiate ATSC's capabilities in optimizing storage space, offering valuable insights into its potential impact on real-world applications. 
 
 \section{Future Work}
