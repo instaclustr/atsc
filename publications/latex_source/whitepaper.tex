@@ -25,17 +25,17 @@
 Lisbon, Portugal \\
 carlos.rolo@netapp.com}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Joshua Varghese}
-\IEEEauthorblockA{\textit{dept. name of organization} \\
-\textit{Open SI(NetApp)}\\
-Canberra, Australia \\
-u3227463@uni.canberra.edu.au}
-\and
-\IEEEauthorblockN{3\textsuperscript{nd} Ben Bromhead}
+\IEEEauthorblockN{2\textsuperscript{nd} Ben Bromhead}
 \IEEEauthorblockA{\textit{Instaclustr} \\
 \textit{NetApp}\\
 Canberra, Australia \\
 ben.bromhead@netapp.com}
+\and
+\IEEEauthorblockN{3\textsuperscript{hd} Joshua Varghese}
+\IEEEauthorblockA{\textit{dept. name of organization} \\
+\textit{Open SI(NetApp)}\\
+Canberra, Australia \\
+u3227463@uni.canberra.edu.au}
 }
 
 \maketitle
@@ -56,7 +56,7 @@ Time Series Compression, Function Approximation, Data Storage, Streaming, Indexi
 
 \section{Introduction}
 % Present your research topic
-In this study we introduce a novel method to compress time series monitoring data. 
+In this study we introduce a novel method to compress time series monitoring data\cite{influx}. 
 Our approach enabled compression ratios of up to 3000x in test scenarios and up to 880x with production.
 % Capture reader interest
 Current monitoring data is lossy by nature, due to being a sampled, and as such, not capturing all events. And the sampling rate can have a varied rate, typically from 1 sample per second to a sample per minute\cite{monitoring-samples}, or even more\cite{microsoft}.  
@@ -64,14 +64,13 @@ Current monitoring data is lossy by nature, due to being a sampled, and as such,
 Even so, capturing and storing monitoring data can take massive amounts of space. In our test case, a group of 57 nodes generated 600 MB in less than a day.
 Thus, monitoring data can be a significant burden in terms of storage and computational resources. Additionally, viewing data stored in the cloud incurs extra costs from egressing data.
 % Summarize existing research
-Current approaches tackle these problems by compressing time series data using several generic and/or specific algorithms\cite{compression} (e.g. Gorilla\cite{gorilla}).
+Current approaches tackle these problems by compressing time series data using several generic and/or specific algorithms\cite{timescale}\cite{dzone}\cite{compression} (e.g. Gorilla\cite{gorilla}).
 Domain-specific research for time series compression\cite{nasa-compression}\cite{smartgrid} and improvements to existing algorithms\cite{victoria} have been performed.
-Our approach leverages multimedia-specific knowledge (e.g., FLAC\cite{flac}) and the existing streaming capacity and fast decoding capabilities.
+Our approach leverages multimedia-specific knowledge (e.g., from FLAC\cite{flac}) and the existing streaming capacity and fast decoding capabilities.
 % Position your own approach
-Our approach starts with the premise that monitoring data is inherently lossy, and that we need the capacity to stream data in blocks to offer a fast decompression opposed to a slower compression process   .
+Our approach starts with the premise that monitoring data is inherently lossy, and that we need the capacity to stream data in blocks to offer a fast decompression opposed to a slower compression process.
 % Highlight the novelty and contributions of the study
-We treat data as signals and leverage previously established signal processing techniques (e.g., Fast Fourier Transform (FFTs) and splines\ref{math_aprox}
-) to approximate data points using mathematical formulas at the cost of precision.
+We treat data as signals and leverage previously established signal processing techniques (e.g., Fast Fourier Transform (FFTs) and splines\ref{math_aprox}) to approximate data points using mathematical formulas at the cost of precision.
 Using an approach that shares similarities with those used in domains such as audio compression, we developed a compressor capable of very high compression ratios, and fast decompression and streaming capabilities.
 
 \begin{figure}[ht]
@@ -83,25 +82,27 @@ Using an approach that shares similarities with those used in domains such as au
 
 Prior to the mathematical modelling of the signal, the data is split into blocks with a dynamic size.
 This is complemented by an indexing technique that allows the streaming of data without its complete decompression.
-The compressor can either operate in lossy or lossless mode. Importantly, even when operating in a lossy manner, the information is preserved  .
+The compressor can either operate in lossy or lossless mode. Importantly, even when operating in a lossy manner, the information is preserved.
 The compression ratios achieved using our method enables avoiding data aggregation techniques and culminate in storage and compute savings.
 % Give an overview of the paper’s structure
 In the following sections, we discuss the context leading to our research while exploring the architecture of our compressor and providing a detailed explanation of its dynamic blocking, modelling, and indexing aspects. Furthermore, we expand on the topic of error correction for minimizing compression artifacts and discuss the results obtained with this approach on production datasets.
 
 \section{Background}
 
-In the dynamic landscape of computer systems monitoring, the impetus for our research stems from critical challenges that impact the efficiency and cost-effectiveness of current practices. 
+In the dynamic landscape of computer systems monitoring, the impetus for our research stems from critical challenges that impact the efficiency and cost-effectiveness of current practices\cite{10.1007/978-3-319-63712-9_8}. 
 
 \subsection{High Storage Cost}
 
-The exponential growth of data in computer systems monitoring has led to soaring storage costs. Traditional methods often struggle to cope with the sheer volume of information generated by processes, databases, and overall system health monitoring. Our research delves into innovative time-series compression techniques that alleviate the burden of high storage costs, offering a sustainable solution for data retention and management. 
+The exponential growth of data in computer systems monitoring has led to soaring storage costs.
+Traditional methods often struggle to cope with the sheer volume of information generated by processes, databases, and overall system health monitoring.
+Our research delves into innovative time-series compression techniques that alleviate the burden of high storage costs, offering a sustainable solution for data retention and management. 
 
 \subsection{Balancing Data Reduction and Information Preservation}
 Conventional practices often resort to techniques such as averaging, sub-sampling or undersampling to manage the overwhelming data volumes. This approach effectively reduces the amount of data points but is undermined by the loss of valuable information.
 Our research addresses this trade-off by proposing advanced time-series compression methods that achieve data reduction without sacrificing critical insights and information\ref{fft_comparison}. 
 
 \subsection{Computational Challenges in Traditional Monitoring Techniques}
-Traditional approaches, such as point-walking algorithms, demand substantial computational resources to process vast amounts of monitoring data. Recognizing the strain on computing capabilities, our method introduces a more resource-efficient paradigm by exploring novel compression techniques inspired by audio processing.
+Traditional approaches, such as point-walking algorithms, demand substantial computational resources to process vast amounts of monitoring data\cite{10.14778/2735479.2735481}. Recognizing the strain on computing capabilities, our method introduces a more resource-efficient paradigm by exploring novel compression techniques inspired by audio processing.
 
 Our comprehensive approach tackles the immediate challenges of high storage and egress costs while addressing the inherent trade-offs of data reduction techniques. The overarching goal is to improve the landscape of computer systems monitoring by introducing a cost-effective and information-rich paradigm through advanced time-series compression.  
 
@@ -354,7 +355,7 @@ ATSC                        & 14,276,544                       & 42.47
 
 The compression performance of ATSC was benchmarked against two state-of-the-art methods (Prometheus and LZ4). Results obtained in the compression tests are shown in Table \ref{table:results} and Figure \ref{fig:histogram}. Overall, ATSC performed substantially better, achieving a compression ratio over an order of magnitude than the other methods tested (Table \ref{table:results}).
 The data overview in Table \ref{table:results} provides a performance reference, while compression statistics and signal counts measure  the efficiency of ATSC's compression strategies. 
-The compression effectiveness was quantified using the average compression ratios and the compression histogram\ref{fig:histogram}. 
+The compression effectiveness was quantified using the average compression ratios and the compression histogram (figure \ref{fig:histogram}). 
 
 \begin{figure}[ht]
   \centering
