@@ -11,6 +11,8 @@
 \usepackage{url}
 \usepackage{hyperref}
 
+\usepackage{tabularray}
+
 %\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
 %    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
@@ -39,14 +41,13 @@ ben.bromhead@netapp.com}
 \maketitle
 
 \begin{abstract}
-    This research paper introduces a novel approach to time series compression tailored for the complexities of computer systems monitoring.
-    The Advanced Time Series Compression (ATSC) methodology, drawing inspiration from established audio compression techniques, achieves significant compression ratios, potentially resulting in space savings of up to 880 times against raw data, about one order greater than state-of-the-art compression methods.
-    By splitting time series using dynamic block sizes and applying mathematical modeling to each block, we change the representation from a sequence of points to a mathematical formula and its parameters.
-    Dynamic selection of the mathematical formula, based on information retrieved from the time series, allows an optimal fitting.
-    The time part of the time series is reduced to a simple index that not only keeps the representation of time for each point but also allows precise retrieval and efficient streaming of data segments. 
+    This study introduces a novel approach to time series compression tailored for the complexities of computer systems monitoring.
+    The Advanced Time Series Compression (ATSC) methodology, drawing inspiration from established audio compression techniques, achieves significant compression ratios. It enables storing raw data using 880 times less space, approximately an order of magnitude less than state-of-the-art compression methods.
+    The data representation is converted from a sequence of points to a mathematical formula (and its parameters) by using dynamic block sizes to split time series and applying mathematical modeling to each block.
+    Dynamic selection of the mathematical formula is based on information retrieved from the time series and allows an optimal fitting.
+    The time component of the time series is reduced to a simple index that keeps the representation of time for each point and allows the precise retrieval and efficient streaming of data segments. 
     ATSC presents a promising solution for effectively managing high sample rate time series data within the realm of computer systems monitoring.
-    We present promising results from initial testing against state-of-the-art compression systems. 
-    %Future research directions encompass exploring automated selections, integration with time series databases, and further optimization for enhanced efficiency.
+    Here, we present promising results from initial testing against state-of-the-art compression systems. 
 \end{abstract}
 \vspace{5pt}
 \begin{IEEEkeywords}
@@ -54,111 +55,77 @@ Time Series Compression, Function Approximation, Data Storage, Streaming, Indexi
 \end{IEEEkeywords}
 
 \section{Introduction}
-%%%
 % Present your research topic
+In this study we introduce a novel method to compress time series monitoring data. 
+Our approach enabled compression ratios of up to 3000x in test scenarios and up to 880x with production.
 % Capture reader interest
-% Summarize existing research
-% Position your own approach
+Current monitoring data is lossy by nature, due to being a sampled, and as such, not capturing all events. And the sampling rate can have a varied rate, typically from 1 sample per second to a sample per minute\cite{monitoring-samples}, or even more\cite{microsoft}.  
 % Define your specific research problem and problem statement
-% Highlight the novelty and contributions of the study
-% Give an overview of the paper’s structure
-
-% Present your research topic
-In this paper we introduce a novel method to compress time series monitoring data. 
-We observed compression ratios of up to 3000x in test scenarios and up to 880x with production data using this novel method.
-% Capture reader interest
-By Leveraging the fact that current monitoring data is already a sampled series and that for monitoring series have a sample rate between 1 sample per second to 1 sample per minute\cite{monitoring-samples} or even more\cite{microsoft}, not all events are captured.
-% Define your specific research problem and problem statement
-Even so, capturing and storing the monitoring data can take massive amounts of space. In our test case a group of 57 nodes generated 600 MB in less than a day.
-Currently, monitoring data can be a significant burden in terms of storage and compute.
-Also, viewing data stored in the cloud incurs in extra costs from egressing data.
+Even so, capturing and storing monitoring data can take massive amounts of space. In our test case, a group of 57 nodes generated 600 MB in less than a day.
+Thus, monitoring data can be a significant burden in terms of storage and computational resources. Additionally, viewing data stored in the cloud incurs extra costs from egressing data.
 % Summarize existing research
-To reduce these problems, current approaches compress time series data via several generic algorithms\cite{compression} and/or some specific ones (e.g. Gorilla\cite{gorilla}).
-There are some domain specific research for time series compression\cite{nasa-compression}\cite{smartgrid} and some improvements to existing algorithms\cite{victoria}.
-Also, we leveraged a lot from multimedia specific knowledge, mostly FLAC\cite{flac}, where the existing streaming capacity and fast decoding are characteristics we aimed for.
+Current approaches tackle these problems by compressing time series data using several generic and/or specific algorithms\cite{compression} (e.g. Gorilla\cite{gorilla}).
+Domain-specific research for time series compression\cite{nasa-compression}\cite{smartgrid} and improvements to existing algorithms\cite{victoria} have been performed.
+Our approach leverages multimedia-specific knowledge (e.g., FLAC\cite{flac}) and the existing streaming capacity and fast decoding capabilities.
 % Position your own approach
-With this knowledge we approach this process with a premise that monitoring data is inherently lossy by default, and capacity to stream data in blocks, with decompression speed on par with current state-of-the-art.
+Our approach starts with the premise that monitoring data is inherently lossy, and that we need the capacity to stream data in blocks to offer a fast decompression opposed to a slower compression process   .
 % Highlight the novelty and contributions of the study
-By looking at the data like signals we could leverage previously existing research and well know Signal processing techniques to try to approximate the data points via mathematical formulas at the cost of precision.
-So with an approach that is similar to what exists in other domains (namely audio), we ended up with a compressor that exhibits very high compression ratios, fast decompression and streaming capabilities.
-We use techniques like Fast Fourier Transforms (FFT), Splines, etc. to do a mathematical approximation of the signals\ref{math_aprox}.
+We treat data as signals and leverage previously established signal processing techniques (e.g., Fast Fourier Transform (FFTs) and splines\ref{math_aprox}
+) to approximate data points using mathematical formulas at the cost of precision.
+Using an approach that shares similarities with those used in domains such as audio compression, we developed a compressor capable of very high compression ratios, and fast decompression and streaming capabilities.
 
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=0.5\textwidth]{math_approximation-2.png}
+  \includegraphics[width=0.5\textwidth]{math_approximation-3.png}
   \caption{A disk usage metric approximated by a Fast Fourier Transform and a Catmull-Rom interpolation.}
   \label{math_aprox}
 \end{figure}
 
-This is preceded by dynamic block sizing of the data so that the best result can be achieved.
-All this is complemented by a small indexing technique allowing the streaming of data without the need to decompress the whole data or even the whole block.
-The compressor can be both lossy and lossless, but even operating in a lossy manner information is preserved allowing the use of the data.
-Given the compression ratios achieved data aggregations techniques can be avoided and bring savings not only in storage but also in compute.
+Prior to the mathematical modelling of the signal, the data is split into blocks with a dynamic size.
+This is complemented by an indexing technique that allows the streaming of data without its complete decompression.
+The compressor can either operate in lossy or lossless mode. Importantly, even when operating in a lossy manner, the information is preserved  .
+The compression ratios achieved using our method enables avoiding data aggregation techniques and culminate in storage and compute savings.
 % Give an overview of the paper’s structure
-In this article we discuss the background that lead to this research, explore the current architecture of the compressor and dive into detailed explanation of dynamic blocking, modelling and indexing.
-We include other topics as error correction for minimizing compression artifacts and discuss the results obtain with this approach on production datasets.
-
-%The realm of computer systems monitoring, distinct from general time-series monitoring, is characterized by a unique set of challenges. 
-%Typically, current systems, monitor with sample rates ranges from 1 sample per second to 1 sample per 20 seconds (or more). 
-%These process focuses on capturing signals from various processes, such as database operations and the overall health of the operating system \cite{influx}. 
-%In many cases, these signals are treated as isolated samples or short sequences, employing compression techniques like XOR compression and delta-delta encoding. 
-%Or, are treated as any other form of generic digital content and compressed via generic compressors (LZ4, ZIP, etc.).
-%However, a paradigm shift emerges by viewing these signals collectively. 
-%While the techniques themselves may not be novel, their application in this domain is ground-breaking. 
-%By learning from audio packing and processing methodologies, we not only capitalize on compression benefits but also tap into the benefits from the streaming functionality that exists in such formats.
-%One of the first lessons learned was the use of lossy compression. 
-%Not all data is needed as long as critical information is preserved.
-%As such, we show that with a close approximation (1\% to 3\%) of the original data, we achieve high compression ratios. 
-%This opens the possibility of keeping more data, for more time, and even for historical data, that is normally sub sampled, we can keep sample-by-sample accuracy.
-%The significance of data compression extends beyond storage concerns to encompass in-transit scenarios, especially with the rise of cloud computing.
-%Sending monitoring data to external systems incurs egress costs, and stored data must be uncompressed and processed before transmission.
-%ATSC compressor sits in  between Metrics Server and Metrics server(Fig1.) Leveraging audio packing techniques allows us to seamlessly integrate with the broader ecosystem of software and hardware, ranging from servers to mobile devices, proficient in transporting and encoding/decoding such information on demand. 
-%ATSC achieves a high compression ratio while keeping Compression and Decompression speed and resource consumption at a similar level as current existing compression algorithms.
+In the following sections, we discuss the context leading to our research while exploring the architecture of our compressor and providing a detailed explanation of its dynamic blocking, modelling, and indexing aspects. Furthermore, we expand on the topic of error correction for minimizing compression artifacts and discuss the results obtained with this approach on production datasets.
 
 \section{Background}
 
-In the dynamic landscape of computer systems monitoring, the impetus for our research stems from critical challenges that impact both the efficiency and cost-effectiveness of current practices. 
+In the dynamic landscape of computer systems monitoring, the impetus for our research stems from critical challenges that impact the efficiency and cost-effectiveness of current practices. 
 
 \subsection{High Storage Cost}
 
-The exponential growth of data in computer systems monitoring has led to soaring storage costs. Traditional methods often struggle to cope with the sheer volume of information generated by processes, databases, and overall system health monitoring. Our research delves into innovative time-series compression techniques to alleviate the burden of high storage costs, offering a sustainable solution for data retention. 
-
-\subsection{High Egress Cost}
-Sending monitoring data to external systems, especially in cloud environments, incurs in egress costs. Our research recognizes the financial implications of these expenses and aims to mitigate them through advanced compression methodologies. By optimizing data before transmission, we not only reduce egress costs but also enhance the overall efficiency of data transfer. 
+The exponential growth of data in computer systems monitoring has led to soaring storage costs. Traditional methods often struggle to cope with the sheer volume of information generated by processes, databases, and overall system health monitoring. Our research delves into innovative time-series compression techniques that alleviate the burden of high storage costs, offering a sustainable solution for data retention and management. 
 
 \subsection{Balancing Data Reduction and Information Preservation}
-To manage overwhelming data volumes, conventional practices often resort to techniques like averaging, sub-sampling or by not collecting enough information via very low sample rates (1 sample per minute or every 2 minutes). While effective in reducing data points, this approach comes at a cost, the loss of valuable information. Our research seeks to address this trade-off by proposing advanced time-series compression methods that achieve data reduction without sacrificing critical insights and information. 
+Conventional practices often resort to techniques such as averaging, sub-sampling or undersampling to manage the overwhelming data volumes. This approach effectivelly reduces the amount of data points but is undermined by the loss of valuable information . Our research addresses this trade-off by proposing advanced time-series compression methods that achieve data reduction without sacrificing critical insights and information. 
 
 \subsection{Computational Challenges in Traditional Monitoring Techniques}
-Traditional approaches, such as point-walking algorithms, demand substantial computational resources to process the vast amounts of monitoring data. Recognizing the strain on computing capabilities, our research introduces a more resource-efficient paradigm. By exploring novel compression techniques inspired by audio processing, we aim to streamline the computational demands of data analysis in computer systems monitoring. 
+Traditional approaches, such as point-walking algorithms, demand substantial computational resources to process vast amounts of monitoring data. Recognizing the strain on computing capabilities, our method introduces a more resource-efficient paradigm by exploring novel compression techniques inspired by audio processing.
 
-  
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.5\textwidth]{Fig2.png}
-  \caption{Internal Diagram of the ATSC Compressor}
-  \label{internal}
-\end{figure}
-
-Our comprehensive approach not only tackles the immediate challenges of high storage and egress costs but also addresses the inherent trade-offs in data reduction techniques. The overarching goal is to improve the landscape of computer systems monitoring by introducing a cost-effective and information-rich paradigm through advanced time-series compression. 
-
-
+Our comprehensive approach tackles the immediate challenges of high storage and egress costs while addressing the inherent trade-offs of data reduction techniques. The overarching goal is to improve the landscape of computer systems monitoring by introducing a cost-effective and information-rich paradigm through advanced time-series compression.  
 
 \section{Architecture}
 
-\subsection{ATSC Write Paths}
+In this section we describe the internals of the ATSC compressor. That includes both compressor\ref{internal} and decompressor, also internal structures and any other auxiliary mechanisms used.
 
-\subsubsection{Pre-processing the Signal for Initial Reduction}
-Ahead of compression, the signal undergoes a statistical pre-processing, calculating means, variance, etc. This initial step aims to eliminate redundant information and prepare the signal for more advanced compression methodologies.
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.5\textwidth]{Fig2.png}
+  \caption{Internal Diagram of the ATSC Compressor stage}
+  \label{internal}
+\end{figure}
 
-\vspace{10pt}
-\subsubsection{Packing the Signal in a Non-compressed Format (WAVBRO)}
-The uncompressed signal may then be packed into a non-compressed format. For this we created a new format heavily inspired by WAV. The signal can also be stored in the WAV format, but for this frequency might need to be converted, since WAV doesn't support <1 HZ frequencies. Additionally, the signal might be strategically split into integer and float types formatted to sizes compatible with audio sampling. Also, the signal might be split into different channels to reduce size. 
+\subsection{ATSC Compressor}
 
-\vspace{10pt}
-\subsubsection{Identifying and Exploiting Local Opportunities within the signal}
-ATSC leverages its distinctive approach by identifying local opportunities that are more suitable for a mathematical approximation. By slicing the signal in a targeted way, this sets the stage for enhanced compression in the subsequent stages. One way of doing such slicing is via Wavelets transforms, so that high and low frequencies components are identified, and the signal divided in different parts accordingly to its behavior.
-In case a clear opportunity for slicing the samples in optimal blocks are not identified, blocks are created with an optimal size for FFT processing (in the form of $slice = 2^n * 3^m$).
+\subsubsection{Split time and signal data}
+First part of the processing is to split the signal into is two components, time and the signal.
+
+\subsubsection{Data Analysis}
+In this stage signal undergoes a statistical pre-processing, calculating the minimum, maximum, mean, variance, etc.
+Also, the splitting of the signal into different blocks is performed here.
+The block sizes are dynamic, and the sizing is done via 2 methods, either a discrete wavelet transform (DWT)\ref{wavelet} or sizing for optimal FFT processing (in the form of $slice = 2^n * 3^m$).
+Given the computational cost of DWT, smaller signals are immediately sliced for FFT optimal size. In the other cases, DWT is performed first and if there is no high frequency components detected for slicing, FFT sizing is then performed.
+This information is provided to the Data Compression stage along with the signal data.
 
 \begin{figure}[ht]
   \centering
@@ -166,58 +133,52 @@ In case a clear opportunity for slicing the samples in optimal blocks are not id
   \caption{Example of wavelet detection of high frequency sections to slice the signal. Signal on top and Wavelet Analysis on bottom.}
   \label{wavelet}
 \end{figure}
-\vspace{5pt}
 
-\vspace{10pt}
-\subsubsection{Generate an Index for Precision Access}
-To facilitate precise access to samples without the need for full file seeking or decompression of the full file, ATSC generates a comprehensive index. This index ensures efficient retrieval of relevant portions of the signal, a critical aspect in the subsequent compression and decompression processes.
+\subsection{Time Mapping}
+To facilitate precise access to samples without the need for full file seeking or decompression of the full file, ATSC generates a an index. This index ensures efficient retrieval of relevant portions of the signal, a critical aspect in the decompression and streaming processes.
+The indexing technique is further explained in his own section.
 
-\vspace{10pt}
-\subsubsection{Blocking and Modelling}
-The signal samples are divided into blocks, and for each block, ATSC applies modelling techniques tailored to the specific characteristics of the signal. This may involve techniques such as Linear Predictive Coding (LPC), Polynomial Prediction, Fast Fourier Transforms (FFT), or other methodologies that best suit the signal's behavior. This modeling converts the original samples into an approximated formula. In some cases it is possible to match the original signal precisely. This leads to a high number of data points being converted into a mathematical formula and its components.
+\subsubsection{Data Compression}
+The signal samples are divided into blocks, and for each block, ATSC applies modelling techniques tailored to the specific characteristics of the signal. 
+This may involve techniques such as Linear Predictive Coding (LPC), Polynomial Prediction, Fast Fourier Transforms (FFT), or other methodologies that best suit the signal's behavior. 
+For a special case of signals that are continuous only a single value is stored, alongside the number of samples.
+This modeling converts the original samples into an approximated formula.
+In some cases it is possible to match the original signal precisely and no other data is stored, otherwise an array of values representing the biggest outliers are stored alongside the formula type and its components.
+This leads to a high number of data points being converted into a mathematical formula and its components.
+Error correction and artifact reduction are also performed at this stage.
+A deeper dive into this is done in the Compression\ref{section:compression} section of this study.
 
-\vspace{10pt}
-\subsubsection{Error correction and final optimizations}
-In cases where the resulting formulas are approximated, error correction can be applied. An error percentage can be provided so that the amount of error correction is applied until the approximation + error correction falls within the provided error margin. After the error corrections are applied (either via keeping samples with the highest error, Huffman-codding differences, etc) further optimization is done by reducing the information to the minimal computational size needed for each sample. Samples are normally provided in 64bits size, this step can reduce the sample size to 8bit if the samples fit.
+\subsubsection{Data Encoding}
+The last step of optimization is done by reducing the information to the minimal computational size needed for each sample. 
+Samples are normally provided in 64bits size, this step can reduce the sample size to 8bit or any other size that the samples fit.
 
-\vspace{10pt}
-\subsubsection{Generate the Final Compressed File}
-Building upon the insights gained from steps 1 to 7, ATSC culminates the write path by generating the final compressed file. This file encapsulates the intricacies of the original signal in a highly compressed and efficient format, ready for storage or transmission.
+\subsubsection{Compressor stage}
+This is the final stage, it just joins the compressed data alongside the index.
 
 
-\subsection{ATSC Read Paths}
+\subsection{ATSC Decompressor}
 
 ATSC distinguishes itself by eschewing the storage of timestamp information directly within the file, opting instead for a distinctive indexing approach that enables efficient streaming and targeted decompression of pertinent data segments.
 Within the Read Path of ATSC, the samples are located via an indexing table, and then uncompressed, or the full content if requested. 
 Since speed is important in retrieval of metrics, the read stage, after the location of the samples, applies the mathematical formula defined for the sample segment plus any error correction, and the returns the samples. 
 
-\vspace{10pt}
 \subsubsection{Precise Streaming through Specialized Indexing}\label{SCMA}
 The core innovation in the Read Path lies in the application of a specialized indexing mechanism. Unlike traditional methods, ATSC's indexing facilitates pinpointing the relevant portion of the file without the necessity of timestamp inclusion in the file itself. This precision in indexing empowers ATSC to streamline the streaming process, focusing exclusively on the required data, thereby optimizing resource utilization. 
 
-\vspace{10pt}
-\subsubsection{Unveiling of the Read Path}\label{SCMC}
+\subsubsection{Decompression process}
+
 \begin{itemize}
-
 \item{\textbf{\textit{Identifying the Samples to be Retrieved:}}} The Read Path initiation begins with the user specifying time interval of metric of interest. If no interval is provided, all samples are returned.
-
-\vspace{5pt}
-\item{\textbf{\textit{Precision in Data Retrieval Using the Index:}}} The index plays a crucial role in ATSC's approach. It aids in precisely identifying the segment of the file essential for the query. This ensures focused and efficient data retrieval.
-
-\vspace{5pt}
+\item{\textbf{\textit{Data Retrieval Using the Index:}}} The index plays a crucial role in ATSC's approach. It aids in precisely identifying the segment of the file essential for the query. This ensures focused and efficient data retrieval.
 \item{\textbf{\textit{Sample decompression:}}} Once the relevant data segment is identified, ATSC initiates the decompression of the data.
 For the located data samples, the correspondent formula translation is applied and any error correction.
-
-\vspace{5pt}
 \item{\textbf{\textit{Timestamp Integration Post-Decompression:}}} Following decompression, the samples, now in their extracted form, receive timestamp information from the index. This final step ensures temporal accuracy and relevance of the retrieved data.
-
-\vspace{5pt}
 \item{\textbf{\textit{Streaming/Writing data out:}}} Under a streaming process, samples are sent while being decompressed. ATSC also supports full file decompression where all the data is decompressed and then send out, or written out to a WAVBRO file.
 \end{itemize}
 
-\section{Compression Methods}
+\section{Compression Methods}\label{section:compression}
 
-Mostly of the work is done in this step. 
+Most of the work is done in this step. 
 After a statistical analysis the signal, the compressor stage decides which approach is best for a given block of samples.
 Things like first and second derivative analysis also allows a more precise selection of the compression form. 
 For example, a signal which is mostly stable (small variation) will be approximated by a Spline, a signal with a lot of variation will be better approximated by an Fast Fourier Transform or Linear Predictive Coding.
@@ -293,7 +254,7 @@ They constitute point errors bigger than any other points in the generated data.
   \centering
   \includegraphics[width=0.5\textwidth]{compression_artifact.png}
   \caption{Compression artifact from the FFT approximation.}
-  \label{Fig.4}
+  \label{fig:artifact}
 \end{figure}
 \vspace{5pt}
 
@@ -402,23 +363,17 @@ In our production testing, approximate 13\% of the data falls into the best case
 \textbf{Raw Data Size:} 847,315,029 bytes \\
 \textbf{Compression Statistics:}
 
-\begin{itemize}
-    \item \textbf{Prometheus Compression:}
-    \begin{itemize}
-        \item Compressed Size: 454,778,552 bytes
-        \item Compression Ratio: 1.86 times
-    \end{itemize}
-    \item \textbf{LZ4 Compression:}
-    \begin{itemize}
-        \item Compressed Size: 141,347,821 bytes
-        \item Compression Ratio: 5.99 times
-    \end{itemize}
-    \item \textbf{ATSC Compression:}
-    \begin{itemize}
-        \item Compressed Size: 14,276,544 bytes
-        \item Compression Ratio: 59.35 times
-    \end{itemize}
-\end{itemize}
+\begin{table}
+\centering
+\begin{tblr}{
+  hline{2} = {-}{},
+}
+\textbf{Module} & \textbf{Compressed size (bytes)} & \textbf{Compression Ratio}   \\
+Prometheus                  & 454,778,552                      & 1.86 \\
+LZ4                         & 141,347,821                      & 5.99 \\
+ATSC                        & 14,276,544                       & 59.35                                    
+\end{tblr}
+\end{table}
 
 \begin{figure}[h]
   \centering
@@ -428,6 +383,7 @@ In our production testing, approximate 13\% of the data falls into the best case
 \end{figure}
 
 \vspace{10pt}
+
 These results offer a detailed insight into the performance of ATSC across various compression techniques. 
 The data overview provides the baseline, while compression statistics and signal count shed light on the efficiency of ATSC's compression strategies. 
 The analysis of compression ratios average and the histogram of compression further quantifies the compression effectiveness across the tested scenario. 

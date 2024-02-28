@@ -87,3 +87,36 @@ year = {2023},
 month = {June},
 url = {https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/metrics-aggregation-explained},
 }
+@InProceedings{10.1007/978-3-319-63712-9_8,
+author="Peng, Xuesong
+and Pernici, Barbara",
+editor="Helfert, Markus
+and Klein, Cornel
+and Donnellan, Brian
+and Gusikhin, Oleg",
+title="Monitoring Data Reduction in Data Centers: A Correlation-Based Approach",
+booktitle="Smart Cities, Green Technologies, and Intelligent Transport Systems",
+year="2017",
+publisher="Springer International Publishing",
+address="Cham",
+pages="135--153",
+abstract="Monitoring data are collected and stored in a wide range of domains, especially in data centers, which integrate myriads of services and massive data. To handle the inevitable challenges brought by increasing volume of monitoring data, this paper proposes a correlation-based reduction method for streaming data that derives quantitative formulas between correlated indicators, and reduces the sampling rate of some indicators by replacing them with formulas predictions. This approach also revises formulas through iterations of the reduction process to find an adaptive solution in dynamic environments of data centers. One highlight of this work is the ability to work on upstream side, i.e., it can reduce volume requirements for data collection of monitoring systems. This work also tests the approach with both simulated and real data, showing that our approach is capable of data reduction in complex data centers.",
+isbn="978-3-319-63712-9"
+}
+@article{10.14778/2735479.2735481,
+author = {Ding, Rui and Wang, Qiang and Dang, Yingnong and Fu, Qiang and Zhang, Haidong and Zhang, Dongmei},
+title = {YADING: fast clustering of large-scale time series data},
+year = {2015},
+issue_date = {January 2015},
+publisher = {VLDB Endowment},
+volume = {8},
+number = {5},
+issn = {2150-8097},
+url = {https://doi.org/10.14778/2735479.2735481},
+doi = {10.14778/2735479.2735481},
+abstract = {Fast and scalable analysis techniques are becoming increasingly important in the era of big data, because they are the enabling techniques to create real-time and interactive experiences in data analysis. Time series are widely available in diverse application areas. Due to the large number of time series instances (e.g., millions) and the high dimensionality of each time series instance (e.g., thousands), it is challenging to conduct clustering on large-scale time series, and it is even more challenging to do so in real-time to support interactive exploration.In this paper, we propose a novel end-to-end time series clustering algorithm, YADING, which automatically clusters large-scale time series with fast performance and quality results. Specifically, YADING consists of three steps: sampling the input dataset, conducting clustering on the sampled dataset, and assigning the rest of the input data to the clusters generated on the sampled dataset. In particular, we provide theoretical proof on the lower and upper bounds of the sample size, which not only guarantees YADING's high performance, but also ensures the distribution consistency between the input dataset and the sampled dataset. We also select L1 norm as similarity measure and the multi-density approach as the clustering method. With theoretical bound, this selection ensures YADING's robustness to time series variations due to phase perturbation and random noise.Evaluation results have demonstrated that on typical-scale (100,000 time series each with 1,000 dimensions) datasets, YADING is about 40 times faster than the state-of-the-art, sampling-based clustering algorithm DENCLUE 2.0, and about 1,000 times faster than DBSCAN and CLARANS. YADING has also been used by product teams at Microsoft to analyze service performance. Two of such use cases are shared in this paper.},
+journal = {Proc. VLDB Endow.},
+month = {jan},
+pages = {473–484},
+numpages = {12}
+}
