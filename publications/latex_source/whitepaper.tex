@@ -25,17 +25,17 @@
 Lisbon, Portugal \\
 carlos.rolo@netapp.com}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Joshua Varghese}
-\IEEEauthorblockA{\textit{dept. name of organization} \\
-\textit{Open SI(NetApp)}\\
-Canberra, Australia \\
-u3227463@uni.canberra.edu.au}
-\and
-\IEEEauthorblockN{3\textsuperscript{nd} Ben Bromhead}
+\IEEEauthorblockN{2\textsuperscript{nd} Ben Bromhead}
 \IEEEauthorblockA{\textit{Instaclustr} \\
 \textit{NetApp}\\
 Canberra, Australia \\
 ben.bromhead@netapp.com}
+\and
+\IEEEauthorblockN{3\textsuperscript{nd} Joshua Varghese}
+\IEEEauthorblockA{\textit{University of Canberra} \\
+\textit{Open SI(NetApp)}\\
+Canberra, Australia \\
+u3227463@uni.canberra.edu.au}
 }
 
 \maketitle
@@ -325,7 +325,8 @@ Existing segments are incremented if the sample timestamp is the next in sequenc
 A comprehensive testing methodology was employed to assess the efficiency and effectiveness of ATSC. The ATSC server was configured as both a read and write backend for a Prometheus\cite{prometheus} instance, establishing a practical and relevant testing environment. 
 In turn, the Prometheus instance was connected to an Instaclustr internal production 57-node Cassandra\cite{cassandra} cluster with a Prometheus endpoint enabled. The data flow was then collected at the node level and sent to the Prometheus endpoint that would forward it to the ATSC server configured as previously stated.
 The server ran for approximated 18 hours over a 2 day period. Samples were collected at 1 point every 20 seconds, resulting in 5432 samples per each signal for each node. A total of 14386 signals were processed.
-We removed signals representing aggregations (e.g. histograms), reducing the total number of signal to 13950. ATSC ran with automatic compressor selection and a maximum allowed error of 3\%.
+We removed signals representing aggregations (e.g. histograms), reducing the total number of signal to 13950 and the total data size to  with a total data size of 606,294,900 bytes.
+ATSC ran with automatic compressor selection and a maximum allowed error of 3\%.
 
 \subsection{A Best-Case Scenario Analysis}
 
@@ -337,25 +338,22 @@ In our production tests, approximately 13\% of the data falls into these categor
 
 \subsection{Data Overview}
 
-\textbf{Raw Data Size:} 847,315,029 bytes \\
-\textbf{Compression Statistics:}
-
 \begin{table}
 \centering
 \begin{tblr}{
   hline{2} = {-}{},
 }
 \textbf{Method} & \textbf{Compressed size (bytes)} & \textbf{Compression Ratio}   \\
-Prometheus                  & 454,778,552                      & 1.86 \\
-LZ4                         & 141,347,821                      & 5.99 \\
-ATSC                        & 14,276,544                       & 59.35                                    
+Prometheus                  & 454,778,552                      & 1.33 \\
+LZ4                         & 141,347,821                      & 4.29 \\
+ATSC                        & 14,276,544                       & 42.47                                    
 \end{tblr}
 \caption{Benchmark results of compression performances between different compression methods.}
 \label{table:results}
 \end{table}
 
-The compression performance of ATSC was benchmarked against two state-of-the-art methods (Prometheus and LZ4). results obtained in the compression tests are shown in Table 1 and Figure 7. Overall, ATSC performed substantially better, achieving a compression ratio over an order of magnitude than the other methods tested (Table 1).
-The data overview in Table 1 provides a performance reference, while compression statistics and signal counts measure  the efficiency of ATSC's compression strategies. 
+The compression performance of ATSC was benchmarked against two state-of-the-art methods (Prometheus and LZ4). Results obtained in the compression tests are shown in Table \ref{table:results} and Figure \ref{fig:histogram}. Overall, ATSC performed substantially better, achieving a compression ratio over an order of magnitude than the other methods tested (Table \ref{table:results}).
+The data overview in Table \ref{table:results} provides a performance reference, while compression statistics and signal counts measure  the efficiency of ATSC's compression strategies. 
 The compression effectiveness was quantified using the average compression ratios and the compression histogram\ref{fig:histogram}. 
 
 \begin{figure}[ht]
