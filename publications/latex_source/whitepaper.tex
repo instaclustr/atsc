@@ -11,8 +11,8 @@
 \usepackage{url}
 \usepackage{hyperref}
 
-\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
-    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+%\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+%    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
 
 \title{A novel compression approach for time series monitoring data\\}
@@ -40,41 +40,80 @@ ben.bromhead@netapp.com}
 
 \begin{abstract}
     This research paper introduces a novel approach to time series compression tailored for the complexities of computer systems monitoring.
-    The Advanced Time Series Compression (ATSC) methodology, drawing inspiration from established audio compression techniques, achieves significant compression ratios, potentially resulting in space savings of up to 60 times or more against raw data, about one order greater than state-of-the-art compression methods.
-    With a strong emphasis on precise data retrieval and efficient streaming capabilities, ATSC presents a promising solution for effectively managing high sample rate time series data within the realm of computer systems monitoring.
-    The study underscores the critical importance of unique indexing for targeted decompression and showcases promising results from initial testing against traditional methods.
-    Future research directions encompass exploring automated selections, integration with time series databases, and further optimization for enhanced efficiency.
+    The Advanced Time Series Compression (ATSC) methodology, drawing inspiration from established audio compression techniques, achieves significant compression ratios, potentially resulting in space savings of up to 880 times against raw data, about one order greater than state-of-the-art compression methods.
+    By splitting time series using dynamic block sizes and applying mathematical modeling to each block, we change the representation from a sequence of points to a mathematical formula and its parameters.
+    Dynamic selection of the mathematical formula, based on information retrieved from the time series, allows an optimal fitting.
+    The time part of the time series is reduced to a simple index that not only keeps the representation of time for each point but also allows precise retrieval and efficient streaming of data segments. 
+    ATSC presents a promising solution for effectively managing high sample rate time series data within the realm of computer systems monitoring.
+    We present promising results from initial testing against state-of-the-art compression systems. 
+    %Future research directions encompass exploring automated selections, integration with time series databases, and further optimization for enhanced efficiency.
 \end{abstract}
 \vspace{5pt}
 \begin{IEEEkeywords}
-Timeseries Compression, Function Approximation, Audio Compression, Data Storage, Streaming, Indexing, Computer Systems Monitoring
+Time Series Compression, Function Approximation, Data Storage, Streaming, Indexing, Computer Systems Monitoring
 \end{IEEEkeywords}
 
 \section{Introduction}
-The realm of computer systems monitoring, distinct from general time-series monitoring, is characterized by a unique set of challenges. 
-Typically, current systems, monitor with sample rates ranges from 1 sample per second to 1 sample per 20 seconds (or more). 
-These process focuses on capturing signals from various processes, such as database operations and the overall health of the operating system \cite{influx}. 
-In many cases, these signals are treated as isolated samples or short sequences, employing compression techniques like XOR compression and delta-delta encoding. 
-Or, are treated as any other form of generic digital content and compressed via generic compressors (LZ4, ZIP, etc.).
-However, a paradigm shift emerges by viewing these signals collectively. 
-While the techniques themselves may not be novel, their application in this domain is ground-breaking. 
-By learning from audio packing and processing methodologies, we not only capitalize on compression benefits but also tap into the benefits from the streaming functionality that exists in such formats.
-One of the first lessons learned was the use of lossy compression. 
-Not all data is needed as long as critical information is preserved.
-As such, we show that with a close approximation (1\% to 3\%) of the original data, we achieve high compression ratios. 
-This opens the possibility of keeping more data, for more time, and even for historical data, that is normally sub sampled, we can keep sample-by-sample accuracy.
-The significance of data compression extends beyond storage concerns to encompass in-transit scenarios, especially with the rise of cloud computing.
-Sending monitoring data to external systems incurs egress costs, and stored data must be uncompressed and processed before transmission.
-ATSC compressor sits in  between Metrics Server and Metrics server(Fig1.) Leveraging audio packing techniques allows us to seamlessly integrate with the broader ecosystem of software and hardware, ranging from servers to mobile devices, proficient in transporting and encoding/decoding such information on demand. 
+%%%
+% Present your research topic
+% Capture reader interest
+% Summarize existing research
+% Position your own approach
+% Define your specific research problem and problem statement
+% Highlight the novelty and contributions of the study
+% Give an overview of the paper’s structure
+
+% Present your research topic
+In this paper we introduce a novel method to compress time series monitoring data. 
+We observed compression ratios of up to 3000x in test scenarios and up to 880x with production data using this novel method.
+% Capture reader interest
+By Leveraging the fact that current monitoring data is already a sampled series and that for monitoring series have a sample rate between 1 sample per second to 1 sample per minute\cite{monitoring-samples} or even more\cite{microsoft}, not all events are captured.
+% Define your specific research problem and problem statement
+Even so, capturing and storing the monitoring data can take massive amounts of space. In our test case a group of 57 nodes generated 600 MB in less than a day.
+Currently, monitoring data can be a significant burden in terms of storage and compute.
+Also, viewing data stored in the cloud incurs in extra costs from egressing data.
+% Summarize existing research
+To reduce these problems, current approaches compress time series data via several generic algorithms\cite{compression} and/or some specific ones (e.g. Gorilla\cite{gorilla}).
+There are some domain specific research for time series compression\cite{nasa-compression}\cite{smartgrid} and some improvements to existing algorithms\cite{victoria}.
+Also, we leveraged a lot from multimedia specific knowledge, mostly FLAC\cite{flac}, where the existing streaming capacity and fast decoding are characteristics we aimed for.
+% Position your own approach
+With this knowledge we approach this process with a premise that monitoring data is inherently lossy by default, and capacity to stream data in blocks, with decompression speed on par with current state-of-the-art.
+% Highlight the novelty and contributions of the study
+By looking at the data like signals we could leverage previously existing research and well know Signal processing techniques to try to approximate the data points via mathematical formulas at the cost of precision.
+So with an approach that is similar to what exists in other domains (namely audio), we ended up with a compressor that exhibits very high compression ratios, fast decompression and streaming capabilities.
+We use techniques like Fast Fourier Transforms (FFT), Splines, etc. to do a mathematical approximation of the signals\ref{math_aprox}.
 
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=0.5\textwidth]{math_approximation.png}
+  \includegraphics[width=0.5\textwidth]{math_approximation-2.png}
   \caption{A disk usage metric approximated by a Fast Fourier Transform and a Catmull-Rom interpolation.}
-  \label{Fig.1}
+  \label{math_aprox}
 \end{figure}
 
-ATSC achieves a high compression ratio while keeping Compression and Decompression speed and resource consumption at a similar level as current existing compression algorithms.
+This is preceded by dynamic block sizing of the data so that the best result can be achieved.
+All this is complemented by a small indexing technique allowing the streaming of data without the need to decompress the whole data or even the whole block.
+The compressor can be both lossy and lossless, but even operating in a lossy manner information is preserved allowing the use of the data.
+Given the compression ratios achieved data aggregations techniques can be avoided and bring savings not only in storage but also in compute.
+% Give an overview of the paper’s structure
+In this article we discuss the background that lead to this research, explore the current architecture of the compressor and dive into detailed explanation of dynamic blocking, modelling and indexing.
+We include other topics as error correction for minimizing compression artifacts and discuss the results obtain with this approach on production datasets.
+
+%The realm of computer systems monitoring, distinct from general time-series monitoring, is characterized by a unique set of challenges. 
+%Typically, current systems, monitor with sample rates ranges from 1 sample per second to 1 sample per 20 seconds (or more). 
+%These process focuses on capturing signals from various processes, such as database operations and the overall health of the operating system \cite{influx}. 
+%In many cases, these signals are treated as isolated samples or short sequences, employing compression techniques like XOR compression and delta-delta encoding. 
+%Or, are treated as any other form of generic digital content and compressed via generic compressors (LZ4, ZIP, etc.).
+%However, a paradigm shift emerges by viewing these signals collectively. 
+%While the techniques themselves may not be novel, their application in this domain is ground-breaking. 
+%By learning from audio packing and processing methodologies, we not only capitalize on compression benefits but also tap into the benefits from the streaming functionality that exists in such formats.
+%One of the first lessons learned was the use of lossy compression. 
+%Not all data is needed as long as critical information is preserved.
+%As such, we show that with a close approximation (1\% to 3\%) of the original data, we achieve high compression ratios. 
+%This opens the possibility of keeping more data, for more time, and even for historical data, that is normally sub sampled, we can keep sample-by-sample accuracy.
+%The significance of data compression extends beyond storage concerns to encompass in-transit scenarios, especially with the rise of cloud computing.
+%Sending monitoring data to external systems incurs egress costs, and stored data must be uncompressed and processed before transmission.
+%ATSC compressor sits in  between Metrics Server and Metrics server(Fig1.) Leveraging audio packing techniques allows us to seamlessly integrate with the broader ecosystem of software and hardware, ranging from servers to mobile devices, proficient in transporting and encoding/decoding such information on demand. 
+%ATSC achieves a high compression ratio while keeping Compression and Decompression speed and resource consumption at a similar level as current existing compression algorithms.
 
 \section{Background}
 
@@ -477,5 +516,4 @@ In summary, ATSC emerges as a promising solution that not only tackles current c
 
 \bibliographystyle{plain} % We choose the "plain" reference style
 \bibliography{refs} % Entries are in the refs.bib file
-
 \end{document}
