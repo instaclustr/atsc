@@ -28,7 +28,7 @@ carlos.rolo@netapp.com}
 \IEEEauthorblockN{2\textsuperscript{nd} Ben Bromhead}
 \IEEEauthorblockA{\textit{Instaclustr} \\
 \textit{NetApp}\\
-Canberra, Australia \\
+Christchurch, New Zealand \\
 ben.bromhead@netapp.com}
 \and
 \IEEEauthorblockN{3\textsuperscript{hd} Joshua Varghese}
@@ -42,12 +42,12 @@ u3227463@uni.canberra.edu.au}
 
 \begin{abstract}
     This study introduces a novel approach to time series compression tailored for the complexities of computer systems monitoring.
-    The Advanced Time Series Compression (ATSC) methodology, drawing inspiration from established audio compression techniques, achieves significant compression ratios. It enables storing raw data using 880 times less space, approximately an order of magnitude less than state-of-the-art compression methods.
-    The data representation is converted from a sequence of points to a mathematical formula (and its parameters) by using dynamic block sizes to split time series and applying mathematical modeling to each block.
-    Dynamic selection of the mathematical formula is based on information retrieved from the time series and allows an optimal fitting.
+    The Advanced Time Series Compression (ATSC) methodology, drawing inspiration from established audio compression techniques, achieves significant compression ratios. It enables storing time series data using 880 times less space than its original uncrompressed format and approximately an order of magnitude less than state-of-the-art open-source compression methods.
+    The data representation of a time series is converted from a sequence of points (time and the measured value) to a mathematical formula (and its parameters) by using dynamicly sized blocks of consecutive points to split the series and applying mathematical modeling to each block of points.
+    Selection of the mathematical formula is based on information retrieved from the time series and optimised to fit for desired maximum compression and error rates.
     The time component of the time series is reduced to a simple index that keeps the representation of time for each point and allows the precise retrieval and efficient streaming of data segments. 
-    ATSC presents a promising solution for effectively managing high sample rate time series data within the realm of computer systems monitoring.
-    Here, we present promising results from initial testing against state-of-the-art compression systems. 
+    ATSC presents a promising solution for efficiently managing high sample rate time series data within the realm of computer systems monitoring.
+    Here, we present promising results from initial testing against known open source state-of-the-art compression systems. 
 \end{abstract}
 \vspace{5pt}
 \begin{IEEEkeywords}
@@ -57,21 +57,19 @@ Time Series Compression, Function Approximation, Data Storage, Streaming, Indexi
 \section{Introduction}
 % Present your research topic
 In this study we introduce a novel method to compress time series monitoring data\cite{influx}. 
-Our approach enabled compression ratios of up to 3000x in test scenarios and up to 880x with production.
+Our approach enabled compression ratios of up to 3000x in test scenarios and up to 880x with real-world production data.
 % Capture reader interest
-Current monitoring data is lossy by nature, due to being a sampled, and as such, not capturing all events. And the sampling rate can have a varied rate, typically from 1 sample per second to a sample per minute\cite{monitoring-samples}, or even more\cite{microsoft}.  
+Current computer systems monitoring data is lossy by nature, as it is generally sampled, and as such, not capturing all events. The sampling rate can be varied, ranging from 1 sample per second to a sample per minute\cite{monitoring-samples}, or even more\cite{microsoft}.
 % Define your specific research problem and problem statement
-Even so, capturing and storing monitoring data can take massive amounts of space. In our test case, a group of 57 nodes generated 600 MB in less than a day.
+Capturing and storing monitoring data can take massive amounts of space. In our test case, a group of 57 servers running the Apache Cassandra database generated 600 MB in less than a day.
 Thus, monitoring data can be a significant burden in terms of storage and computational resources. Additionally, viewing data stored in the cloud incurs extra costs from egressing data.
 % Summarize existing research
 Current approaches tackle these problems by compressing time series data using several generic and/or specific algorithms\cite{timescale}\cite{dzone}\cite{compression} (e.g. Gorilla\cite{gorilla}).
 Domain-specific research for time series compression\cite{nasa-compression}\cite{smartgrid} and improvements to existing algorithms\cite{victoria} have been performed.
-Our approach leverages multimedia-specific knowledge (e.g., from FLAC\cite{flac}) and the existing streaming capacity and fast decoding capabilities.
-% Position your own approach
-Our approach starts with the premise that monitoring data is inherently lossy, and that we need the capacity to stream data in blocks to offer a fast decompression opposed to a slower compression process.
+Our approach leverages signal processing-specific knowledge from the multimedia domain (e.g., from FLAC\cite{flac}), starting with the premise that monitoring data is inherently lossy..
 % Highlight the novelty and contributions of the study
 We treat data as signals and leverage previously established signal processing techniques (e.g., Fast Fourier Transform (FFTs) and splines\ref{math_aprox}) to approximate data points using mathematical formulas at the cost of precision.
-Using an approach that shares similarities with those used in domains such as audio compression, we developed a compressor capable of very high compression ratios, and fast decompression and streaming capabilities.
+Using an approach that shares similarities with those used in domains such as audio compression, we developed a time-series compressor capable of very high compression ratios, and fast decompression and streaming capabilities.
 
 \begin{figure}[ht]
   \centering
@@ -82,8 +80,8 @@ Using an approach that shares similarities with those used in domains such as au
 
 Prior to the mathematical modelling of the signal, the data is split into blocks with a dynamic size.
 This is complemented by an indexing technique that allows the streaming of data without its complete decompression.
-The compressor can either operate in lossy or lossless mode. Importantly, even when operating in a lossy manner, the information is preserved.
-The compression ratios achieved using our method enables avoiding data aggregation techniques and culminate in storage and compute savings.
+The compressor can either operate in lossy or lossless mode. Importantly, even when operating in a lossy manner, the shape of the time series is preserved.
+The compression ratios achieved using our method enables avoiding data aggregation techniques (such as roll-ups, averaging points over larger time spans, and other summary based techniques) and culminate in storage and compute savings.
 % Give an overview of the paper’s structure
 In the following sections, we discuss the context leading to our research while exploring the architecture of our compressor and providing a detailed explanation of its dynamic blocking, modelling, and indexing aspects. Furthermore, we expand on the topic of error correction for minimizing compression artifacts and discuss the results obtained with this approach on production datasets.
 
@@ -137,7 +135,7 @@ This information is provided to the Data Compression stage along with the signal
 \end{figure}
 
 \subsection{Time Mapping}
-To facilitate precise access to samples without the need for full file seeking or decompression of the full file, ATSC generates a an index. This index ensures efficient retrieval of relevant portions of the signal, a critical aspect in the decompression and streaming processes.
+To facilitate precise access to samples without the need for full file seeking or decompression of the full file, ATSC generates an index. This index ensures efficient retrieval of relevant portions of the signal, a critical aspect in the decompression and streaming processes.
 The indexing technique is further explained in his own section.
 
 \subsubsection{Data Compression}
@@ -145,9 +143,9 @@ The signal samples are divided into blocks, and for each block, ATSC applies mod
 This may involve techniques such as Linear Predictive Coding (LPC), Polynomial Prediction, Fast Fourier Transforms (FFT), or other methodologies that best suit the signal's behavior. 
 For a special case of signals that are continuous only a single value is stored, alongside the number of samples.
 This modeling converts the original samples into an approximated formula.
+Error correction and artifact reduction are also performed at this stage.
 In some cases it is possible to match the original signal precisely and no other data is stored, otherwise an array of values representing the biggest outliers are stored alongside the formula type and its components.
 This leads to a high number of data points being converted into a mathematical formula and its components.
-Error correction and artifact reduction are also performed at this stage.
 A deeper dive into this is done in the Compression\ref{section:compression} section of this study.
 
 \subsubsection{Data Encoding}
@@ -323,7 +321,7 @@ Existing segments are incremented if the sample timestamp is the next in sequenc
 
 \section{Results}
 
-A comprehensive testing methodology was employed to assess the efficiency and effectiveness of ATSC. The ATSC server was configured as both a read and write backend for a Prometheus\cite{prometheus} instance, establishing a practical and relevant testing environment. 
+A real-world testing methodology was employed to assess the efficiency and effectiveness of ATSC. The ATSC server was configured as both a read and write backend for a Prometheus\cite{prometheus} instance, establishing a practical and relevant testing environment. 
 In turn, the Prometheus instance was connected to an Instaclustr internal production 57-node Cassandra\cite{cassandra} cluster with a Prometheus endpoint enabled. The data flow was then collected at the node level and sent to the Prometheus endpoint that would forward it to the ATSC server configured as previously stated.
 The server ran for approximated 18 hours over a 2 day period. Samples were collected at 1 point every 20 seconds, resulting in 5432 samples per each signal for each node. A total of 14386 signals were processed.
 We removed signals representing aggregations (e.g. histograms), reducing the total number of signal to 13950 and the total data size to  with a total data size of 606,294,900 bytes.
