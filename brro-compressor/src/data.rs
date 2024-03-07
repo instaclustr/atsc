@@ -41,6 +41,7 @@ impl CompressedStream {
         chunk: &[f64],
         compressor: Compressor,
         max_error: f32,
+        compression_speed: usize,
     ) {
         debug!(
             "Compressing chunk bounded with a max error of {}",
@@ -49,7 +50,7 @@ impl CompressedStream {
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         match compressor {
             // Auto means the frame will pick the best
-            Compressor::Auto => compressor_frame.compress_best(chunk, max_error),
+            Compressor::Auto => compressor_frame.compress_best(chunk, max_error, compression_speed),
             _ => compressor_frame.compress_bounded(chunk, max_error),
         }
         compressor_frame.close();
