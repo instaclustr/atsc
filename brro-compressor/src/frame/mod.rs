@@ -4,14 +4,7 @@ use log::debug;
 use std::mem::size_of_val;
 
 
-const COMPRESSION_SPEED: [i32; 7] =
-    [i32::MAX,
-    4096,
-    2048,
-    1024,
-    512,
-    256,
-    128];
+const COMPRESSION_SPEED: [i32; 7] = [i32::MAX, 4096, 2048, 1024, 512, 256, 128];
     
 /// This is the structure of a compressor frame
 #[derive(Encode, Decode, Debug, Clone)]
