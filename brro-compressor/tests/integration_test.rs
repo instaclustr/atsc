@@ -84,7 +84,6 @@ fn compress_file_with_speed(speed: u8) {
     assert!(path.join("1.bro").is_file());
 }
 
-
 fn run_compressor(args: &[&str]) {
     // path to binary set by cargo: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
     let command = std::env!("CARGO_BIN_EXE_brro-compressor");
