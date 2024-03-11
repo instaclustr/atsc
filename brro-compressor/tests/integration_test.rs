@@ -78,7 +78,7 @@ fn compress_file_with_speed(speed: u8) {
 
     run_compressor(&[
         path.join("1.wbro").to_str().unwrap(),
-        "--speed",
+        "--compression-selection-sample-level",
         &speed.to_string(),
     ]);
     assert!(path.join("1.bro").is_file());

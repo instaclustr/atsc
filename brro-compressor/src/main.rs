@@ -109,7 +109,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
                 data,
                 cpr.to_owned(),
                 arguments.error as f32 / 100.0,
-                arguments.speed as usize,
+                arguments.compression_selection_sample_level as usize,
             ),
             _ => cs.compress_chunk_with(data, cpr.to_owned()),
         }
@@ -151,7 +151,7 @@ struct Args {
     /// 0 will use all the data (slowest)
     /// 6 will sample 128 data points (fastest)
     #[arg(short, long, default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..7))]
-    speed: u8,
+    compression_selection_sample_level: u8,
 
     /// Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
     #[arg(long, action)]
