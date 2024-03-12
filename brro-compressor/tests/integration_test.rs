@@ -30,9 +30,20 @@ fn test_auto() {
     test_suite("auto");
 }
 
+#[test]
+fn test_compression_speed() {
+    test_speed();
+}
+
 fn test_suite(compressor: &str) {
     compress_dir(compressor);
     compress_file(compressor);
+}
+
+fn test_speed() {
+    for speed in 0..7 {
+        compress_file_with_speed(speed);
+    }
 }
 
 fn compress_dir(compressor: &str) {
@@ -56,6 +67,19 @@ fn compress_file(compressor: &str) {
         path.join("1.wbro").to_str().unwrap(),
         "--compressor",
         compressor,
+    ]);
+    assert!(path.join("1.bro").is_file());
+}
+
+fn compress_file_with_speed(speed: u8) {
+    let tmp_dir = tempdir().unwrap();
+    let path = tmp_dir.path();
+    std::fs::copy("tests/wbros/memory_used.wbro", path.join("1.wbro")).unwrap();
+
+    run_compressor(&[
+        path.join("1.wbro").to_str().unwrap(),
+        "--compression-selection-sample-level",
+        &speed.to_string(),
     ]);
     assert!(path.join("1.bro").is_file());
 }

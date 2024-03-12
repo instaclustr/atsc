@@ -3,6 +3,8 @@ use bincode::{Decode, Encode};
 use log::debug;
 use std::mem::size_of_val;
 
+const COMPRESSION_SPEED: [i32; 7] = [i32::MAX, 4096, 2048, 1024, 512, 256, 128];
+
 /// This is the structure of a compressor frame
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct CompressorFrame {
@@ -52,29 +54,56 @@ impl CompressorFrame {
     }
 
     /// Run all compressor algorithms and pick the best one, mostly for auto
-    pub fn compress_best(&mut self, data: &[f64], max_error: f32) {
+    pub fn compress_best(&mut self, data: &[f64], max_error: f32, compression_speed: usize) {
         self.sample_count = data.len();
+        // Speed factor limits the amount of data that is sampled to calculate the best compressor.
+        // We need enough samples to do decent compression, minimum is 128 (2^7)
+        // 17 is because we do 0 to 10 as speed factor. This gives 2^7 to 2^17 as sample size.
+        let data_sample = COMPRESSION_SPEED[compression_speed] as usize;
         // Eligible compressors for use
         let compressor_list = [
             Compressor::Constant,
             Compressor::FFT,
             Compressor::Polynomial,
         ];
+        // Any technique determine the best compressor seems to be slower than this one
+        // Sample the dataset for a fast compressor run
+        // Pick the best compression
+        // Compress the full dataset that way
+        if self.sample_count >= data_sample {
+            let (_smallest_result, chosen_compressor) = compressor_list
+                .iter()
+                .map(|compressor| {
+                    (
+                        compressor
+                            .get_compress_bounded_results(&data[0..data_sample], max_error as f64),
+                        compressor,
+                    )
+                })
+                .min_by_key(|x| x.0.compressed_data.len())
+                .unwrap();
+            self.compressor = *chosen_compressor;
+            // Now do the full data compression
+            self.data = self
+                .compressor
+                .get_compress_bounded_results(data, max_error as f64)
+                .compressed_data;
+        } else {
+            // Run all the eligible compressors and choose smallest
+            let (smallest_result, chosen_compressor) = compressor_list
+                .iter()
+                .map(|compressor| {
+                    (
+                        compressor.get_compress_bounded_results(data, max_error as f64),
+                        compressor,
+                    )
+                })
+                .min_by_key(|x| x.0.compressed_data.len())
+                .unwrap();
 
-        // Run all the eligible compressors and choose smallest
-        let (smallest_result, chosen_compressor) = compressor_list
-            .iter()
-            .map(|compressor| {
-                (
-                    compressor.get_compress_bounded_results(data, max_error as f64),
-                    compressor,
-                )
-            })
-            .min_by_key(|x| x.0.compressed_data.len())
-            .unwrap();
-
-        self.data = smallest_result.compressed_data;
-        self.compressor = *chosen_compressor;
+            self.data = smallest_result.compressed_data;
+            self.compressor = *chosen_compressor;
+        }
         debug!("Auto Compressor Selection: {:?}", self.compressor);
     }
 
