@@ -18,6 +18,8 @@ pub struct DataStats {
     pub min: f64,
     // Min value location in the array
     pub min_loc: usize,
+    // Mean of the data
+    pub mean: f64,
     // Bitdepth that this data can be
     pub bitdepth: Bitdepth,
     pub fractional: bool,
@@ -30,9 +32,11 @@ impl DataStats {
         let mut max: f64 = data[0];
         let mut max_loc = 0;
         let mut fractional = false;
+        let mut mean: f64 = 0.0;
         let mut recommended_bitdepth = Bitdepth::F64;
         for (i, value) in data.iter().enumerate() {
             let t_value = *value;
+            mean += value;
             if split_n(t_value).1 != 0.0 {
                 fractional = true;
             }
@@ -45,6 +49,7 @@ impl DataStats {
                 min_loc = i;
             };
         }
+        mean = mean / data.len() as f64;
         // Check max size of values
         // For very large numbers (i32 and i64), it might be ideal to detect the dc component
         // of the signal. And then remove it later
@@ -64,6 +69,7 @@ impl DataStats {
             max_loc,
             min,
             min_loc,
+            mean,
             bitdepth: recommended_bitdepth,
             fractional,
         }
