@@ -208,3 +208,32 @@ fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
 
     bitdepth.max(bitdepth_signed)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stats_linear() {
+        let data = vec![1.0, 1.0, 1.0];
+        let stats = DataStats::new(&data);
+        assert_eq!(stats.bitdepth, Bitdepth::U8);
+        assert_eq!(stats.min, 1.0);
+        assert_eq!(stats.max, 1.0);
+        assert_eq!(stats.mean, 1.0);
+        assert_eq!(stats.min_loc, 0);
+        assert_eq!(stats.max_loc, 0);
+    }
+
+    #[test]
+    fn test_stats_non_linear() {
+        let data = vec![1.0, 4.0, 7.0];
+        let stats = DataStats::new(&data);
+        assert_eq!(stats.bitdepth, Bitdepth::U8);
+        assert_eq!(stats.min, 1.0);
+        assert_eq!(stats.max, 7.0);
+        assert_eq!(stats.mean, 4.0);
+        assert_eq!(stats.min_loc, 0);
+        assert_eq!(stats.max_loc, 2);
+    }
+}
