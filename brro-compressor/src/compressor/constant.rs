@@ -92,7 +92,7 @@ impl Constant {
         Constant {
             id: CONSTANT_COMPRESSOR_ID,
             constant: constant_value,
-            bitdepth: bitdepth,
+            bitdepth,
         }
     }
 

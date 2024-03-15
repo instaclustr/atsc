@@ -76,12 +76,11 @@ impl CompressorFrame {
                 .compressor
                 .get_compress_bounded_results(data, max_error as f64)
                 .compressed_data;
-        }
-        // Any technique determine the best compressor seems to be slower than this one
-        // Sample the dataset for a fast compressor run
-        // Pick the best compression
-        // Compress the full dataset that way
-        if self.sample_count >= data_sample {
+        } else if self.sample_count >= data_sample {
+            // Any technique determine the best compressor seems to be slower than this one
+            // Sample the dataset for a fast compressor run
+            // Pick the best compression
+            // Compress the full dataset that way
             let (_smallest_result, chosen_compressor) = compressor_list
                 .iter()
                 .map(|compressor| {
