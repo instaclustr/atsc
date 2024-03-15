@@ -223,6 +223,7 @@ mod tests {
         assert_eq!(stats.mean, 1.0);
         assert_eq!(stats.min_loc, 0);
         assert_eq!(stats.max_loc, 0);
+        assert_eq!(stats.fractional, false);
     }
 
     #[test]
@@ -235,5 +236,19 @@ mod tests {
         assert_eq!(stats.mean, 4.0);
         assert_eq!(stats.min_loc, 0);
         assert_eq!(stats.max_loc, 2);
+        assert_eq!(stats.fractional, false);
+    }
+
+    #[test]
+    fn test_stats_fract_non_linear() {
+        let data = vec![1.5, 4.5, 9.0];
+        let stats = DataStats::new(&data);
+        assert_eq!(stats.bitdepth, Bitdepth::F64);
+        assert_eq!(stats.min, 1.5);
+        assert_eq!(stats.max, 9.0);
+        assert_eq!(stats.mean, 5.0);
+        assert_eq!(stats.min_loc, 0);
+        assert_eq!(stats.max_loc, 2);
+        assert_eq!(stats.fractional, true);
     }
 }
