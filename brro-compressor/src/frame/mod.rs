@@ -1,4 +1,4 @@
-use crate::compressor::Compressor;
+use crate::{compressor::Compressor, optimizer::utils::DataStats};
 use bincode::{Decode, Encode};
 use log::debug;
 use std::mem::size_of_val;
@@ -53,12 +53,11 @@ impl CompressorFrame {
         self.data = self.compressor.compress_bounded(data, max_error as f64);
     }
 
-    /// Run all compressor algorithms and pick the best one, mostly for auto
+    /// This function tries to detect the best compressor for use and apply it to the data size
     pub fn compress_best(&mut self, data: &[f64], max_error: f32, compression_speed: usize) {
         self.sample_count = data.len();
         // Speed factor limits the amount of data that is sampled to calculate the best compressor.
         // We need enough samples to do decent compression, minimum is 128 (2^7)
-        // 17 is because we do 0 to 10 as speed factor. This gives 2^7 to 2^17 as sample size.
         let data_sample = COMPRESSION_SPEED[compression_speed] as usize;
         // Eligible compressors for use
         let compressor_list = [
@@ -66,6 +65,18 @@ impl CompressorFrame {
             Compressor::FFT,
             Compressor::Polynomial,
         ];
+        // Do a statistical analysis of the data, let's see if we can pick a compressor out of this.
+        let stats = DataStats::new(data);
+        // Checking the statistical analysis and chose, if possible, a compressor
+        // If the data is constant, well, constant frame
+        if stats.min == stats.max {
+            self.compressor = Compressor::Constant;
+            // Now do the full data compression
+            self.data = self
+                .compressor
+                .get_compress_bounded_results(data, max_error as f64)
+                .compressed_data;
+        }
         // Any technique determine the best compressor seems to be slower than this one
         // Sample the dataset for a fast compressor run
         // Pick the best compression

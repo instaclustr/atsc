@@ -27,6 +27,7 @@ pub struct DataStats {
 
 impl DataStats {
     pub fn new(data: &[f64]) -> Self {
+        // Statistical data stored
         let mut min: f64 = data[0];
         let mut min_loc = 0;
         let mut max: f64 = data[0];
@@ -34,6 +35,8 @@ impl DataStats {
         let mut fractional = false;
         let mut mean: f64 = 0.0;
         let mut recommended_bitdepth = Bitdepth::F64;
+
+        // Walk the data and perform the analysis
         for (i, value) in data.iter().enumerate() {
             let t_value = *value;
             mean += value;

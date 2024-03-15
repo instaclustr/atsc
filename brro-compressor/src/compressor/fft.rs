@@ -1,4 +1,4 @@
-use crate::utils::error::calculate_error;
+use crate::{optimizer::utils::DataStats, utils::error::calculate_error};
 use bincode::{Decode, Encode};
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{cmp::Ordering, collections::BinaryHeap};
@@ -471,6 +471,18 @@ pub fn fft_allowed_error(data: &[f64], allowed_error: f64) -> CompressorResult {
     }
     // Initialize the compressor
     let mut c = FFT::new(data.len(), min, max);
+    // Convert the data
+    c.compress_bounded(data, allowed_error);
+    // Convert to bytes
+    CompressorResult::new(c.to_bytes(), c.error.unwrap_or(0.0))
+}
+
+/// Compress targeting a specific max error allowed. This is very computational intensive,
+/// as the FFT will be calculated over and over until the specific error threshold is achived.
+pub fn fft_compressor(data: &[f64], allowed_error: f64, stats: DataStats) -> CompressorResult {
+    debug!("Initializing FFT Compressor. Error and Stats provided");
+    // Initialize the compressor
+    let mut c = FFT::new(data.len(), stats.min, stats.max);
     // Convert the data
     c.compress_bounded(data, allowed_error);
     // Convert to bytes
