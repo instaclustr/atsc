@@ -1,4 +1,7 @@
-use crate::{compressor::CompressorResult, optimizer::utils::DataStats};
+use crate::{
+    compressor::CompressorResult,
+    optimizer::utils::{Bitdepth, DataStats},
+};
 
 use super::BinConfig;
 use bincode::{Decode, Encode};
@@ -7,19 +10,89 @@ use log::debug;
 const CONSTANT_COMPRESSOR_ID: u8 = 30;
 
 /// Compressor frame for static data, stores the value and nothing else.
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Constant {
     pub id: u8,
     pub constant: f64,
+    // For internal use only
+    bitdepth: Bitdepth,
+}
+
+impl Encode for Constant {
+    fn encode<__E: ::bincode::enc::Encoder>(
+        &self,
+        encoder: &mut __E,
+    ) -> Result<(), ::bincode::error::EncodeError> {
+        Encode::encode(&self.id, encoder)?;
+        Encode::encode(&self.bitdepth, encoder)?;
+        match &self.bitdepth {
+            Bitdepth::U8 => {
+                debug!("Encoding as u8");
+                Encode::encode(&(self.constant as u8), encoder)?;
+            }
+            Bitdepth::I16 => {
+                debug!("Encoding as i16");
+                Encode::encode(&(self.constant as i16), encoder)?;
+            }
+            Bitdepth::I32 => {
+                debug!("Encoding as i32");
+                Encode::encode(&(self.constant as i32), encoder)?;
+            }
+            Bitdepth::F64 => {
+                debug!("Encoding as f64");
+                Encode::encode(&self.constant, encoder)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Decode for Constant {
+    fn decode<__D: ::bincode::de::Decoder>(
+        decoder: &mut __D,
+    ) -> Result<Self, ::bincode::error::DecodeError> {
+        let id = Decode::decode(decoder)?;
+        let bitdepth = Decode::decode(decoder)?;
+        // Here is where the pig twists the tail
+        let constant: f64 = match bitdepth {
+            Bitdepth::U8 => {
+                debug!("Decoding as u8");
+                let const_u8: u8 = Decode::decode(decoder)?;
+                const_u8 as f64
+            }
+            Bitdepth::I16 => {
+                debug!("Decoding as i16");
+                let const_i16: i16 = Decode::decode(decoder)?;
+                const_i16 as f64
+            }
+            Bitdepth::I32 => {
+                debug!("Decoding as i32");
+                let const_i32: i32 = Decode::decode(decoder)?;
+                const_i32 as f64
+            }
+            Bitdepth::F64 => {
+                debug!("Decoding as f64");
+                let const_f64: f64 = Decode::decode(decoder)?;
+                const_f64
+            }
+        };
+
+        Ok(Self {
+            id,
+            constant,
+            bitdepth,
+        })
+    }
 }
 
 impl Constant {
     /// Creates a new instance of the Constant compressor with the size needed to handle the worst case
-    pub fn new(_sample_count: usize, constant_value: f64) -> Self {
+    pub fn new(_sample_count: usize, constant_value: f64, bitdepth: Bitdepth) -> Self {
         debug!("Constant compressor");
         Constant {
             id: CONSTANT_COMPRESSOR_ID,
             constant: constant_value,
+            bitdepth: bitdepth,
         }
     }
 
@@ -53,7 +126,7 @@ impl Constant {
 pub fn constant_compressor(data: &[f64], stats: DataStats) -> CompressorResult {
     debug!("Initializing Constant Compressor. Error and Stats provided");
     // Initialize the compressor
-    let c = Constant::new(data.len(), stats.min);
+    let c = Constant::new(data.len(), stats.min, stats.bitdepth);
     // Convert to bytes
     CompressorResult::new(c.to_bytes(), 0.0)
 }
@@ -68,18 +141,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_constant() {
+    fn test_constant_u8() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
+        let stats = DataStats::new(&vector1);
         assert_eq!(
-            Constant::new(vector1.len(), DataStats::new(&vector1).min).to_bytes(),
-            [30, 0, 0, 0, 0, 0, 0, 240, 63]
+            Constant::new(vector1.len(), stats.min, stats.bitdepth).to_bytes(),
+            [30, 3, 1]
+        );
+    }
+
+    #[test]
+    fn test_constant_f64() {
+        let vector1 = vec![1.23456, 1.23456, 1.23456, 1.23456, 1.23456];
+        let stats = DataStats::new(&vector1);
+        assert_eq!(
+            Constant::new(vector1.len(), stats.min, stats.bitdepth).to_bytes(),
+            [30, 0, 56, 50, 143, 252, 193, 192, 243, 63]
         );
     }
 
     #[test]
     fn test_compression() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
-        let c = Constant::new(vector1.len(), DataStats::new(&vector1).min).to_bytes();
+        let stats = DataStats::new(&vector1);
+        let c = Constant::new(vector1.len(), stats.min, stats.bitdepth).to_bytes();
         let c2 = constant_to_data(vector1.len(), &c);
 
         assert_eq!(vector1, c2);
