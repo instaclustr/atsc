@@ -42,7 +42,7 @@ impl CompressorResult {
 
 impl Compressor {
     pub fn compress(&self, data: &[f64]) -> Vec<u8> {
-        let stats = DataStats::new(&data);
+        let stats = DataStats::new(data);
         match self {
             Compressor::Noop => noop(data),
             Compressor::FFT => fft(data),
@@ -54,7 +54,7 @@ impl Compressor {
     }
 
     pub fn compress_bounded(&self, data: &[f64], max_error: f64) -> Vec<u8> {
-        let stats = DataStats::new(&data);
+        let stats = DataStats::new(data);
         match self {
             Compressor::Noop => noop(data),
             Compressor::FFT => fft_compressor(data, max_error, stats).compressed_data,
@@ -71,7 +71,7 @@ impl Compressor {
     }
 
     pub fn get_compress_bounded_results(&self, data: &[f64], max_error: f64) -> CompressorResult {
-        let stats = DataStats::new(&data);
+        let stats = DataStats::new(data);
         match self {
             Compressor::Noop => CompressorResult::new(noop(data), 0.0),
             Compressor::FFT => fft_compressor(data, max_error, stats),

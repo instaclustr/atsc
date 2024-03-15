@@ -6,39 +6,26 @@ use log::debug;
 
 const CONSTANT_COMPRESSOR_ID: u8 = 30;
 
-/// This is a temporary implementation, other implementations (FFT, Polynomial) might provide the same result
-/// as going through the data anyway.
+/// Compressor frame for static data, stores the value and nothing else.
 #[derive(Encode, Decode, PartialEq, Debug, Clone)]
 pub struct Constant {
     pub id: u8,
     pub constant: f64,
-    pub residuals: Vec<(i32, f64)>,
 }
 
 impl Constant {
     /// Creates a new instance of the Constant compressor with the size needed to handle the worst case
-    pub fn new(sample_count: usize, constant_value: f64) -> Self {
+    pub fn new(_sample_count: usize, constant_value: f64) -> Self {
         debug!("Constant compressor");
         Constant {
             id: CONSTANT_COMPRESSOR_ID,
             constant: constant_value,
-            residuals: Vec::with_capacity(sample_count),
         }
     }
 
     /// This compressor is about having a single constant for the whole segment
     pub fn set_constant(&mut self, constant_value: f64) {
         self.constant = constant_value;
-    }
-
-    /// Adds a residual
-    pub fn add_residual(&mut self, sample_number: i32, value: f64) {
-        self.residuals.push((sample_number, value));
-    }
-
-    /// returns the error value
-    pub fn get_residual_count(self) {
-        self.residuals.len();
     }
 
     /// Receives a data stream and generates a Constant
@@ -58,10 +45,7 @@ impl Constant {
     /// Returns an array of data. It creates an array of data the size of the frame with a constant value
     /// and pushes the residuals to the right place.
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
-        let mut data = vec![self.constant; frame_size];
-        for (i, v) in &self.residuals {
-            data[*i as usize] = *v;
-        }
+        let data = vec![self.constant; frame_size];
         data
     }
 }
@@ -88,14 +72,14 @@ mod tests {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
         assert_eq!(
             Constant::new(vector1.len(), DataStats::new(&vector1).min).to_bytes(),
-            [30, 2, 0]
+            [30, 0, 0, 0, 0, 0, 0, 240, 63]
         );
     }
 
     #[test]
     fn test_compression() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
-        let mut c = Constant::new(vector1.len(), DataStats::new(&vector1).min).to_bytes();
+        let c = Constant::new(vector1.len(), DataStats::new(&vector1).min).to_bytes();
         let c2 = constant_to_data(vector1.len(), &c);
 
         assert_eq!(vector1, c2);

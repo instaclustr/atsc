@@ -52,7 +52,7 @@ impl DataStats {
                 min_loc = i;
             };
         }
-        mean = mean / data.len() as f64;
+        mean /= data.len() as f64;
         // Check max size of values
         // For very large numbers (i32 and i64), it might be ideal to detect the dc component
         // of the signal. And then remove it later
@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(stats.mean, 1.0);
         assert_eq!(stats.min_loc, 0);
         assert_eq!(stats.max_loc, 0);
-        assert_eq!(stats.fractional, false);
+        assert!(!stats.fractional);
     }
 
     #[test]
@@ -239,7 +239,7 @@ mod tests {
         assert_eq!(stats.mean, 4.0);
         assert_eq!(stats.min_loc, 0);
         assert_eq!(stats.max_loc, 2);
-        assert_eq!(stats.fractional, false);
+        assert!(!stats.fractional);
     }
 
     #[test]
@@ -252,6 +252,6 @@ mod tests {
         assert_eq!(stats.mean, 5.0);
         assert_eq!(stats.min_loc, 0);
         assert_eq!(stats.max_loc, 2);
-        assert_eq!(stats.fractional, true);
+        assert!(stats.fractional);
     }
 }
