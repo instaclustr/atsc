@@ -107,7 +107,7 @@ mod tests {
         let mut cs = CompressedStream::new();
         cs.compress_chunk_with(&vector1, Compressor::Constant);
         let b = cs.to_bytes();
-        assert_eq!(b, [66, 82, 82, 79, 0, 1, 41, 251, 0, 4, 3, 3, 30, 2, 0]);
+        assert_eq!(b, [66, 82, 82, 79, 0, 1, 41, 251, 0, 4, 3, 3, 30, 3, 1]);
     }
 
     #[test]

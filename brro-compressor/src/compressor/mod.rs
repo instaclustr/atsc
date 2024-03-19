@@ -1,8 +1,10 @@
 use bincode::config::{self, Configuration};
 use bincode::{Decode, Encode};
 
-use self::constant::{constant, constant_to_data};
-use self::fft::{fft, fft_allowed_error, fft_to_data};
+use crate::optimizer::utils::DataStats;
+
+use self::constant::{constant_compressor, constant_to_data};
+use self::fft::{fft, fft_compressor, fft_to_data};
 use self::noop::{noop, noop_to_data};
 use self::polynomial::{polynomial, polynomial_allowed_error, to_data, PolynomialType};
 
@@ -40,10 +42,11 @@ impl CompressorResult {
 
 impl Compressor {
     pub fn compress(&self, data: &[f64]) -> Vec<u8> {
+        let stats = DataStats::new(data);
         match self {
             Compressor::Noop => noop(data),
             Compressor::FFT => fft(data),
-            Compressor::Constant => constant(data),
+            Compressor::Constant => constant_compressor(data, stats).compressed_data,
             Compressor::Polynomial => polynomial(data, PolynomialType::Polynomial),
             Compressor::Idw => polynomial(data, PolynomialType::Idw),
             _ => todo!(),
@@ -51,10 +54,11 @@ impl Compressor {
     }
 
     pub fn compress_bounded(&self, data: &[f64], max_error: f64) -> Vec<u8> {
+        let stats = DataStats::new(data);
         match self {
             Compressor::Noop => noop(data),
-            Compressor::FFT => fft_allowed_error(data, max_error).compressed_data,
-            Compressor::Constant => constant(data),
+            Compressor::FFT => fft_compressor(data, max_error, stats).compressed_data,
+            Compressor::Constant => constant_compressor(data, stats).compressed_data,
             Compressor::Polynomial => {
                 polynomial_allowed_error(data, max_error, PolynomialType::Polynomial)
                     .compressed_data
@@ -67,10 +71,11 @@ impl Compressor {
     }
 
     pub fn get_compress_bounded_results(&self, data: &[f64], max_error: f64) -> CompressorResult {
+        let stats = DataStats::new(data);
         match self {
             Compressor::Noop => CompressorResult::new(noop(data), 0.0),
-            Compressor::FFT => fft_allowed_error(data, max_error),
-            Compressor::Constant => CompressorResult::new(constant(data), 0.0),
+            Compressor::FFT => fft_compressor(data, max_error, stats),
+            Compressor::Constant => constant_compressor(data, stats),
             Compressor::Polynomial => {
                 polynomial_allowed_error(data, max_error, PolynomialType::Polynomial)
             }

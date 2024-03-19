@@ -1,7 +1,10 @@
-use crate::compressor::{
-    constant::constant,
-    fft::fft,
-    polynomial::{polynomial, PolynomialType},
+use crate::{
+    compressor::{
+        constant::constant_compressor,
+        fft::fft,
+        polynomial::{polynomial, PolynomialType},
+    },
+    optimizer::utils::DataStats,
 };
 use std::thread;
 
@@ -18,6 +21,7 @@ impl CompressionDecision {
     pub fn compress_and_decide() -> Result<(), Box<dyn std::error::Error>> {
         // Sample data for testing
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let stats = DataStats::new(&data);
 
         // Clone data for each compressor
         let data_constant = data.clone();
@@ -25,7 +29,7 @@ impl CompressionDecision {
         let data_polynomial = data.clone();
 
         // Create threads for each compressor
-        let thread_constant = thread::spawn(move || constant(&data_constant));
+        let thread_constant = thread::spawn(move || constant_compressor(&data_constant, stats));
         let thread_fft = thread::spawn(move || fft(&data_fft));
         let thread_polynomial =
             thread::spawn(move || polynomial(&data_polynomial, PolynomialType::Polynomial));
@@ -43,7 +47,7 @@ impl CompressionDecision {
 
         // Use the decision logic to determine the compression decision
         let decision = match (
-            result_constant.len(),
+            result_constant.compressed_data.len(),
             result_fft.len(),
             result_polynomial.len(),
         ) {

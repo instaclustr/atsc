@@ -18,6 +18,8 @@ pub struct DataStats {
     pub min: f64,
     // Min value location in the array
     pub min_loc: usize,
+    // Mean of the data
+    pub mean: f64,
     // Bitdepth that this data can be
     pub bitdepth: Bitdepth,
     pub fractional: bool,
@@ -25,14 +27,19 @@ pub struct DataStats {
 
 impl DataStats {
     pub fn new(data: &[f64]) -> Self {
+        // Statistical data stored
         let mut min: f64 = data[0];
         let mut min_loc = 0;
         let mut max: f64 = data[0];
         let mut max_loc = 0;
         let mut fractional = false;
+        let mut mean: f64 = 0.0;
         let mut recommended_bitdepth = Bitdepth::F64;
+
+        // Walk the data and perform the analysis
         for (i, value) in data.iter().enumerate() {
             let t_value = *value;
+            mean += value;
             if split_n(t_value).1 != 0.0 {
                 fractional = true;
             }
@@ -45,6 +52,7 @@ impl DataStats {
                 min_loc = i;
             };
         }
+        mean /= data.len() as f64;
         // Check max size of values
         // For very large numbers (i32 and i64), it might be ideal to detect the dc component
         // of the signal. And then remove it later
@@ -64,6 +72,7 @@ impl DataStats {
             max_loc,
             min,
             min_loc,
+            mean,
             bitdepth: recommended_bitdepth,
             fractional,
         }
@@ -201,4 +210,48 @@ fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
     };
 
     bitdepth.max(bitdepth_signed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stats_linear() {
+        let data = vec![1.0, 1.0, 1.0];
+        let stats = DataStats::new(&data);
+        assert_eq!(stats.bitdepth, Bitdepth::U8);
+        assert_eq!(stats.min, 1.0);
+        assert_eq!(stats.max, 1.0);
+        assert_eq!(stats.mean, 1.0);
+        assert_eq!(stats.min_loc, 0);
+        assert_eq!(stats.max_loc, 0);
+        assert!(!stats.fractional);
+    }
+
+    #[test]
+    fn test_stats_non_linear() {
+        let data = vec![1.0, 4.0, 7.0];
+        let stats = DataStats::new(&data);
+        assert_eq!(stats.bitdepth, Bitdepth::U8);
+        assert_eq!(stats.min, 1.0);
+        assert_eq!(stats.max, 7.0);
+        assert_eq!(stats.mean, 4.0);
+        assert_eq!(stats.min_loc, 0);
+        assert_eq!(stats.max_loc, 2);
+        assert!(!stats.fractional);
+    }
+
+    #[test]
+    fn test_stats_fract_non_linear() {
+        let data = vec![1.5, 4.5, 9.0];
+        let stats = DataStats::new(&data);
+        assert_eq!(stats.bitdepth, Bitdepth::F64);
+        assert_eq!(stats.min, 1.5);
+        assert_eq!(stats.max, 9.0);
+        assert_eq!(stats.mean, 5.0);
+        assert_eq!(stats.min_loc, 0);
+        assert_eq!(stats.max_loc, 2);
+        assert!(stats.fractional);
+    }
 }
