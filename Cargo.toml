@@ -5,6 +5,7 @@ members = [
     "prometheus-remote",
     "tools",
     "wavbrro",
+    "vsri",
 ]
 resolver = "2"
 
