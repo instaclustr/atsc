@@ -94,12 +94,11 @@ impl Vsri {
     /// flush needs to be called for that
     pub fn new(filename: &String) -> Self {
         debug!("[INDEX] Creating new index!");
-        let segments: Vec<[i32; 4]> = Vec::new();
         Vsri {
             index_file: filename.to_string(),
             min_ts: 0,
             max_ts: 0,
-            vsri_segments: segments,
+            vsri_segments: vec![],
         }
     }
 
@@ -118,7 +117,7 @@ impl Vsri {
 
     /// Get the sample for this timestamp or the next one
     pub fn get_this_or_next(&self, y: i32) -> Option<i32> {
-        let r = self.get_sample(y).or(self.get_next_sample(y));
+        let r = self.get_sample(y).or_else(|| self.get_next_sample(y));
         debug!("[INDEX] This or next location {:?} for TS {}", r, y);
         r
     }
@@ -141,7 +140,7 @@ impl Vsri {
             return None;
         }
         // It wasn't smaller, so let's see if we have a sample that matches
-        for segment in self.vsri_segments.clone().into_iter().rev() {
+        for segment in self.vsri_segments.iter().rev() {
             let first_sample = segment[1];
             let y0 = segment[2];
             if y <= y0 {
@@ -431,7 +430,7 @@ impl Vsri {
 
     /// Reads an index file and loads the content into the structure
     /// TODO: Add error control (Unwrap hell)
-    pub fn load(filename: &String) -> Result<Self, std::io::Error> {
+    pub fn load(filename: &str) -> Result<Self, std::io::Error> {
         debug!("[INDEX] Load existing index");
         let file = File::open(format!("{}.vsri", &filename))?;
         let reader = BufReader::new(file);
@@ -454,7 +453,7 @@ impl Vsri {
                         .map(|value| value.trim().parse::<i32>())
                         .collect::<Result<Vec<i32>, _>>()
                         .unwrap();
-                    segments.push([values[0], values[1], values[2], values[3]]);
+                    segments.push(values.try_into().unwrap());
                 }
             }
             i += 1;
