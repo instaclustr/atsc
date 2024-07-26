@@ -7,7 +7,7 @@ use crate::write::write_wavbrro_file;
 
 const MAX_CHUNK_SIZE: usize = 2048;
 
-#[derive(Archive, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(Archive, Deserialize, Serialize, Debug, PartialEq, Clone)]
 #[archive(
     // This will generate a PartialEq impl between our unarchived and archived
     // types:

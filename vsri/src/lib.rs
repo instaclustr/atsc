@@ -24,6 +24,7 @@ use log::{debug, warn};
 ///     15,166,58505,63
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::path::{Path, PathBuf};
 
 // TODO: This should be configurable. Indexes are build for 1 day worth of samples, at 1 sample per second
 pub static MAX_INDEX_SAMPLES: i32 = 86400;
@@ -80,7 +81,7 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 ///                [sample_rate (m), initial_point(x,y), # of samples(length)]
 /// Each segments describes a line with the form of mX + B that has a lenght
 /// of # of samples.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Vsri {
     index_file: String,
     min_ts: i32,
@@ -408,7 +409,13 @@ impl Vsri {
     /// 2    | maximum timestamp on this file. eg: 34510
     /// 3..N | Segments. 4 fields separated by commas. ex: 0,1,2,3
     pub fn flush(&self) -> Result<(), std::io::Error> {
-        let file = File::create(format!("{}.vsri", &self.index_file))?;
+        let mut path = PathBuf::from(&self.index_file);
+        path.set_extension("vsri");
+        self.flush_to(&path)
+    }
+
+    pub fn flush_to(&self, path: &Path) -> Result<(), std::io::Error> {
+        let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
 
         // Write index_file, min_ts, max_ts on the first three lines
