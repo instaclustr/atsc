@@ -1,4 +1,3 @@
-use crate::csv::{SampleParser, SampleWriter};
 use crate::metric::Metric;
 use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
@@ -6,11 +5,8 @@ use brro_compressor::optimizer::OptimizerPlan;
 use brro_compressor::utils::readers::bro_reader::read_file;
 use clap::{arg, Parser};
 use log::debug;
-use std::cell::RefCell;
 use std::fs;
-use std::fs::OpenOptions;
-use std::path::PathBuf;
-use std::rc::Rc;
+use std::path::{Path, PathBuf};
 use vsri::Vsri;
 use wavbrro::wavbrro::WavBrro;
 
@@ -122,102 +118,78 @@ fn decompress_data(compressed_data: &[u8]) -> Vec<f64> {
     cs.decompress()
 }
 
-pub fn process_csv(args: &Args) -> Metric {
-    let res = OpenOptions::new().read(true).write(true).open(&args.input);
-    if res.is_err() {
-        panic!(
-            "[PANIC] Failed to open file {}, err: {}",
-            &args.input.to_str().unwrap(),
-            res.err().unwrap()
-        )
-    }
-
-    let file = res.unwrap();
-    let mut parser = SampleParser::new(file);
-    let samples = parser.parse().expect("failed to parse samples");
-
+/// process_csv opens and parses the content of file at path
+pub fn process_csv(path: &Path) -> Metric {
+    let samples = csv::read_samples_from_csv_file(path).expect("failed to read samples from file");
     Metric::from_samples(&samples).expect("failed to create metric from samples")
 }
 
-fn process_args(args: &Args) {
+fn process_args(args: Args) {
     let output_base = args
         .output
         .clone()
-        .unwrap_or(args.input.clone())
-        .to_str()
-        .unwrap()
-        .to_string();
+        .unwrap_or_else(|| args.input.clone())
+        .clone();
 
     // uncompressing input
     if args.uncompress {
-        debug!("Starting uncompressing of {}", args.input.to_str().unwrap());
+        debug!("Starting uncompressing of {:?}", &args.input);
         if let Some(data) = read_file(&args.input).expect("failed to read bro file") {
             // decomressing data and creating wavbrro from it
-            let decompressed_data = Rc::new(RefCell::new(decompress_data(&data)));
+            let decompressed_data = decompress_data(&data);
             let mut wbro = WavBrro::new();
-            for data in decompressed_data.borrow().iter() {
+            for data in decompressed_data.iter() {
                 wbro.add_sample(*data);
             }
 
-            // reading existing index
+            // // reading existing index
             let mut vsri_file_path = args.input.clone();
-            vsri_file_path.set_extension("");
+            vsri_file_path.set_extension("vsri");
+            debug!("Reading vsri at {:?}", &output_base);
             let index = Vsri::load(vsri_file_path.to_str().unwrap()).expect("failed to read vsri");
 
             let metric = Metric::new(wbro, index);
 
-            let mut file_path = PathBuf::from(output_base);
+            let mut file_path = output_base.clone();
             file_path.set_extension("wbro");
 
-            debug!(
-                "Writing uncompressed wavbrro to disk, path: {}",
-                &file_path.to_str().unwrap()
-            );
-            WavBrro::to_file_with_data(&file_path, &decompressed_data.borrow());
+            debug!("Writing uncompressed wavbrro to disk, path: {file_path:?}");
+            WavBrro::to_file_with_data(&file_path, &decompressed_data);
 
             let samples = metric.get_samples();
 
             // creating csv output file
             let mut csv_file_path = file_path.clone();
             csv_file_path.set_extension("csv");
-            debug!(
-                "Creating file for csv output at {}",
-                csv_file_path.to_str().unwrap()
-            );
-            let csv_file = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .read(true)
-                .open(&csv_file_path)
-                .expect("failed to create csv output file");
-
-            let csv_file = Rc::new(RefCell::new(csv_file));
-
             debug!("Writing samples into csv file");
-            let writer = SampleWriter::new(Rc::clone(&csv_file));
-            writer
-                .write_samples(&samples)
-                .expect("failed to write samples to csv")
+            csv::write_samples_to_csv_file(&csv_file_path, &samples)
+                .expect("failed to write samples to file")
         }
     } else {
-        debug!("Starting processing of {}", args.input.to_str().unwrap());
-        let metric = process_csv(args);
+        debug!("Starting processing of {:?}", args.input);
+        let metric = process_csv(&args.input);
 
         if args.output_wavbrro {
-            metric.flush_wavbrro(&output_base);
+            let mut wavbro_file_path = output_base.clone();
+            wavbro_file_path.set_extension("wavbro");
+            metric.flush_wavbrro(&wavbro_file_path);
         }
 
         if args.output_vsri {
-            metric.flush_indexes(&output_base);
+            let mut vsri_file_path = output_base.clone();
+            vsri_file_path.set_extension("vsri");
+            metric
+                .flush_indexes(&vsri_file_path)
+                .expect("failed to flush vsri to the file");
         }
 
         // compressing input if no_compression is not set
         if !args.no_compression {
             debug!("Starting compressing");
             let data = metric.wbro.get_samples();
-            let compressed = compress_data(&data, args);
+            let compressed = compress_data(&data, &args);
 
-            let mut file_path = PathBuf::from(output_base);
+            let mut file_path = output_base.clone();
             file_path.set_extension("bro");
 
             fs::write(&file_path, compressed).expect("failed to write compressed data");
@@ -229,20 +201,19 @@ fn main() {
     env_logger::init();
     let args = Args::parse();
 
-    let res = fs::metadata(&args.input);
-    if res.is_err() {
-        panic!(
-            "Failed to retrieve metadata of {}, err: {}",
-            &args.input.to_str().unwrap(),
-            res.err().unwrap()
-        )
-    }
+    let metadata = fs::metadata(&args.input);
+    match metadata {
+        Ok(metadata) => {
+            if !metadata.is_file() {
+                panic!("Input is not a file")
+            }
 
-    let metadata = res.unwrap();
-    if !metadata.is_file() {
-        panic!("Input is not a file")
+            debug!("Starting processing args {:?}", &args);
+            process_args(args);
+        }
+        Err(err) => panic!(
+            "Failed to retrieve metadata of {:?}, err: {err}",
+            &args.input
+        ),
     }
-
-    debug!("Starting processing args");
-    process_args(&args);
 }

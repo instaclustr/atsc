@@ -439,7 +439,7 @@ impl Vsri {
     /// TODO: Add error control (Unwrap hell)
     pub fn load(filename: &str) -> Result<Self, std::io::Error> {
         debug!("[INDEX] Load existing index");
-        let file = File::open(format!("{}.vsri", &filename))?;
+        let file = File::open(filename)?;
         let reader = BufReader::new(file);
         let mut min_ts = 0;
         let mut max_ts = 0;

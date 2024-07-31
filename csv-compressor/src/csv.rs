@@ -25,10 +25,7 @@ impl Sample {
 /// |    000001 | 1.01  |
 /// |    000005 | 1.22  |
 pub fn read_samples_from_csv_file(dest: &Path) -> Result<Vec<Sample>, csv::Error> {
-    let file = OpenOptions::new().
-        read(true).
-        open(dest)?;
-
+    let file = OpenOptions::new().read(true).open(dest)?;
     let mut reader = csv::Reader::from_reader(file);
     reader.deserialize().collect()
 }
@@ -54,12 +51,10 @@ mod tests {
     #[test]
     fn test_write_samples_to_csv_file() {
         let expected_contents = "timestamp,value\n1,1.01\n5,1.22\n";
-        let samples = vec![
-            Sample::new(1, 1.01),
-            Sample::new(5, 1.22),
-        ];
+        let samples = vec![Sample::new(1, 1.01), Sample::new(5, 1.22)];
 
-        let temp_dir = TempDir::new("test_write_samples").expect("Unable to create temporary directory");
+        let temp_dir =
+            TempDir::new("test_write_samples").expect("Unable to create temporary directory");
         let path = temp_dir.path().join("samples.csv");
 
         let result = write_samples_to_csv_file(&path, &samples);
@@ -72,17 +67,16 @@ mod tests {
     #[test]
     fn test_read_samples_from_csv_file() {
         let csv_content = "timestamp,value\n1,1.01\n5,1.22\n";
-        let expected_samples = vec![
-            Sample::new(1, 1.01),
-            Sample::new(5, 1.22),
-        ];
+        let expected_samples = vec![Sample::new(1, 1.01), Sample::new(5, 1.22)];
 
-        let temp_dir = TempDir::new("test_read_samples").expect("Unable to create temporary directory");
+        let temp_dir =
+            TempDir::new("test_read_samples").expect("Unable to create temporary directory");
         let path = temp_dir.path().join("samples.csv");
 
         // Writing content to test file
         let mut file = File::create(&path).expect("Unable to create test file");
-        file.write_all(csv_content.as_bytes()).expect("Unable to write data");
+        file.write_all(csv_content.as_bytes())
+            .expect("Unable to write data");
 
         let result = read_samples_from_csv_file(&path);
         assert!(result.is_ok());
@@ -93,12 +87,10 @@ mod tests {
 
     #[test]
     fn test_write_and_read_samples() {
-        let samples = vec![
-            Sample::new(1, 1.01),
-            Sample::new(5, 1.22),
-        ];
+        let samples = vec![Sample::new(1, 1.01), Sample::new(5, 1.22)];
 
-        let temp_dir = TempDir::new("test_write_and_read_samples").expect("Unable to create temporary directory");
+        let temp_dir = TempDir::new("test_write_and_read_samples")
+            .expect("Unable to create temporary directory");
         let path = temp_dir.path().join("samples.csv");
 
         let write_result = write_samples_to_csv_file(&path, &samples);
