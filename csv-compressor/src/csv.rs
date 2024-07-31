@@ -1,9 +1,6 @@
-use csv::Reader;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
-use std::error::Error;
-use std::io;
-use std::rc::Rc;
+use std::fs::{File, OpenOptions};
+use std::path::Path;
 
 /// Sample describe a single metric record according to csv format.
 /// The file should have the following structure:
@@ -22,104 +19,95 @@ impl Sample {
     }
 }
 
-/// SampleParser is responsible for reading and parsing CSV formatted samples from R
-pub struct SampleParser<R: io::Read> {
-    reader: R,
+/// Reads samples from csv file at dest.
+/// The file should contain the following structure:
+/// | timestamp | value |
+/// |    000001 | 1.01  |
+/// |    000005 | 1.22  |
+pub fn read_samples_from_csv_file(dest: &Path) -> Result<Vec<Sample>, csv::Error> {
+    let file = OpenOptions::new().
+        read(true).
+        open(dest)?;
+
+    let mut reader = csv::Reader::from_reader(file);
+    reader.deserialize().collect()
 }
 
-impl<R: io::Read> SampleParser<R> {
-    pub fn new(reader: R) -> Self {
-        SampleParser { reader }
+/// Writes samples to file at dest as csv
+pub fn write_samples_to_csv_file(dest: &Path, samples: &[Sample]) -> Result<(), csv::Error> {
+    let mut csv_file = File::create(dest)?;
+    let mut writer = csv::Writer::from_writer(&mut csv_file);
+    for sample in samples {
+        writer.serialize(sample)?;
     }
 
-    /// Parses CSV formatted samples from src
-    pub fn parse(&mut self) -> Result<Vec<Sample>, Box<dyn Error>> {
-        let mut reader = Reader::from_reader(&mut self.reader);
-        let mut samples = Vec::new();
-        for result in reader.deserialize() {
-            let sample: Sample = result?;
-            samples.push(sample);
-        }
-        Ok(samples)
-    }
-}
-
-/// SampleWriter is responsible for writing Sample as CSV into W
-pub struct SampleWriter<W: io::Write> {
-    writer: Rc<RefCell<W>>,
-}
-
-impl<W: io::Write> SampleWriter<W> {
-    pub fn new(writer: Rc<RefCell<W>>) -> Self {
-        SampleWriter { writer }
-    }
-
-    /// Writes samples into writer as CSV
-    pub fn write_samples(&self, samples: &Vec<Sample>) -> Result<(), Box<dyn Error>> {
-        let mut w = self.writer.borrow_mut();
-        let mut writer = csv::Writer::from_writer(&mut *w);
-        for sample in samples {
-            writer.serialize(sample)?;
-        }
-        Ok(())
-    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
+    use std::fs::File;
+    use std::io::Write;
+    use tempdir::TempDir;
 
     #[test]
-    fn test_sample_parser_parse() {
-        let data = "timestamp,value\n1,1.01\n5,1.22\n";
-        let cursor = Cursor::new(data);
+    fn test_write_samples_to_csv_file() {
+        let expected_contents = "timestamp,value\n1,1.01\n5,1.22\n";
+        let samples = vec![
+            Sample::new(1, 1.01),
+            Sample::new(5, 1.22),
+        ];
 
-        let mut parser = SampleParser::new(cursor);
-        let samples = parser.parse().unwrap();
+        let temp_dir = TempDir::new("test_write_samples").expect("Unable to create temporary directory");
+        let path = temp_dir.path().join("samples.csv");
 
-        assert_eq!(samples.len(), 2);
-        assert_eq!(samples[0], Sample::new(1, 1.01));
-        assert_eq!(samples[1], Sample::new(5, 1.22));
+        let result = write_samples_to_csv_file(&path, &samples);
+        assert!(result.is_ok());
+
+        let contents = std::fs::read_to_string(&path).expect("Unable to read the file");
+        assert_eq!(contents, expected_contents);
     }
 
     #[test]
-    fn test_sample_parser_parse_empty() {
-        let data = "timestamp,value\n";
-        let cursor = Cursor::new(data);
+    fn test_read_samples_from_csv_file() {
+        let csv_content = "timestamp,value\n1,1.01\n5,1.22\n";
+        let expected_samples = vec![
+            Sample::new(1, 1.01),
+            Sample::new(5, 1.22),
+        ];
 
-        let mut parser = SampleParser::new(cursor);
-        let samples = parser.parse().unwrap();
+        let temp_dir = TempDir::new("test_read_samples").expect("Unable to create temporary directory");
+        let path = temp_dir.path().join("samples.csv");
 
-        assert_eq!(samples.len(), 0);
+        // Writing content to test file
+        let mut file = File::create(&path).expect("Unable to create test file");
+        file.write_all(csv_content.as_bytes()).expect("Unable to write data");
+
+        let result = read_samples_from_csv_file(&path);
+        assert!(result.is_ok());
+
+        let samples = result.unwrap();
+        assert_eq!(samples, expected_samples);
     }
 
     #[test]
-    fn test_sample_parser_parse_invalid_data() {
-        let data = "timestamp,value\n1,not_a_float\n";
-        let cursor = Cursor::new(data);
+    fn test_write_and_read_samples() {
+        let samples = vec![
+            Sample::new(1, 1.01),
+            Sample::new(5, 1.22),
+        ];
 
-        let mut parser = SampleParser::new(cursor);
-        let result = parser.parse();
+        let temp_dir = TempDir::new("test_write_and_read_samples").expect("Unable to create temporary directory");
+        let path = temp_dir.path().join("samples.csv");
 
-        assert!(result.is_err());
-    }
+        let write_result = write_samples_to_csv_file(&path, &samples);
+        assert!(write_result.is_ok());
 
-    #[test]
-    fn test_sample_writer() {
-        let cursor = Rc::new(RefCell::new(Cursor::new(vec![])));
+        let read_result = read_samples_from_csv_file(&path);
+        assert!(read_result.is_ok());
 
-        let writer = SampleWriter::new(Rc::clone(&cursor));
-
-        let samples = vec![Sample::new(1, 1.01), Sample::new(5, 1.31)];
-
-        let res = writer.write_samples(&samples);
-        assert!(res.is_ok());
-
-        let expected = "timestamp,value\n1,1.01\n5,1.31\n";
-        let result = String::from_utf8(cursor.borrow().get_ref().to_vec());
-
-        assert!(res.is_ok());
-        assert_eq!(expected, result.unwrap(), "result mismatch")
+        let read_samples = read_result.unwrap();
+        assert_eq!(samples, read_samples);
     }
 }
