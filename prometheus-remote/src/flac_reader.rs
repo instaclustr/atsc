@@ -120,10 +120,7 @@ impl FlacMetric {
 
     fn datetime_from_ms(real_time: i64) -> String {
         // Time is in ms, convert it to seconds
-        let datetime = DateTime::<Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(real_time / 1000, 0).unwrap(),
-            Utc,
-        );
+        let datetime = DateTime::<Utc>::from_timestamp(real_time / 1000, 0).unwrap();
         // Transform datetime to string with the format YYYY-MM-DD
         let datetime_str = datetime.format("%Y-%m-%d").to_string();
         datetime_str
@@ -163,10 +160,9 @@ impl FlacMetric {
         // Get the default track.
         let track = format.default_track().unwrap();
         // Create a decoder for the track.
-        let decoder = symphonia::default::get_codecs()
+        symphonia::default::get_codecs()
             .make(&track.codec_params, &decoder_opts)
-            .unwrap();
-        decoder
+            .unwrap()
     }
 
     /// Read samples from a file with an optional start and end point.

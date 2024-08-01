@@ -9,12 +9,11 @@ description = "Tools for testing/supporting the development/validation of the co
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 wavbrro = { path = "../wavbrro" }
-sysinfo = "0.29.0"
 hound = "3.5"
 chrono = "0.4.26"
 claxon = "0.4.3"
 symphonia = { version = "0.5.3", features = ["flac"] }
-env_logger = "0.10.0"
+env_logger = "0.11.0"
 log = "0.4.0"
 clap = {version = "4.3.14", features = ["derive"] }
 regex = "1.9.1"

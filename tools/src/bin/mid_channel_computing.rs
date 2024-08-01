@@ -1,3 +1,5 @@
+use std::fs::File;
+
 use clap::Parser;
 use hound::{WavSpec, WavWriter};
 
@@ -49,12 +51,7 @@ fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
 fn write_optimal_int_wav(filename: &str, data: Vec<i16>, bitdepth: i32, channels: i32) {
     let header: WavSpec = generate_wav_header(Some(channels), bitdepth as u16, 8000);
     let file_path = format!("{filename}.wav");
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .read(true)
-        .open(file_path)
-        .unwrap();
+    let file = File::create(file_path).unwrap();
     let mut wav_writer = WavWriter::new(file, header).unwrap();
     for sample in data {
         let _ = wav_writer.write_sample(sample as i8);

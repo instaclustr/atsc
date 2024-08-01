@@ -29,10 +29,7 @@ impl WavMetric {
     /// Create a new WavMetric struct. `start_sample_ts` *must be* timestamp with miliseconds!
     pub fn new(name: String, source: String, job: String, start_sample_ts: i64) -> WavMetric {
         // Sample needs to fall within the file that the TS refers too, not the calendar day
-        let start_date = DateTime::<Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(start_sample_ts / 1000, 0).unwrap(),
-            Utc,
-        );
+        let start_date = DateTime::<Utc>::from_timestamp(start_sample_ts / 1000, 0).unwrap();
         // TODO: Do not ignore JOB!
         WavMetric {
             metric_name: name,
@@ -143,11 +140,7 @@ impl WavMetric {
                 return Ok((wav_writer, Vsri::load(&file_name).unwrap()));
             }
         }
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .read(true)
-            .open(&file_path)?;
+        let file = File::create(&file_path)?;
         let wav_writer = WavWriter::new(file, spec)?;
         self.last_file_created = Some(file_path);
         // TODO: Y can't be 0. Needs to be TS
