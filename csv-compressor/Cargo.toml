@@ -15,4 +15,5 @@ wavbrro = { version = "0.1.0", path = "../wavbrro" }
 log = "0.4.19"
 env_logger = "0.10.0"
 vsri = { version = "0.1.0", path = "../vsri" }
+[dev-dependencies]
 tempdir = "0.3.7"
