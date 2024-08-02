@@ -183,14 +183,8 @@ impl DataLocator {
     ) -> Option<Vec<DataLocator>> {
         let mut file_index_vec = Vec::new();
         let data_locator_vec: Vec<DataLocator>;
-        let start_date = DateTime::<Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(start_time / 1000, 0).unwrap(),
-            Utc,
-        );
-        let end_date = DateTime::<Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(end_time / 1000, 0).unwrap(),
-            Utc,
-        );
+        let start_date = DateTime::<Utc>::from_timestamp(start_time / 1000, 0).unwrap();
+        let end_date = DateTime::<Utc>::from_timestamp(end_time / 1000, 0).unwrap();
         let file_time_intervals = time_intervals(start_time, end_time);
         debug!(
             "[READ] Time intervals for the range {:?} ",
@@ -255,14 +249,8 @@ impl DataLocator {
 /// Returns a Vector of array of time intervals (in seconds) for the interval of time
 fn time_intervals(start_time: i64, end_time: i64) -> Vec<[i32; 2]> {
     let mut time_intervals = Vec::new();
-    let start_date = DateTime::<Utc>::from_utc(
-        chrono::NaiveDateTime::from_timestamp_opt(start_time / 1000, 0).unwrap(),
-        Utc,
-    );
-    let end_date = DateTime::<Utc>::from_utc(
-        chrono::NaiveDateTime::from_timestamp_opt(end_time / 1000, 0).unwrap(),
-        Utc,
-    );
+    let start_date = DateTime::<Utc>::from_timestamp(start_time / 1000, 0).unwrap();
+    let end_date = DateTime::<Utc>::from_timestamp(end_time / 1000, 0).unwrap();
     let start_ts_i32 = day_elapsed_seconds(start_time);
     let end_ts_i32 = day_elapsed_seconds(end_time);
     let date_spread_size = DateRange(start_date, end_date).count();
@@ -325,14 +313,8 @@ pub fn get_data_between_timestamps(
     // How many files to process
     let file_count = file_vec.len();
     // Get the baseline timestamps to add to the index timestamps
-    let start_date = DateTime::<Utc>::from_utc(
-        chrono::NaiveDateTime::from_timestamp_opt(start_time / 1000, 0).unwrap(),
-        Utc,
-    );
-    let end_date = DateTime::<Utc>::from_utc(
-        chrono::NaiveDateTime::from_timestamp_opt(end_time / 1000, 0).unwrap(),
-        Utc,
-    );
+    let start_date = DateTime::<Utc>::from_timestamp(start_time / 1000, 0).unwrap();
+    let end_date = DateTime::<Utc>::from_timestamp(end_time / 1000, 0).unwrap();
     let ts_bases: Vec<i64> = DateRange(start_date, end_date).map(start_day_ts).collect();
     let start_ts_i32 = day_elapsed_seconds(start_time);
     let end_ts_i32 = day_elapsed_seconds(end_time);

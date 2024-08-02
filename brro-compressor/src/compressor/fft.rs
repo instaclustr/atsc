@@ -65,25 +65,6 @@ impl FrequencyPoint {
             im: self.freq_img * -1.0,
         }
     }
-
-    /// To allow to use rust std structures
-    fn partial_cmp(&self, other: &Self) -> Ordering {
-        let c1 = Complex {
-            re: self.freq_real,
-            im: self.freq_img,
-        };
-        let c2 = Complex {
-            re: other.freq_real,
-            im: other.freq_img,
-        };
-        if self == other {
-            Ordering::Equal
-        } else if c1.norm() > c2.norm() {
-            return Ordering::Greater;
-        } else {
-            return Ordering::Less;
-        }
-    }
 }
 
 // This is VERY specific for this use case, DO NOT RE-USE! This NORM comparison is false for complex numbers
@@ -105,13 +86,27 @@ impl Eq for FrequencyPoint {}
 
 impl PartialOrd for FrequencyPoint {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.partial_cmp(other))
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for FrequencyPoint {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other)
+        let c1 = Complex {
+            re: self.freq_real,
+            im: self.freq_img,
+        };
+        let c2 = Complex {
+            re: other.freq_real,
+            im: other.freq_img,
+        };
+        if self == other {
+            Ordering::Equal
+        } else if c1.norm() > c2.norm() {
+            return Ordering::Greater;
+        } else {
+            return Ordering::Less;
+        }
     }
 }
 
@@ -179,9 +174,7 @@ impl FFT {
         FFT {
             id: FFT_COMPRESSOR_ID,
             frequencies: Vec::with_capacity(sample_count),
-            /// The maximum numeric value of the points in the frame
             max_value: FFT::f64_to_f32(max),
-            /// The minimum numeric value of the points in the frame
             min_value: FFT::f64_to_f32(min),
             error: None,
         }

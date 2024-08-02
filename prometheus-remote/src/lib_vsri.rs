@@ -30,10 +30,7 @@ pub static MAX_INDEX_SAMPLES: i32 = 86400;
 // Helper functions, this should be moved somewhere
 /// Returns the number of seconds elapsed for the day provided in the `timestamp_sec`
 pub fn day_elapsed_seconds(timestamp_sec: i64) -> i32 {
-    let datetime = DateTime::<Utc>::from_utc(
-        chrono::NaiveDateTime::from_timestamp_opt(timestamp_sec, 0).unwrap(),
-        Utc,
-    );
+    let datetime = DateTime::<Utc>::from_timestamp(timestamp_sec, 0).unwrap();
     // Extract the time components (hour, minute, and second) from the DateTime
     let hour = datetime.time().hour();
     let minute = datetime.time().minute();

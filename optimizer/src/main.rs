@@ -85,12 +85,7 @@ fn write_optimal_wav(filename: &str, data: Vec<f64>, bitdepth: i32, dc: i64, cha
     let mut file_path = filename.to_string();
     file_path.truncate(file_path.len() - 4);
     file_path = format!("{}_OPT.wav", file_path);
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .read(true)
-        .open(file_path)
-        .unwrap();
+    let file = File::create(file_path).unwrap();
     let mut wav_writer = WavWriter::new(file, header).unwrap();
     for sample in data {
         let _ = match bitdepth {
@@ -107,12 +102,7 @@ fn write_optimal_int_wav(filename: &str, data: Vec<i64>, bitdepth: i32, dc: i64,
     let mut file_path = filename.to_string();
     file_path.truncate(file_path.len() - 4);
     file_path = format!("{}_OPT.wav", file_path);
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .read(true)
-        .open(file_path)
-        .unwrap();
+    let file = File::create(file_path).unwrap();
     let mut wav_writer = WavWriter::new(file, header).unwrap();
     for sample in data {
         let _ = match bitdepth {
