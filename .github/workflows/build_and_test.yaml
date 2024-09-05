@@ -35,9 +35,9 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         # rust-cache already handles all the sane defaults for caching rust builds.
-        # However because we are running seperate debug/release builds in parallel,
-        # we also need to add the runner and cargo_flags to the key so that a seperate cache is used.
-        # Otherwise only the last build to finish would get saved to the cache.
+        # However, because we are running separate debug/release builds in parallel,
+        # we also need to add the runner and cargo_flags to the key so that a separate cache is used.
+        # Otherwise, only the last build to finish would get saved to the cache.
         key: ${{ matrix.runner }} - ${{ matrix.cargo_flags }}
     - name: Install external deps for the prom-remote-api crate
       run: sudo apt-get install protobuf-compiler
@@ -48,8 +48,28 @@ jobs:
     - name: Ensure that all crates compile and have no warnings under every possible combination of features
       # some things to explicitly point out:
       # * clippy also reports rustc warnings and errors
-      # * clippy --all-targets causes clippy to run against tests and examples which it doesnt do by default.
-      run: cargo hack --feature-powerset clippy --all-targets --locked ${{ matrix.cargo_flags }} -- -D warnings
+      # * clippy --all-targets causes clippy to run against tests and examples which it doesn't do by default.
+      run: |
+        # Initialize a variable to track if any package fails
+        failure_occurred=false
+
+        # Loop over each package in the workspace
+        for package in $(cargo metadata --format-version=1 --no-deps | jq -r '.packages[].name'); do
+            echo "Running clippy for package: $package"
+            cargo hack clippy --package "$package" --feature-powerset --all-targets --locked ${{ matrix.cargo_flags }} -- -D warnings
+            exit_code=$?
+
+            # If clippy fails, mark failure_occurred as true
+            if [ $exit_code -ne 0 ]; then
+                failure_occurred=true
+            fi
+        done
+
+        # If any package failed, exit with a non-zero status
+        if [ "$failure_occurred" = true ]; then
+            echo "Clippy failed on one or more packages."
+            exit 1
+        fi
     - name: Ensure that tests pass
       run: cargo test ${{ matrix.cargo_flags }} --all-features --all-targets -- --nocapture
     - name: Ensure that tests did not create or modify any files that arent .gitignore'd
