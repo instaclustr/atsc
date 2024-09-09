@@ -60,11 +60,7 @@ impl CompressorFrame {
         // We need enough samples to do decent compression, minimum is 128 (2^7)
         let data_sample = COMPRESSION_SPEED[compression_speed] as usize;
         // Eligible compressors for use
-        let compressor_list = [
-            Compressor::Constant,
-            Compressor::FFT,
-            Compressor::Polynomial,
-        ];
+        let compressor_list = [Compressor::FFT, Compressor::Polynomial];
         // Do a statistical analysis of the data, let's see if we can pick a compressor out of this.
         let stats = DataStats::new(data);
         // Checking the statistical analysis and chose, if possible, a compressor
@@ -90,6 +86,7 @@ impl CompressorFrame {
                         compressor,
                     )
                 })
+                .filter(|(result, _)| result.error <= max_error as f64)
                 .min_by_key(|x| x.0.compressed_data.len())
                 .unwrap();
             self.compressor = *chosen_compressor;
@@ -108,6 +105,7 @@ impl CompressorFrame {
                         compressor,
                     )
                 })
+                .filter(|(result, _)| result.error <= max_error as f64)
                 .min_by_key(|x| x.0.compressed_data.len())
                 .unwrap();
 
