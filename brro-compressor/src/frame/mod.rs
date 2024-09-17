@@ -97,20 +97,21 @@ impl CompressorFrame {
                 .compressed_data;
         } else {
             // Run all the eligible compressors and choose smallest
-            let (smallest_result, chosen_compressor) = compressor_list
-                .iter()
-                .map(|compressor| {
-                    (
-                        compressor.get_compress_bounded_results(data, max_error as f64),
-                        compressor,
-                    )
-                })
+            let compressor_results = compressor_list.iter().map(|compressor| {
+                (
+                    compressor.get_compress_bounded_results(data, max_error as f64),
+                    compressor,
+                )
+            });
+            let best_compressor = compressor_results
+                .clone()
                 .filter(|(result, _)| result.error <= max_error as f64)
                 .min_by_key(|x| x.0.compressed_data.len())
-                .unwrap();
+                .or_else(|| compressor_results.min_by_key(|x| x.0.compressed_data.len()));
 
-            self.data = smallest_result.compressed_data;
-            self.compressor = *chosen_compressor;
+            let selection = best_compressor.unwrap();
+            self.data = selection.0.compressed_data;
+            self.compressor = *selection.1;
         }
         debug!("Auto Compressor Selection: {:?}", self.compressor);
     }
