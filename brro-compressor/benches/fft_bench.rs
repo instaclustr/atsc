@@ -1,9 +1,31 @@
 use brro_compressor::compressor::fft::{fft, fft_allowed_error, fft_set, fft_to_data, FFT};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use std::path::PathBuf;
+use wavbrro::wavbrro::WavBrro;
 
-// Basic FFT compression benchmark
+const TEST_WBRO_PATH: &str = "tests/wbros/go_gc_heap_goal_bytes.wbro";
+
+/// Loads the file, and returns the Vec<f64> result
+fn load_data_from_wbro_file() -> Vec<f64> {
+    let test_file_path = PathBuf::from(TEST_WBRO_PATH);
+    WavBrro::from_file(&test_file_path).unwrap()
+}
+
+fn pad_to_size(mut data: Vec<f64>, desired_size: usize) -> Vec<f64> {
+    // Check if the data length is smaller than the desired size
+    if data.len() < desired_size {
+        // Add zeroes to the data until it reaches the desired size
+        data.resize(desired_size, 1.0);
+    } else {
+        // Truncate the data to the exact size if it's larger
+        data.truncate(desired_size);
+    }
+    data
+}
+
+/// Basic FFT compression benchmark
 fn fft_basic_benchmark(c: &mut Criterion) {
-    let data = vec![1.0; 1024];
+    let data = load_data_from_wbro_file();
 
     c.bench_function("FFT Compression (Basic)", |b| {
         b.iter(|| {
@@ -15,7 +37,7 @@ fn fft_basic_benchmark(c: &mut Criterion) {
 
 // Advanced FFT compression benchmark with custom frequency set
 fn fft_advanced_benchmark(c: &mut Criterion) {
-    let data = vec![1.0; 1024];
+    let data = load_data_from_wbro_file();
 
     c.bench_function("FFT Compression (Advanced)", |b| {
         b.iter(|| {
@@ -27,7 +49,7 @@ fn fft_advanced_benchmark(c: &mut Criterion) {
 
 // Error-constrained FFT compression benchmark
 fn fft_error_benchmark(c: &mut Criterion) {
-    let data = vec![1.0; 1024];
+    let data = load_data_from_wbro_file();
     let max_error = 0.01;
 
     c.bench_function("FFT Compression (Error Constrained)", |b| {
@@ -40,7 +62,7 @@ fn fft_error_benchmark(c: &mut Criterion) {
 
 // FFT decompression benchmark
 fn fft_decompression_benchmark(c: &mut Criterion) {
-    let data = vec![1.0; 1024];
+    let data = load_data_from_wbro_file();
     let compressed_data = fft(&data);
 
     c.bench_function("FFT Decompression", |b| {
@@ -62,7 +84,7 @@ fn fft_initialization_benchmark(c: &mut Criterion) {
 
 // Decompression without FFT benchmark
 fn decompression_without_fft_benchmark(c: &mut Criterion) {
-    let data = vec![1.0; 1024];
+    let data = load_data_from_wbro_file();
     let compressed_data = fft(&data);
 
     c.bench_function("Decompression without FFT", |b| {
@@ -75,9 +97,11 @@ fn decompression_without_fft_benchmark(c: &mut Criterion) {
 
 // FFT compression benchmark with varying data sizes
 fn fft_varying_data_size_benchmark(c: &mut Criterion) {
-    let data_small = vec![1.0; 256];
-    let data_medium = vec![1.0; 1024];
-    let data_large = vec![1.0; 4096];
+    let data = load_data_from_wbro_file();
+
+    let data_small = pad_to_size(data.clone(), 256);
+    let data_medium = pad_to_size(data.clone(), 1024);
+    let data_large = pad_to_size(data, 4096);
 
     c.bench_function("FFT Compression (Small Data)", |b| {
         b.iter(|| {
@@ -100,7 +124,7 @@ fn fft_varying_data_size_benchmark(c: &mut Criterion) {
 
 // Compression ratio vs. time benchmark
 fn compression_ratio_vs_time_benchmark(c: &mut Criterion) {
-    let data = vec![1.0; 1024];
+    let data = load_data_from_wbro_file();
 
     c.bench_function("Compression Ratio vs. Compression Time", |b| {
         b.iter(|| {
@@ -115,7 +139,7 @@ fn compression_ratio_vs_time_benchmark(c: &mut Criterion) {
 
 // Multiple compression rounds benchmark
 fn multiple_compression_rounds_benchmark(c: &mut Criterion) {
-    let data = vec![1.0; 1024];
+    let data = load_data_from_wbro_file();
     let rounds = 10;
 
     c.bench_function("Multiple Compression Rounds", |b| {
