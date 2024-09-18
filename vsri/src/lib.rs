@@ -72,18 +72,22 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 /// # Examples
 /// Creating a new index, metric is of expected time 0, but for sure location of X is 0
 /// ```no_run
-/// let vsri = Vsri::new("metric_name", 0, 0);
+/// # use vsri::Vsri;
+/// let vsri = Vsri::new("metric_name");
 /// vsri.flush();
 /// ```
 /// Updating an index, adding point at time 5sec
 /// ```no_run
-/// let vsri = Vsri::load("metric_name").unwrap().update_for_point(5);
+///
+/// # use vsri::Vsri;
+/// let mut vsri = Vsri::load("metric_name").unwrap();
+/// vsri.update_for_point(5).unwrap();
 /// vsri.flush();
 /// ```
 /// Fetch a sample location from the index given a timestamp
 /// ```no_run
-/// let vsri = Vsri::load("metric_name").unwrap();
-/// vsri.get_sample_location("metric_name", 5);
+/// # use vsri::Vsri;
+/// let vsri = Vsri::get_sample_location("metric_name", 5);
 /// ```
 
 /// Index Structure
@@ -106,7 +110,7 @@ pub struct Vsri {
 impl Vsri {
     /// Creates the index, it doesn't create the file in the disk
     /// flush needs to be called for that
-    pub fn new(filename: &String) -> Self {
+    pub fn new(filename: &str) -> Self {
         debug!("[INDEX] Creating new index!");
         Vsri {
             index_file: filename.to_string(),
@@ -118,8 +122,8 @@ impl Vsri {
 
     /// Given a filename and a time location, returns the sample location in the
     /// data file. Or None in case it doesn't exist.
-    pub fn get_sample_location(filename: String, y: i32) -> Option<i32> {
-        let vsri = match Vsri::load(&filename) {
+    pub fn get_sample_location(filename: &str, y: i32) -> Option<i32> {
+        let vsri = match Vsri::load(filename) {
             Ok(vsri) => vsri,
             Err(_err) => return None,
         };

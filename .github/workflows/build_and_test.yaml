@@ -51,7 +51,9 @@ jobs:
       # * clippy --all-targets causes clippy to run against tests and examples which it doesnt do by default.
       run: cargo hack --feature-powerset clippy --all-targets --locked ${{ matrix.cargo_flags }} -- -D warnings
     - name: Ensure that tests pass
-      run: cargo test ${{ matrix.cargo_flags }} --all-features --all-targets -- --nocapture
+      run: |
+        cargo test --doc ${{ matrix.cargo_flags }} --all-features -- --show-output --nocapture
+        cargo test ${{ matrix.cargo_flags }} --all-features --all-targets -- --nocapture
     - name: Ensure that tests did not create or modify any files that arent .gitignore'd
       run: |
         if [ -n "$(git status --porcelain)" ]; then

@@ -76,11 +76,7 @@ impl CompressorFrame {
         // We need enough samples to do decent compression, minimum is 128 (2^7)
         let data_sample = COMPRESSION_SPEED[compression_speed] as usize;
         // Eligible compressors for use
-        let compressor_list = [
-            Compressor::Constant,
-            Compressor::FFT,
-            Compressor::Polynomial,
-        ];
+        let compressor_list = [Compressor::FFT, Compressor::Polynomial];
         // Do a statistical analysis of the data, let's see if we can pick a compressor out of this.
         let stats = DataStats::new(data);
         // Checking the statistical analysis and chose, if possible, a compressor
@@ -106,6 +102,7 @@ impl CompressorFrame {
                         compressor,
                     )
                 })
+                .filter(|(result, _)| result.error <= max_error as f64)
                 .min_by_key(|x| x.0.compressed_data.len())
                 .unwrap();
             self.compressor = *chosen_compressor;
@@ -116,19 +113,39 @@ impl CompressorFrame {
                 .compressed_data;
         } else {
             // Run all the eligible compressors and choose smallest
-            let (smallest_result, chosen_compressor) = compressor_list
+            let compressor_results: Vec<_> = compressor_list
                 .iter()
                 .map(|compressor| {
                     (
                         compressor.get_compress_bounded_results(data, max_error as f64),
-                        compressor,
+                        *compressor,
                     )
                 })
-                .min_by_key(|x| x.0.compressed_data.len())
-                .unwrap();
+                .collect();
 
-            self.data = smallest_result.compressed_data;
-            self.compressor = *chosen_compressor;
+            #[allow(
+                clippy::neg_cmp_op_on_partial_ord,
+                reason = "we need to exactly negate `result.error < max_error`, we can't apply de morgans to the expression due to NaN values"
+            )]
+            let best_compressor = if compressor_results
+                .iter()
+                .all(|(result, _)| !(result.error <= max_error as f64))
+            {
+                // To ensure we always have at least one result,
+                // if all results are above the max error just pick the smallest.
+                compressor_results
+                    .into_iter()
+                    .min_by_key(|x| x.0.compressed_data.len())
+            } else {
+                compressor_results
+                    .into_iter()
+                    .filter(|(result, _)| result.error <= max_error as f64)
+                    .min_by_key(|x| x.0.compressed_data.len())
+            };
+
+            let (result, compressor) = best_compressor.unwrap();
+            self.data = result.compressed_data;
+            self.compressor = compressor;
         }
         debug!("Auto Compressor Selection: {:?}", self.compressor);
     }

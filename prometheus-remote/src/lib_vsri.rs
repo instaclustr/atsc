@@ -104,7 +104,7 @@ pub struct Vsri {
 impl Vsri {
     /// Creates the index, it doesn't create the file in the disk
     /// flush needs to be called for that
-    pub fn new(filename: &String) -> Self {
+    pub fn new(filename: &str) -> Self {
         debug!("[INDEX] Creating new index!");
         let segments: Vec<[i32; 4]> = Vec::new();
         Vsri {
