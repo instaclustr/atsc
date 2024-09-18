@@ -97,21 +97,39 @@ impl CompressorFrame {
                 .compressed_data;
         } else {
             // Run all the eligible compressors and choose smallest
-            let compressor_results = compressor_list.iter().map(|compressor| {
-                (
-                    compressor.get_compress_bounded_results(data, max_error as f64),
-                    compressor,
-                )
-            });
-            let best_compressor = compressor_results
-                .clone()
-                .filter(|(result, _)| result.error <= max_error as f64)
-                .min_by_key(|x| x.0.compressed_data.len())
-                .or_else(|| compressor_results.min_by_key(|x| x.0.compressed_data.len()));
+            let compressor_results: Vec<_> = compressor_list
+                .iter()
+                .map(|compressor| {
+                    (
+                        compressor.get_compress_bounded_results(data, max_error as f64),
+                        *compressor,
+                    )
+                })
+                .collect();
 
-            let selection = best_compressor.unwrap();
-            self.data = selection.0.compressed_data;
-            self.compressor = *selection.1;
+            #[allow(
+                clippy::neg_cmp_op_on_partial_ord,
+                reason = "we need to exactly negate `result.error < max_error`, we can't apply de morgans to the expression due to NaN values"
+            )]
+            let best_compressor = if compressor_results
+                .iter()
+                .all(|(result, _)| !(result.error <= max_error as f64))
+            {
+                // To ensure we always have at least one result,
+                // if all results are above the max error just pick the smallest.
+                compressor_results
+                    .into_iter()
+                    .min_by_key(|x| x.0.compressed_data.len())
+            } else {
+                compressor_results
+                    .into_iter()
+                    .filter(|(result, _)| result.error <= max_error as f64)
+                    .min_by_key(|x| x.0.compressed_data.len())
+            };
+
+            let (result, compressor) = best_compressor.unwrap();
+            self.data = result.compressed_data;
+            self.compressor = compressor;
         }
         debug!("Auto Compressor Selection: {:?}", self.compressor);
     }
