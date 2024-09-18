@@ -1,3 +1,19 @@
+/*
+Copyright 2024 NetApp, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 use chrono::{DateTime, Timelike, Utc};
 /// Very Small Rolo Index
 /// This is an index made for detection of gaps in continuous data with the same sampling rate.
@@ -88,7 +104,7 @@ pub struct Vsri {
 impl Vsri {
     /// Creates the index, it doesn't create the file in the disk
     /// flush needs to be called for that
-    pub fn new(filename: &String) -> Self {
+    pub fn new(filename: &str) -> Self {
         debug!("[INDEX] Creating new index!");
         let segments: Vec<[i32; 4]> = Vec::new();
         Vsri {

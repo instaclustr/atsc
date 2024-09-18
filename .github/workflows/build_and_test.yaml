@@ -71,7 +71,9 @@ jobs:
             exit 1
         fi
     - name: Ensure that tests pass
-      run: cargo test ${{ matrix.cargo_flags }} --all-features --all-targets -- --nocapture
+      run: |
+        cargo test --doc ${{ matrix.cargo_flags }} --all-features -- --show-output --nocapture
+        cargo test ${{ matrix.cargo_flags }} --all-features --all-targets -- --nocapture
     - name: Ensure that tests did not create or modify any files that arent .gitignore'd
       run: |
         if [ -n "$(git status --porcelain)" ]; then
