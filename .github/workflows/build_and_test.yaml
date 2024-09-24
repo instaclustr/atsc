@@ -50,26 +50,10 @@ jobs:
       # * clippy also reports rustc warnings and errors
       # * clippy --all-targets causes clippy to run against tests and examples which it doesn't do by default.
       run: |
-        # Initialize a variable to track if any package fails
-        failure_occurred=false
-
-        # Loop over each package in the workspace
-        for package in $(cargo metadata --format-version=1 --no-deps | jq -r '.packages[].name'); do
-            echo "Running clippy for package: $package"
-            cargo hack clippy --package "$package" --feature-powerset --all-targets --locked ${{ matrix.cargo_flags }} -- -D warnings
-            exit_code=$?
-
-            # If clippy fails, mark failure_occurred as true
-            if [ $exit_code -ne 0 ]; then
-                failure_occurred=true
-            fi
-        done
-
-        # If any package failed, exit with a non-zero status
-        if [ "$failure_occurred" = true ]; then
-            echo "Clippy failed on one or more packages."
-            exit 1
-        fi
+        # Display all clippy lint failures as warnings
+        cargo hack --feature-powerset clippy --all-targets --locked ${{ matrix.cargo_flags }}
+        # Fail CI on the first crate to fail clippy lints
+        cargo hack --feature-powerset clippy --all-targets --locked ${{ matrix.cargo_flags }} -- -D warnings
     - name: Ensure that tests pass
       run: |
         cargo test --doc ${{ matrix.cargo_flags }} --all-features -- --show-output --nocapture
