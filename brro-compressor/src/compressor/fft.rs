@@ -17,6 +17,7 @@ limitations under the License.
 use crate::{optimizer::utils::DataStats, utils::error::calculate_error};
 use bincode::{Decode, Encode};
 use rustfft::{num_complex::Complex, FftPlanner};
+use std::f64::consts::PI;
 use std::{cmp::Ordering, collections::BinaryHeap};
 
 use super::{BinConfig, CompressorResult};
@@ -258,6 +259,29 @@ impl FFT {
         freq_vec
     }
 
+    fn lanczos_kernel(x: f64, a: f64) -> f64 {
+        if x == 0.0 {
+            1.0
+        } else {
+            let pix = PI * x;
+            (a * (pix).sin() * (pix / a).sin()) / (pix * pix)
+        }
+    }
+
+    fn apply_lanczos(signal: &mut [Complex<f32>], a: f32) {
+        let n = signal.len();
+        let mut result = vec![Complex::new(0.0, 0.0); n];
+        for i in 0..n {
+            let mut sum = Complex::new(0.0, 0.0);
+            for j in 0..n {
+                let x = (i as f32 - j as f32) / a;
+                sum += signal[j] * FFT::lanczos_kernel(x.into(), a.into()) as f32;
+            }
+            result[i] = sum;
+        }
+        signal.copy_from_slice(&result);
+    }
+
     /// Compress data via FFT.
     /// This picks a set of data, computes the FFT, and uses the hinted number of frequencies to store the N provided
     /// more relevant frequencies
@@ -315,6 +339,13 @@ impl FFT {
         // and the first one being the dc component
         let size = (buff_clone.len() / 2) + 1;
         buff_clone.truncate(size);
+        // Apply the Lanczos Kernel to long signals. Lanczos param should be 2 or 3
+        if len > 1024 {
+            trace!("Before Lanczos: {:?}", buff_clone);
+            let lanczos_param = 3.0;
+            FFT::apply_lanczos(&mut buff_clone, lanczos_param);
+            trace!("After Lanczos: {:?}", buff_clone);
+        }
         // To make sure we run the first cycle
         let mut current_err = max_err + 1.0;
         let mut jump: usize = 0;
