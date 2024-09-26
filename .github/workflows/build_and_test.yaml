@@ -35,9 +35,9 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         # rust-cache already handles all the sane defaults for caching rust builds.
-        # However because we are running seperate debug/release builds in parallel,
-        # we also need to add the runner and cargo_flags to the key so that a seperate cache is used.
-        # Otherwise only the last build to finish would get saved to the cache.
+        # However, because we are running separate debug/release builds in parallel,
+        # we also need to add the runner and cargo_flags to the key so that a separate cache is used.
+        # Otherwise, only the last build to finish would get saved to the cache.
         key: ${{ matrix.runner }} - ${{ matrix.cargo_flags }}
     - name: Install external deps for the prom-remote-api crate
       run: sudo apt-get install protobuf-compiler
@@ -48,8 +48,12 @@ jobs:
     - name: Ensure that all crates compile and have no warnings under every possible combination of features
       # some things to explicitly point out:
       # * clippy also reports rustc warnings and errors
-      # * clippy --all-targets causes clippy to run against tests and examples which it doesnt do by default.
-      run: cargo hack --feature-powerset clippy --all-targets --locked ${{ matrix.cargo_flags }} -- -D warnings
+      # * clippy --all-targets causes clippy to run against tests and examples which it doesn't do by default.
+      run: |
+        # Display all clippy lint failures as warnings
+        cargo hack --feature-powerset clippy --all-targets --locked ${{ matrix.cargo_flags }}
+        # Fail CI on the first crate to fail clippy lints
+        cargo hack --feature-powerset clippy --all-targets --locked ${{ matrix.cargo_flags }} -- -D warnings
     - name: Ensure that tests pass
       run: |
         cargo test --doc ${{ matrix.cargo_flags }} --all-features -- --show-output --nocapture
