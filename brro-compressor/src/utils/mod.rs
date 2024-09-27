@@ -100,6 +100,8 @@ mod tests {
     fn test_next_size() {
         assert_eq!(next_size(2048), 2187);
         assert_eq!(next_size(512), 576);
+        assert_eq!(next_size(256), 288);
+        assert_eq!(next_size(128), 144);
         assert_eq!(next_size(12432), 13122);
     }
 }

@@ -221,6 +221,7 @@ impl FFT {
         let suffix = vec![*data.last().unwrap(); suffix_len];
         prefix.extend(data);
         prefix.extend(suffix);
+        trace!("Gibbs constructed data: {:?}", prefix);
         prefix
     }
 
@@ -580,6 +581,17 @@ mod tests {
         let out = FFT::decompress(&compressed_result.compressed_data).to_data(frame_size);
         let e = calculate_error(&vector1, &out);
         assert!(e <= 0.01);
+    }
+
+    #[test]
+    fn test_gibbs_sizing() {
+        let mut vector1 = vec![2.0; 2048];
+        vector1[0] = 1.0;
+        vector1[2047] = 3.0;
+        let vector1_sized = FFT::gibbs_sizing(&vector1);
+        assert!(vector1_sized.len() == 2187);
+        assert!(vector1_sized[2] == 1.0);
+        assert!(vector1_sized[2185] == 3.0);
     }
 
     #[test]
