@@ -89,4 +89,17 @@ mod tests {
         assert_eq!(round_and_limit_f64(1., 2., 4., 1), 2.0);
         assert_eq!(round_and_limit_f64(3.123452312, 2., 4., 3), 3.123);
     }
+
+    #[test]
+    fn test_is_decomposable() {
+        assert!(is_decomposable(2048));
+        assert!(is_decomposable(512));
+    }
+
+    #[test]
+    fn test_next_size() {
+        assert_eq!(next_size(2048), 2187);
+        assert_eq!(next_size(512), 576);
+        assert_eq!(next_size(12432), 13122);
+    }
 }

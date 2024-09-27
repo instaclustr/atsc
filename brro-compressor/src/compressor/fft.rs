@@ -14,7 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::{optimizer::utils::DataStats, utils::error::calculate_error};
+use crate::{
+    optimizer::utils::DataStats,
+    utils::{error::calculate_error, next_size},
+};
 use bincode::{Decode, Encode};
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{cmp::Ordering, collections::BinaryHeap};
@@ -205,6 +208,22 @@ impl FFT {
         y
     }
 
+    /// Given an array of size N, it returns the next best FFT size with the
+    /// begining and the ended padded to improve Gibbs on the edges of the frame
+    fn gibbs_sizing(data: &[f64]) -> Vec<f64> {
+        let data_len = data.len();
+        let added_len = next_size(data_len) - data_len;
+        debug!("Gibbs sizing, padding with {}", added_len);
+        let prefix_len = added_len / 2;
+        let suffix_len = added_len - prefix_len;
+        // Extend the beginning and the end with the first and last value
+        let mut prefix = vec![data[0]; prefix_len];
+        let suffix = vec![*data.last().unwrap(); suffix_len];
+        prefix.extend(data);
+        prefix.extend(suffix);
+        prefix
+    }
+
     /// Rounds a number to the specified number of decimal places
     // TODO: Move this into utils? I think this will be helpfull somewhere else.
     fn round(&self, x: f32, decimals: u32) -> f64 {
@@ -283,7 +302,7 @@ impl FFT {
         self.frequencies = FFT::fft_trim(&mut buffer, max_freq);
     }
 
-    /// Compress data via FFT - VERY EXPENSIVE
+    /// Compress data via FFT - EXPENSIVE
     /// This picks a set of data, computes the FFT, and optimizes the number of frequencies to store to match
     /// the max allowed error.
     /// NOTE: This does not otimize for smallest possible error, just being smaller than the error.
