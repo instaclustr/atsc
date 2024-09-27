@@ -28,6 +28,26 @@ pub fn prev_power_of_two(n: usize) -> usize {
     (1 << highest_bit_set_idx) & n
 }
 
+/// Given a number N, checks what is the next number that is in the form of (2^N * 3^M)
+pub fn next_size(mut n: usize) -> usize {
+    n += 1;
+    while !is_decomposable(n) {
+        n += 1;
+    }
+    n
+}
+
+/// Checks if a number is in the form of (2^N * 3^M), usefull for FFT sizing
+pub fn is_decomposable(mut n: usize) -> bool {
+    while n % 2 == 0 {
+        n /= 2;
+    }
+    while n % 3 == 0 {
+        n /= 3;
+    }
+    n == 1
+}
+
 /// Converts a float to u64 with a given precision
 pub fn f64_to_u64(number: f64, precision: usize) -> u64 {
     // TODO: Panic on overflow
