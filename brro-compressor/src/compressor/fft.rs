@@ -481,8 +481,7 @@ impl FFT {
             .map(|&f| self.round(f.re / len, DECIMAL_PRECISION.into()))
             .collect();
         // Trim the excess data
-        let trimmed_data = out_data[trim_sizes.0..out_data.len() - trim_sizes.1].to_vec();
-        trimmed_data
+        out_data[trim_sizes.0..out_data.len() - trim_sizes.1].to_vec()
     }
 }
 
