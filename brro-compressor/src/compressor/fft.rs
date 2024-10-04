@@ -210,19 +210,26 @@ impl FFT {
 
     /// Given an array of size N, it returns the next best FFT size with the
     /// begining and the ended padded to improve Gibbs on the edges of the frame
-    fn gibbs_sizing(data: &[f64]) -> Vec<f64> {
+    pub fn gibbs_sizing(data: &[f64]) -> Vec<f64> {
         let data_len = data.len();
-        let added_len = next_size(data_len) - data_len;
+        let next_size = next_size(data_len);
+        let added_len = next_size - data_len;
         debug!("Gibbs sizing, padding with {}", added_len);
         let prefix_len = added_len / 2;
         let suffix_len = added_len - prefix_len;
         // Extend the beginning and the end with the first and last value
-        let mut prefix = vec![data[0]; prefix_len];
-        let suffix = vec![*data.last().unwrap(); suffix_len];
-        prefix.extend(data);
-        prefix.extend(suffix);
-        trace!("Gibbs constructed data: {:?}", prefix);
-        prefix
+        let mut result = Vec::with_capacity(next_size);
+        if let Some(first) = data.first() {
+            result.resize(prefix_len, *first);
+            result.extend_from_slice(data);
+
+            if let Some(last) = data.last() {
+                for _ in 0..suffix_len {
+                    result.push(*last);
+                }
+            }
+        }
+        result
     }
 
     /// Rounds a number to the specified number of decimal places
@@ -324,10 +331,10 @@ impl FFT {
         };
 
         // Should we apply a Gibbs sizing?
-        let g_data: Vec<f64> = if data.len() >= 128 {
-            FFT::gibbs_sizing(data)
+        let g_data: &[f64] = if data.len() >= 128 {
+            &FFT::gibbs_sizing(data)
         } else {
-            data.to_vec()
+            data
         };
 
         let len = g_data.len();
@@ -476,12 +483,13 @@ impl FFT {
         // We need this for normalization
         let len = gibbs_frame_size as f32;
         // We only need the real part
-        let out_data: Vec<f64> = data
-            .iter()
+        data.iter()
+            // trim the exceses data
+            .skip(trim_sizes.0)
+            .take(data.len() - trim_sizes.0 - trim_sizes.1)
+            // We only need the real part
             .map(|&f| self.round(f.re / len, DECIMAL_PRECISION.into()))
-            .collect();
-        // Trim the excess data
-        out_data[trim_sizes.0..out_data.len() - trim_sizes.1].to_vec()
+            .collect()
     }
 }
 
@@ -617,7 +625,7 @@ mod tests {
         vector1[0] = 1.0;
         vector1[2047] = 3.0;
         let vector1_sized = FFT::gibbs_sizing(&vector1);
-        assert!(vector1_sized.len() == 2187);
+        assert_eq!(vector1_sized.len(), 2187);
         assert!(vector1_sized[2] == 1.0);
         assert!(vector1_sized[2185] == 3.0);
     }
