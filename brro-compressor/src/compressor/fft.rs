@@ -341,7 +341,7 @@ impl FFT {
         let len_f32 = len as f32;
 
         // Clean the data
-        let mut buffer = FFT::optimize(&g_data);
+        let mut buffer = FFT::optimize(g_data);
 
         // Create the FFT planners
         let mut planner = FftPlanner::new();
@@ -371,7 +371,7 @@ impl FFT {
                 .iter()
                 .map(|&f| self.round(f.re / len_f32, DECIMAL_PRECISION.into()))
                 .collect();
-            current_err = calculate_error(&g_data, &out_data);
+            current_err = calculate_error(g_data, &out_data);
             trace!("Current Err: {}", current_err);
             // Max iterations is 22 (We start at 10%, we can go to 95% and 1% at a time)
             match iterations {
