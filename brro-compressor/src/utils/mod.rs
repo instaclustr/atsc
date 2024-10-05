@@ -28,6 +28,26 @@ pub fn prev_power_of_two(n: usize) -> usize {
     (1 << highest_bit_set_idx) & n
 }
 
+/// Given a number N, checks what is the next number that is in the form of (2^N * 3^M)
+pub fn next_size(mut n: usize) -> usize {
+    n += 1;
+    while !is_decomposable(n) {
+        n += 1;
+    }
+    n
+}
+
+/// Checks if a number is in the form of (2^N * 3^M), usefull for FFT sizing
+pub fn is_decomposable(mut n: usize) -> bool {
+    while n % 2 == 0 {
+        n /= 2;
+    }
+    while n % 3 == 0 {
+        n /= 3;
+    }
+    n == 1
+}
+
 /// Converts a float to u64 with a given precision
 pub fn f64_to_u64(number: f64, precision: usize) -> u64 {
     // TODO: Panic on overflow
@@ -68,5 +88,20 @@ mod tests {
         assert_eq!(round_and_limit_f64(5., 2., 4., 1), 4.0);
         assert_eq!(round_and_limit_f64(1., 2., 4., 1), 2.0);
         assert_eq!(round_and_limit_f64(3.123452312, 2., 4., 3), 3.123);
+    }
+
+    #[test]
+    fn test_is_decomposable() {
+        assert!(is_decomposable(2048));
+        assert!(is_decomposable(512));
+    }
+
+    #[test]
+    fn test_next_size() {
+        assert_eq!(next_size(2048), 2187);
+        assert_eq!(next_size(512), 576);
+        assert_eq!(next_size(256), 288);
+        assert_eq!(next_size(128), 144);
+        assert_eq!(next_size(12432), 13122);
     }
 }
