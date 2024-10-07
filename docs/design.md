@@ -1,3 +1,25 @@
+BRRO
+--
+
+The concept behind BRRO is to process time-series data the way usually multimedia data is processed. It allows
+to reach better compression ratios than typical compression algorithms that are used for
+time-series data (e.a Gorilla).
+
+General writing flow:
+1. Take time-series data
+2. Values is being translated into WavBRROs and time is being translated into VSRI
+3. Apply compression (e.a. FFT) on WavBRRO
+4. As a result we have compressed data (.bro) and indexes for it (.vsri)
+
+General reading flow:
+1. Decompressing .bro data using brro-compressor. The compression algorithm that was applied on the specific chunk of data is
+   encoded at the beginning of the frame so brro-compressor knows which algorithm should be used to decompress data.
+2. Using VSRI to understand which samples from decompressed data should be returned.
+3. Assembling retrieved samples with the corresponding timestamps from the index.
+4. As a result it returns time-series data
+
+For more details on BRRO, including what it is and the concept behind it, you can refer to this [paper](../paper/BRRO.md).
+
 BRRO Compressor
 --
 
@@ -142,8 +164,3 @@ Where:
     2. 166 - initial sample position for the segment X0
     3. 58505 - initial sample timestamp for the segment Y0
     4. 63 - the number of sampels in the first segment
-
-BRRO
---
-
-For more details on BRRO, including what it is and the concept behind it, you can refer to this [paper](../paper/BRRO.md).
