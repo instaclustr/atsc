@@ -95,10 +95,8 @@ To compress a file using ATSC, run:
 atsc <input-file>
 ```
 
-#### Decompress a File
-
-To decompress a file, use the following command:
-
+### Decompress a File
+To decompress a file, use:
 ```bash
 atsc -u <input-file>
 ```
