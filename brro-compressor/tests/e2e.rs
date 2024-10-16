@@ -14,7 +14,7 @@ fn test_compressor_idw_lossless() {
 
 #[test]
 fn test_compressor_idw_lossy() {
-    test_lossy_compression("fft")
+    test_lossy_compression("idw")
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn test_compressor_polynomial_lossless() {
 
 #[test]
 fn test_compressor_polynomial_lossy() {
-    test_lossy_compression("fft")
+    test_lossy_compression("polynomial")
 }
 
 #[test]

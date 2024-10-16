@@ -14,7 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::{optimizer::utils::DataStats, utils::error::calculate_error};
+use crate::{
+    optimizer::utils::DataStats,
+    utils::{error::calculate_error, next_size},
+};
 use bincode::{Decode, Encode};
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{cmp::Ordering, collections::BinaryHeap};
@@ -205,6 +208,30 @@ impl FFT {
         y
     }
 
+    /// Given an array of size N, it returns the next best FFT size with the
+    /// begining and the ended padded to improve Gibbs on the edges of the frame
+    pub fn gibbs_sizing(data: &[f64]) -> Vec<f64> {
+        let data_len = data.len();
+        let next_size = next_size(data_len);
+        let added_len = next_size - data_len;
+        debug!("Gibbs sizing, padding with {}", added_len);
+        let prefix_len = added_len / 2;
+        let suffix_len = added_len - prefix_len;
+        // Extend the beginning and the end with the first and last value
+        let mut result = Vec::with_capacity(next_size);
+        if let Some(first) = data.first() {
+            result.resize(prefix_len, *first);
+            result.extend_from_slice(data);
+
+            if let Some(last) = data.last() {
+                for _ in 0..suffix_len {
+                    result.push(*last);
+                }
+            }
+        }
+        result
+    }
+
     /// Rounds a number to the specified number of decimal places
     // TODO: Move this into utils? I think this will be helpfull somewhere else.
     fn round(&self, x: f32, decimals: u32) -> f64 {
@@ -283,7 +310,7 @@ impl FFT {
         self.frequencies = FFT::fft_trim(&mut buffer, max_freq);
     }
 
-    /// Compress data via FFT - VERY EXPENSIVE
+    /// Compress data via FFT - EXPENSIVE
     /// This picks a set of data, computes the FFT, and optimizes the number of frequencies to store to match
     /// the max allowed error.
     /// NOTE: This does not otimize for smallest possible error, just being smaller than the error.
@@ -292,16 +319,29 @@ impl FFT {
             debug!("Same max and min, we're done here!");
             return;
         }
-        // Variables
-        let len = data.len();
-        let len_f32 = len as f32;
-        if !len.is_power_of_two() {
+
+        if !data.len().is_power_of_two() {
             warn!("Slow FFT, data segment is not a power of 2!");
         }
         // Let's start from the defaults values for frequencies
-        let max_freq = if 3 >= (len / 100) { 3 } else { len / 100 };
+        let max_freq = if 3 >= (data.len() / 100) {
+            3
+        } else {
+            data.len() / 100
+        };
+
+        // Should we apply a Gibbs sizing?
+        let g_data: &[f64] = if data.len() >= 128 {
+            &FFT::gibbs_sizing(data)
+        } else {
+            data
+        };
+
+        let len = g_data.len();
+        let len_f32 = len as f32;
+
         // Clean the data
-        let mut buffer = FFT::optimize(data);
+        let mut buffer = FFT::optimize(g_data);
 
         // Create the FFT planners
         let mut planner = FftPlanner::new();
@@ -331,7 +371,7 @@ impl FFT {
                 .iter()
                 .map(|&f| self.round(f.re / len_f32, DECIMAL_PRECISION.into()))
                 .collect();
-            current_err = calculate_error(data, &out_data);
+            current_err = calculate_error(g_data, &out_data);
             trace!("Current Err: {}", current_err);
             // Max iterations is 22 (We start at 10%, we can go to 95% and 1% at a time)
             match iterations {
@@ -419,21 +459,37 @@ impl FFT {
             debug!("Same max and min, faster decompression!");
             return vec![self.max_value as f64; frame_size];
         }
+        // Was this processed to reduce the Gibbs phenomeon?
+        let trim_sizes = if frame_size >= 128 {
+            let added_len = next_size(frame_size) - frame_size;
+            let prefix_len = added_len / 2;
+            let suffix_len = added_len - prefix_len;
+            debug!(
+                "Gibbs sizing detected, removing padding with {} len",
+                added_len
+            );
+            (prefix_len, suffix_len)
+        } else {
+            (0, 0)
+        };
+        let gibbs_frame_size = frame_size + trim_sizes.0 + trim_sizes.1;
         // Vec to process the ifft
-        let mut data = self.get_mirrored_freqs(frame_size);
+        let mut data = self.get_mirrored_freqs(gibbs_frame_size);
         // Plan the ifft
         let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_inverse(frame_size);
+        let fft = planner.plan_fft_inverse(gibbs_frame_size);
         // run the ifft
         fft.process(&mut data);
         // We need this for normalization
-        let len = frame_size as f32;
+        let len = gibbs_frame_size as f32;
         // We only need the real part
-        let out_data = data
-            .iter()
+        data.iter()
+            // trim the exceses data
+            .skip(trim_sizes.0)
+            .take(data.len() - trim_sizes.0 - trim_sizes.1)
+            // We only need the real part
             .map(|&f| self.round(f.re / len, DECIMAL_PRECISION.into()))
-            .collect();
-        out_data
+            .collect()
     }
 }
 
@@ -561,6 +617,17 @@ mod tests {
         let out = FFT::decompress(&compressed_result.compressed_data).to_data(frame_size);
         let e = calculate_error(&vector1, &out);
         assert!(e <= 0.01);
+    }
+
+    #[test]
+    fn test_gibbs_sizing() {
+        let mut vector1 = vec![2.0; 2048];
+        vector1[0] = 1.0;
+        vector1[2047] = 3.0;
+        let vector1_sized = FFT::gibbs_sizing(&vector1);
+        assert_eq!(vector1_sized.len(), 2187);
+        assert!(vector1_sized[2] == 1.0);
+        assert!(vector1_sized[2185] == 3.0);
     }
 
     #[test]
