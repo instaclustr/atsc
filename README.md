@@ -25,6 +25,7 @@ Advanced Time Series Compressor (in short: ATSC), is a configurable, *lossy* com
 This way, ATSC only needs to store the parametrization of the function and not the data.
 ATSC draws inspiration from established compression and signal analysis techniques, achieving significant compression ratios.
 In internal testing ATSC compressed from 46 times to 880 times the time series of our databases with a fitting error within 1% of the original time-series.
+In some cases, ATSC would produce highly compressed data without any data loss (Perfect fitting functions).
 ATSC is meant to be used in long term storage of time series, as it benefits from more points to do a better fitting.
 The decompression of data is fast vs a slower compression speed, as it is expected that the data might be compressed once and decompressed several times.
 
@@ -48,8 +49,8 @@ If there is no need of absolute precision of the output vs the original input, y
 Example of use cases:
 
 * In places where time series are rolled over, ATSC is a perfect fit. It would probably offer more space savings without any meaningful loss in precision.
-* Time series that are under sampled (e.g. once every 20sec). With ATSC you can greatly increase sample rate (e.g. once per second) without losing space, your sampling rate is already missing information anyway.
-* Data that is meant to be visualized by humans and not machine processed (e.g. Operation teams). With a very low error, under 1%, it would make low to none the introduced error for the analysis.
+* Time series that are under sampled (e.g. once every 20sec). With ATSC you can greatly increase sample rate (e.g. once per second) without losing space.
+* Data that is meant to be visualized by humans and not machine processed (e.g. Operation teams). With such a small error, under 1%, it shouldn't impact analysis.
 
 ## Usage ATSC
 
