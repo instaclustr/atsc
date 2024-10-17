@@ -27,7 +27,7 @@ ATSC draws inspiration from established compression and signal analysis techniqu
 In internal testing ATSC compressed from 46 times to 880 times the time series of our databases with a fitting error within 1% of the original time-series.
 In some cases, ATSC would produce highly compressed data without any data loss (Perfect fitting functions).
 ATSC is meant to be used in long term storage of time series, as it benefits from more points to do a better fitting.
-The decompression of data is fast vs a slower compression speed, as it is expected that the data might be compressed once and decompressed several times.
+The decompression of data is faster (up to 40x) vs a slower compression speed, as it is expected that the data might be compressed once and decompressed several times.
 
 Internally ATSC uses the following methods for time series fitting:
 
@@ -50,6 +50,7 @@ Example of use cases:
 
 * In places where time series are rolled over, ATSC is a perfect fit. It would probably offer more space savings without any meaningful loss in precision.
 * Time series that are under sampled (e.g. once every 20sec). With ATSC you can greatly increase sample rate (e.g. once per second) without losing space.
+* Long, slow moving data series (e.g. Weather data). Those will most probably follow an easy to fit pattern
 * Data that is meant to be visualized by humans and not machine processed (e.g. Operation teams). With such a small error, under 1%, it shouldn't impact analysis.
 
 ## Usage ATSC
