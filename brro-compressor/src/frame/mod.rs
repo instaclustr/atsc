@@ -123,10 +123,7 @@ impl CompressorFrame {
                 })
                 .collect();
 
-            #[allow(
-                clippy::neg_cmp_op_on_partial_ord,
-                reason = "we need to exactly negate `result.error < max_error`, we can't apply de morgans to the expression due to NaN values"
-            )]
+            #[allow(clippy::neg_cmp_op_on_partial_ord)]
             let best_compressor = if compressor_results
                 .iter()
                 .all(|(result, _)| !(result.error <= max_error as f64))
