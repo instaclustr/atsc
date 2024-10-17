@@ -331,10 +331,10 @@ impl FFT {
         };
 
         // Should we apply a Gibbs sizing?
-        let g_data: &[f64] = if data.len() >= 128 {
-            &FFT::gibbs_sizing(data)
-        } else {
-            data
+        let mut g_data: &[f64] = &FFT::gibbs_sizing(data);
+
+        if data.len() < 128 {
+            g_data = data
         };
 
         let len = g_data.len();

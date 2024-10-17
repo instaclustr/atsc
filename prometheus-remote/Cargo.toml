@@ -23,3 +23,5 @@ regex = "1.9.1"
 median = "0.3.2"
 dtw_rs = "0.9.5"
 
+[build-dependencies.proc-macro2]
+version = "=1.0.79"
