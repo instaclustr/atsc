@@ -495,3 +495,51 @@ impl Vsri {
 pub enum Error {
     UpdateIndexForPointError,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vsri_simple() {
+        let timestamps = vec![
+            1729606100, 1729606120, 1729606140, 1729606160, 1729606180, 1729606200, 1729606220,
+            1729606240, 1729606260,
+        ];
+        let mut vsri = Vsri::new("test");
+        for ts in &timestamps {
+            vsri.update_for_point(*ts).unwrap();
+        }
+        let out_vsri = vsri.get_all_timestamps();
+        assert_eq!(timestamps, out_vsri);
+    }
+
+    #[test]
+    fn test_vsri_several_segments() {
+        let timestamps = vec![
+            1729606100, 1729606120, 1729606140, 1729606160, 1729606180, 1729606200, 1729606220,
+            1729606260, 1729606360, 1729606460, 1729606560, 1729606660, 1729606760, 1729606860,
+            1729606881, 1729606882, 1729606883, 1729606884, 1729606885, 1729606886, 1729606887,
+        ];
+        let mut vsri = Vsri::new("test");
+        for ts in &timestamps {
+            vsri.update_for_point(*ts).unwrap();
+        }
+        let out_vsri = vsri.get_all_timestamps();
+        assert_eq!(timestamps, out_vsri);
+    }
+
+    #[test]
+    fn test_point_in_past() {
+        let timestamps = vec![
+            1729606100, 1729606120, 1729606140, 1729606160, 1729606180, 1729606200, 1729606220,
+            1729606240, 1729606260,
+        ];
+        let mut vsri = Vsri::new("test");
+        for ts in &timestamps {
+            vsri.update_for_point(*ts).unwrap();
+        }
+        let result = vsri.update_for_point(1729605260);
+        assert!(result.is_err());
+    }
+}
