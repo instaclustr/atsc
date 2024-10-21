@@ -23,11 +23,13 @@ use self::constant::{constant_compressor, constant_to_data};
 use self::fft::{fft, fft_compressor, fft_to_data};
 use self::noop::{noop, noop_to_data};
 use self::polynomial::{polynomial, polynomial_allowed_error, to_data, PolynomialType};
+use self::vsri::{vsri_compressor, vsri_to_data};
 
 pub mod constant;
 pub mod fft;
 pub mod noop;
 pub mod polynomial;
+pub mod vsri;
 
 #[derive(Encode, Decode, Default, Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum Compressor {
@@ -38,6 +40,7 @@ pub enum Compressor {
     Constant,
     Polynomial,
     Auto,
+    VSRI,
 }
 
 /// Struct to store the results of a compression round. Will be used to pick the best compressor.

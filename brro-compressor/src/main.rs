@@ -112,6 +112,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
         CompressorType::Fft => op.set_compressor(Compressor::FFT),
         CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
         CompressorType::Idw => op.set_compressor(Compressor::Idw),
+        CompressorType::Vsri => op.set_compressor(Compressor::VSRI),
         CompressorType::Auto => op.set_compressor(Compressor::Auto),
     }
     for (cpr, data) in op.get_execution().into_iter() {
@@ -119,6 +120,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
         // If compressor is a losseless one, compress with the error defined, or default
         match arguments.compressor {
             CompressorType::Fft
+            | CompressorType::Vsri
             | CompressorType::Polynomial
             | CompressorType::Idw
             | CompressorType::Auto => cs.compress_chunk_bounded_with(
@@ -183,6 +185,7 @@ enum CompressorType {
     Constant,
     Polynomial,
     Idw,
+    Vsri,
 }
 
 fn main() {
