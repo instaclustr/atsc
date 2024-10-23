@@ -14,6 +14,6 @@ serde = { version = "1.0.171", features = ["derive"] }
 wavbrro = { version = "0.1.0", path = "../wavbrro" }
 log = "0.4.19"
 env_logger = "0.11.0"
-vsri = { version = "0.1.0", path = "../vsri" }
+lib_vsri = { version = "0.2.0", path = "../lib_vsri" }
 [dev-dependencies]
 tempdir = "0.3.7"

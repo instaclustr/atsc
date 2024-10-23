@@ -14,20 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::{
-    compressor::CompressorResult,
-    optimizer::utils::{Bitdepth, DataStats},
-};
+use crate::compressor::CompressorResult;
 
 use super::BinConfig;
 use bincode::{Decode, Encode};
-use lib_vsri::vsri;
+use lib_vsri::vsri::Vsri;
 use log::debug;
 
 const VSRI_COMPRESSOR_ID: u8 = 249;
 
 /// Compressor frame for static data, stores the value and nothing else.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct VSRI {
     pub id: u8,
     pub vsri: Vsri,
@@ -39,7 +36,7 @@ impl VSRI {
         debug!("Constant compressor");
         VSRI {
             id: VSRI_COMPRESSOR_ID,
-            vsri: todo!(),
+            vsri: Vsri::new("placeholder"),
         }
     }
 
@@ -59,23 +56,26 @@ impl VSRI {
 
     /// Returns an array of data. It creates an array of data the size of the frame with a constant value
     /// and pushes the residuals to the right place.
-    pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
-        let data = vec![self.constant; frame_size];
+    pub fn to_data(&self) -> Vec<i32> {
+        let data = self.vsri.get_all_timestamps();
         data
     }
 }
 
-pub fn vsri_compressor(data: &[f64], stats: DataStats) -> CompressorResult {
+pub fn vsri_compressor(data: &[i32]) -> CompressorResult {
     debug!("Initializing VSRI Compressor. Error and Stats provided");
     // Initialize the compressor
-    let c = VSRI::new();
+    let mut c = VSRI::new();
+    for ts in data {
+        c.vsri.update_for_point(*ts).unwrap();
+    }
     // Convert to bytes
     CompressorResult::new(c.to_bytes(), 0.0)
 }
 
-pub fn vsri_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
+pub fn vsri_to_data(compressed_data: &[u8]) -> Vec<i32> {
     let c = VSRI::decompress(compressed_data);
-    c.to_data(sample_number)
+    c.to_data()
 }
 
 #[cfg(test)]
@@ -83,32 +83,5 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_constant_u8() {
-        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
-        let stats = DataStats::new(&vector1);
-        assert_eq!(
-            Constant::new(vector1.len(), stats.min, stats.bitdepth).to_bytes(),
-            [30, 3, 1]
-        );
-    }
-
-    #[test]
-    fn test_constant_f64() {
-        let vector1 = vec![1.23456, 1.23456, 1.23456, 1.23456, 1.23456];
-        let stats = DataStats::new(&vector1);
-        assert_eq!(
-            Constant::new(vector1.len(), stats.min, stats.bitdepth).to_bytes(),
-            [30, 0, 56, 50, 143, 252, 193, 192, 243, 63]
-        );
-    }
-
-    #[test]
-    fn test_compression() {
-        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
-        let stats = DataStats::new(&vector1);
-        let c = Constant::new(vector1.len(), stats.min, stats.bitdepth).to_bytes();
-        let c2 = constant_to_data(vector1.len(), &c);
-
-        assert_eq!(vector1, c2);
-    }
+    fn test_vsri() {}
 }

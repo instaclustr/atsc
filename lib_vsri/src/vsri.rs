@@ -98,7 +98,7 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 ///                [sample_rate (m), initial_point(x,y), # of samples(length)]
 /// Each segments describes a line with the form of mX + B that has a lenght
 /// of # of samples.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Vsri {
     index_file: String,
     min_ts: i32,

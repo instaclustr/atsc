@@ -113,6 +113,14 @@ impl Compressor {
             _ => todo!(),
         }
     }
+
+    pub fn compress_vsri(&self, data: &[i32]) -> CompressorResult {
+        vsri_compressor(data)
+    }
+
+    pub fn decompress_vsri(&self, data: &[u8]) -> Vec<i32> {
+        vsri_to_data(data)
+    }
 }
 
 pub struct BinConfig {

@@ -2,6 +2,9 @@
 name = "lib_vsri"
 version = "0.2.0"
 edition = "2021"
+authors = ["Carlos Rolo <carlos.rolo@netapp.com>"]
+license = "Apache-2.0"
+description = "Very small index for a sequence of timestamps"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

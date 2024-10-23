@@ -4,8 +4,8 @@ members = [
     "optimizer",
     "prometheus-remote",
     "tools",
+    "lib_vsri",
     "wavbrro",
-    "vsri",
     "csv-compressor"
 ]
 resolver = "2"
