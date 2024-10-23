@@ -17,11 +17,11 @@ limitations under the License.
 use crate::{
     compressor::CompressorResult,
     optimizer::utils::{Bitdepth, DataStats},
-    VSRI,
 };
 
 use super::BinConfig;
 use bincode::{Decode, Encode};
+use lib_vsri::vsri;
 use log::debug;
 
 const VSRI_COMPRESSOR_ID: u8 = 249;
@@ -35,7 +35,7 @@ pub struct VSRI {
 
 impl VSRI {
     /// Creates a new instance of the Constant compressor with the size needed to handle the worst case
-    pub fn new(_sample_count: usize, constant_value: f64, bitdepth: Bitdepth) -> Self {
+    pub fn new() -> Self {
         debug!("Constant compressor");
         VSRI {
             id: VSRI_COMPRESSOR_ID,
@@ -68,7 +68,7 @@ impl VSRI {
 pub fn vsri_compressor(data: &[f64], stats: DataStats) -> CompressorResult {
     debug!("Initializing VSRI Compressor. Error and Stats provided");
     // Initialize the compressor
-    let c = VSRI::new(data.len(), stats.min, stats.bitdepth);
+    let c = VSRI::new();
     // Convert to bytes
     CompressorResult::new(c.to_bytes(), 0.0)
 }

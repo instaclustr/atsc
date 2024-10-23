@@ -239,6 +239,7 @@ dependencies = [
  "rustfft",
  "splines",
  "tempfile",
+ "vsri",
  "wavbrro",
 ]
 
