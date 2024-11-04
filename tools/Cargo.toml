@@ -19,3 +19,4 @@ clap = {version = "4.3.14", features = ["derive"] }
 regex = "1.9.1"
 median = "0.3.2"
 dtw_rs = "0.9.5"
+csv = "1.3"

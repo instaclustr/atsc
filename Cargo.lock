@@ -2163,6 +2163,7 @@ dependencies = [
  "chrono",
  "clap",
  "claxon",
+ "csv",
  "dtw_rs",
  "env_logger 0.11.5",
  "hound",
