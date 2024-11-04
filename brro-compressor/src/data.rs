@@ -36,6 +36,14 @@ impl CompressedStream {
     }
 
     /// Compress a chunk of data adding it as a new frame to the current stream
+    pub fn compress_vsri(&mut self, chunk: &[i32]) {
+        let mut compressor_frame = CompressorFrame::new(None);
+        compressor_frame.compress_vsri(chunk);
+        compressor_frame.close();
+        self.data_frames.push(compressor_frame);
+    }
+
+    /// Compress a chunk of data adding it as a new frame to the current stream
     pub fn compress_chunk(&mut self, chunk: &[f64]) {
         let mut compressor_frame = CompressorFrame::new(None);
         compressor_frame.compress(chunk);

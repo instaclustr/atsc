@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use bincode::{Decode, Encode};
 use chrono::{DateTime, Timelike, Utc};
 use log::{debug, warn};
 /// Very Small Rolo Index
@@ -98,7 +99,7 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 ///                [sample_rate (m), initial_point(x,y), # of samples(length)]
 /// Each segments describes a line with the form of mX + B that has a lenght
 /// of # of samples.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Encode, Decode)]
 pub struct Vsri {
     index_file: String,
     min_ts: i32,

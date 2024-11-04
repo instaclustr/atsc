@@ -11,3 +11,4 @@ description = "Very small index for a sequence of timestamps"
 [dependencies]
 chrono = "0.4.26"
 log = "0.4.0"
+bincode = "2.0.0-rc.3"

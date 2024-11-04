@@ -23,7 +23,7 @@ use self::constant::{constant_compressor, constant_to_data};
 use self::fft::{fft, fft_compressor, fft_to_data};
 use self::noop::{noop, noop_to_data};
 use self::polynomial::{polynomial, polynomial_allowed_error, to_data, PolynomialType};
-use self::vsri::{vsri_compressor, vsri_to_data};
+use self::vsri::{vsri_compressor_bytes, vsri_to_data};
 
 pub mod constant;
 pub mod fft;
@@ -114,8 +114,8 @@ impl Compressor {
         }
     }
 
-    pub fn compress_vsri(&self, data: &[i32]) -> CompressorResult {
-        vsri_compressor(data)
+    pub fn compress_vsri(&self, data: &[i32]) -> Vec<u8> {
+        vsri_compressor_bytes(data)
     }
 
     pub fn decompress_vsri(&self, data: &[u8]) -> Vec<i32> {

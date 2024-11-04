@@ -24,7 +24,7 @@ use log::debug;
 const VSRI_COMPRESSOR_ID: u8 = 249;
 
 /// Compressor frame for static data, stores the value and nothing else.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct VSRI {
     pub id: u8,
     pub vsri: Vsri,
@@ -73,6 +73,17 @@ pub fn vsri_compressor(data: &[i32]) -> CompressorResult {
     CompressorResult::new(c.to_bytes(), 0.0)
 }
 
+pub fn vsri_compressor_bytes(data: &[i32]) -> Vec<u8> {
+    debug!("Initializing VSRI Compressor. Error and Stats provided");
+    // Initialize the compressor
+    let mut c = VSRI::new();
+    for ts in data {
+        c.vsri.update_for_point(*ts).unwrap();
+    }
+    // Convert to bytes
+    c.to_bytes()
+}
+
 pub fn vsri_to_data(compressed_data: &[u8]) -> Vec<i32> {
     let c = VSRI::decompress(compressed_data);
     c.to_data()
@@ -83,5 +94,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_vsri() {}
+    fn test_vsri_simple() {
+        let timestamps = vec![
+            1729606100, 1729606120, 1729606140, 1729606160, 1729606180, 1729606200, 1729606220,
+            1729606240, 1729606260,
+        ];
+        let vsri = vsri_compressor(&timestamps);
+        let out = vsri_to_data(&vsri.compressed_data);
+        assert_eq!(timestamps, out);
+    }
+
+    #[test]
+    fn test_vsri_several_segments() {
+        let timestamps = vec![
+            1729606100, 1729606120, 1729606140, 1729606160, 1729606180, 1729606200, 1729606220,
+            1729606260, 1729606360, 1729606460, 1729606560, 1729606660, 1729606760, 1729606860,
+            1729606881, 1729606882, 1729606883, 1729606884, 1729606885, 1729606886, 1729606887,
+        ];
+        let vsri = vsri_compressor(&timestamps);
+        let out = vsri_to_data(&vsri.compressed_data);
+        assert_eq!(timestamps, out);
+    }
 }

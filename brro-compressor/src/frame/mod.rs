@@ -57,6 +57,12 @@ impl CompressorFrame {
         self.frame_size = size;
     }
 
+    /// Compress a vsri index
+    pub fn compress_vsri(&mut self, data: &[i32]) {
+        self.sample_count = data.len();
+        self.data = self.compressor.compress_vsri(data);
+    }
+
     /// Compress a data and stores the result in the frame
     pub fn compress(&mut self, data: &[f64]) {
         self.sample_count = data.len();

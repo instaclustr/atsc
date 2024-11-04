@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use brro_compressor::compressor::Compressor;
+use brro_compressor::compressor::{vsri, Compressor};
 use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer::OptimizerPlan;
 use brro_compressor::utils::readers::bro_reader;
@@ -83,16 +83,36 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
             WavBrro::to_file_with_data(&file_path, &decompressed_data)
         }
     } else {
-        // Read an WavBRRO file and compress it
-        let data = WavBrro::from_file(&file_path)?;
-        if arguments.verbose {
-            println!("Input={:?}", data);
-        }
-        //compress
-        let compressed_data = compress_data(&data, arguments);
-
+        // VSRI case
+        let compressed_data = match arguments.compressor {
+            CompressorType::Vsri => {
+                // Get data in i32 format!
+                let vsri_data = [
+                    1729606100, 1729606120, 1729606140, 1729606160, 1729606180, 1729606200,
+                    1729606220,
+                ];
+                if arguments.verbose {
+                    println!("Input={:?}", vsri_data);
+                }
+                // Need special stream for VSRI
+                let mut cs = CompressedStream::new();
+                // Compress a VSRI
+                file_path.set_extension("vsri");
+                cs.compress_vsri(&vsri_data);
+                cs.to_bytes()
+            }
+            _ => {
+                // Read an WavBRRO file and compress it
+                let data = WavBrro::from_file(&file_path)?;
+                if arguments.verbose {
+                    println!("Input={:?}", data);
+                }
+                file_path.set_extension("bro");
+                //compress
+                compress_data(&data, arguments)
+            }
+        };
         //write
-        file_path.set_extension("bro");
         std::fs::write(file_path, compressed_data)?;
     }
     Ok(())
@@ -112,7 +132,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
         CompressorType::Fft => op.set_compressor(Compressor::FFT),
         CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
         CompressorType::Idw => op.set_compressor(Compressor::Idw),
-        CompressorType::Vsri => op.set_compressor(Compressor::VSRI),
+        CompressorType::Vsri => panic!("Can't provide f64 to VRSI. VSRI is i32 only."),
         CompressorType::Auto => op.set_compressor(Compressor::Auto),
     }
     for (cpr, data) in op.get_execution().into_iter() {
@@ -120,7 +140,6 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
         // If compressor is a losseless one, compress with the error defined, or default
         match arguments.compressor {
             CompressorType::Fft
-            | CompressorType::Vsri
             | CompressorType::Polynomial
             | CompressorType::Idw
             | CompressorType::Auto => cs.compress_chunk_bounded_with(
@@ -129,6 +148,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
                 arguments.error as f32 / 100.0,
                 arguments.compression_selection_sample_level as usize,
             ),
+            CompressorType::Vsri => panic!("Can't provide f64 to VRSI. VSRI is i32 only."),
             _ => cs.compress_chunk_with(data, cpr.to_owned()),
         }
     }
