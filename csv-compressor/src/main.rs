@@ -20,10 +20,10 @@ use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer::OptimizerPlan;
 use brro_compressor::utils::readers::bro_reader::read_file;
 use clap::{arg, Parser};
+use lib_vsri::vsri::Vsri;
 use log::debug;
 use std::fs;
 use std::path::{Path, PathBuf};
-use vsri::Vsri;
 use wavbrro::wavbrro::WavBrro;
 
 mod csv;

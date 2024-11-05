@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use brro_compressor::compressor::{vsri, Compressor};
+use brro_compressor::compressor::Compressor;
 use brro_compressor::data::CompressedStream;
 use brro_compressor::optimizer::OptimizerPlan;
 use brro_compressor::utils::readers::bro_reader;

@@ -15,9 +15,9 @@ limitations under the License.
 */
 
 use crate::csv::Sample;
+use lib_vsri::vsri::{day_elapsed_seconds, Vsri};
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
-use vsri::{day_elapsed_seconds, Vsri};
 use wavbrro::wavbrro::WavBrro;
 
 /// Metric is responsible for generating WavBrro and VSRI from parsed Samples
