@@ -34,8 +34,8 @@ For full documentation please go to [Docs](https://github.com/instaclustr/atsc/t
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/instaclustr/fft-compression
-   cd fft-compression
+   git clone https://github.com/instaclustr/atsc
+   cd atsc
    ```
 
 2. Build the project:
@@ -150,4 +150,4 @@ atsc -u <input-file>
 * Frame expansion (Allowing new data to be appended to existing frames)
 * Dynamic function loading (e.g. providing more functions without touching the whole code base)
 * Global/Per frame error storage
-* Efficient error encoding
+* Efficient error

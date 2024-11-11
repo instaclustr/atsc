@@ -1,10 +1,10 @@
 # WAVBRRO
 
-**NOTE:** This needs some serious work!
+**NOTE:** This library is under development. It might have breaking changes.
 
 WAVBRRO is a based on the WAV format to be used to store raw timeseries data.
 
-## SPEC
+## WAVBRRO SPECIFICATION
 
 The spec for WAVBRRO is the following:
 
@@ -20,9 +20,36 @@ Extension: .wbro
   - Samples
     - Blocks of 2048 samples
 
-### Reading/Writting WAVBRRO
+### WAVBRRO API
 
-Check the tests in the `wavbrro.rs`
+#### Writing a file
+
+```rust
+    fn write_wavbrro() {
+        // Create a temporary directory for the file
+        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
+        let path = temp_dir.path().join("test.wbro");
+        // Creating the structure
+        let mut wb = WavBrro::new();
+        // Adding samples
+        wb.add_sample(1.0);
+        wb.add_sample(2.0);
+        wb.add_sample(3.0);
+        wb.to_file(&path);
+        let result = is_wavbrro_file(&path);
+        assert!(result.unwrap());
+    }
+```
+
+#### Reading a file
+
+```rust
+    fn read_wavbrro() {
+        let data = WavBrro::from_file(path);
+    }
+```
+
+Check the tests in the `wavbrro.rs` for more examples.
 
 ### What it doesn't support
 
@@ -37,4 +64,4 @@ WAVBRRO doesn't support the following bitdepths
 
 - Implement streaming read and write
 - Seeking for a specific block
-- Support other bitdepth
+- Support other bitdepths
