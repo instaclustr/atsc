@@ -2,12 +2,23 @@
 
 ## Table of Contents
 
-1. [Documentation](#documentation)
-2. [Building ATSC](#building-atsc)
-3. [What is ATSC?](#what-is-atsc)
-4. [Where does ATSC fits?](#where-does-atsc-fits)
-5. [ATSC Usage](#atsc-usage)
-6. [Roadmap](#roadmap)
+1. [TL;DR;](#tldr)
+2. [Documentation](#documentation)
+3. [Building ATSC](#building-atsc)
+4. [What is ATSC?](#what-is-atsc)
+5. [Where does ATSC fits?](#where-does-atsc-fits)
+6. [ATSC Usage](#atsc-usage)
+7. [Roadmap](#roadmap)
+
+## TL;DR
+
+1. Download release here:
+2. Get a CSV file with the proper format (or get one from the tests here)
+3. Run it
+
+```bash
+atsc -csv <input-file>
+```
 
 ## Documentation
 
