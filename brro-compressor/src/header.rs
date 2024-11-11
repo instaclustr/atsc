@@ -16,7 +16,6 @@ limitations under the License.
 
 use bincode::{Decode, Encode};
 
-/// This will write the file headers
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct CompressorHeader {
     initial_segment: [u8; 4],

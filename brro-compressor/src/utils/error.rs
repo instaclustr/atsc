@@ -40,17 +40,11 @@ impl ErrorMethod {
 
 /// This function calculates the error between 2 arrays of f64. The results are from 0 to ..
 /// Being 0, no error, 1 - 100% error and so on.
-/// This uses the default function to calculte it.
+/// This uses the default function to calculate it.
 pub fn calculate_error(original: &[f64], generated: &[f64]) -> f64 {
     ErrorMethod::error(ErrorMethod::default(), original, generated)
 }
 
-/// This function calculates the error between 2 arrays of f64. The results are from 0 to ..
-/// Being 0, no error, 1 - 100% error and so on.
-/// This uses the provided method to calculte it.
-pub fn calculate_error_method(original: &[f64], generated: &[f64], method: ErrorMethod) -> f64 {
-    ErrorMethod::error(method, original, generated)
-}
 /// Calculates the mean squared error between two vectors.
 ///
 /// # Arguments

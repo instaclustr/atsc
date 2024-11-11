@@ -70,12 +70,11 @@ fn join_u16_into_f64(bits: [u16; 4]) -> f64 {
     }
     out
 }
-// --- Legacy ends (I need to stop lying to myself...) ---
+// --- Legacy ends ---
 
 #[derive(Parser, Default, Debug)]
 #[command(author, version, about="WAV to WAVBRRO converter", long_about = None)]
 struct Args {
-    /// input file
     input: PathBuf,
 
     /// Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
@@ -91,16 +90,13 @@ fn main() {
     assert!(is_wav_file(&arguments.input));
     let wav_data = read_metrics_from_wav(filename);
     let mut wb = WavBrro::new();
-    // Clean NaN
     wav_data.iter().for_each(|x| {
         if !x.is_nan() {
             wb.add_sample(*x)
         }
     });
-    // Write the file
     let wavbrro_file = format!("{}wbro", filename.strip_suffix("wav").unwrap());
     wb.to_file(Path::new(&wavbrro_file));
-    // Checking the results
     if arguments.validate {
         let brro_data = wb.get_samples();
         assert_eq!(wav_data, brro_data);

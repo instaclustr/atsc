@@ -27,7 +27,6 @@ pub struct CompressedStream {
 }
 
 impl CompressedStream {
-    /// Creates an empty compressor stream
     pub fn new() -> Self {
         CompressedStream {
             header: CompressorHeader::new(),
@@ -87,8 +86,6 @@ impl CompressedStream {
         let (compressed_stream, _) = bincode::decode_from_slice(data, config).unwrap();
         compressed_stream
     }
-
-    /// Decompresses all the frames and returns a vector with the data
     pub fn decompress(&self) -> Vec<f64> {
         self.data_frames
             .iter()

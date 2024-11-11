@@ -42,17 +42,12 @@ pub enum Method {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Polynomial {
-    /// Compressor ID
     pub id: PolynomialType,
-    /// Stored Points
     pub data_points: Vec<f64>,
     pub min: f64,
     pub max: f64,
-    /// What is the base step between points
     pub point_step: u8,
-    /// Compression error
     pub error: Option<f64>,
-    /// Target bitdepth
     pub bitdepth: Bitdepth,
 }
 
@@ -97,7 +92,6 @@ impl Decode for Polynomial {
     ) -> Result<Self, ::bincode::error::DecodeError> {
         let id = Decode::decode(decoder)?;
         let bitdepth = Decode::decode(decoder)?;
-        // Here is where the pig twists the tail
         let data_points: Vec<f64> = match bitdepth {
             Bitdepth::U8 => {
                 debug!("Decoding as u8");
@@ -205,10 +199,6 @@ impl Polynomial {
         }
     }
 
-    fn locate_in_data_points(&self, point: f64) -> bool {
-        self.data_points.iter().any(|&i| i == point)
-    }
-
     fn get_method(&self) -> Method {
         match self.id {
             PolynomialType::Idw => Method::Idw,
@@ -223,7 +213,7 @@ impl Polynomial {
         }
         // TODO: Big one, read below
         // To reduce error we add more points to the polynomial, but, we also might add residuals
-        // each residual is 1/data_lenght * 100% less compression, each jump is 5% less compression.
+        // each residual is 1/data_length * 100% less compression, each jump is 5% less compression.
         // We can do the math and pick the one which fits better.
         let method = self.get_method();
         let data_len = data.len();
@@ -280,7 +270,7 @@ impl Polynomial {
         }
         self.error = Some(current_err);
         debug!(
-            "Final Stored Data Lenght: {} Iterations: {}",
+            "Final Stored Data Length: {} Iterations: {}",
             self.data_points.len(),
             iterations
         );
@@ -314,7 +304,6 @@ impl Polynomial {
         self.point_step = step as u8;
     }
 
-    // --- MANDATORY METHODS ---
     pub fn compress(&mut self, data: &[f64]) {
         let points = if 3 >= (data.len() / 100) {
             3
@@ -324,7 +313,6 @@ impl Polynomial {
         self.compress_hinted(data, points)
     }
 
-    /// Decompresses data
     pub fn decompress(data: &[u8]) -> Self {
         let config = BinConfig::get();
         let (poly, _) = bincode::decode_from_slice(data, config).unwrap();
@@ -336,7 +324,6 @@ impl Polynomial {
         bincode::encode_to_vec(self, config).unwrap()
     }
 
-    // --- END OF MANDATORY METHODS ---
     /// Since IDW and Polynomial are the same code everywhere, this function prepares the data
     /// to be used by one of the polynomial decompression methods
     fn get_positions(&self, frame_size: usize) -> Vec<usize> {
@@ -393,7 +380,6 @@ impl Polynomial {
             .map(|&f| f as f64)
             .collect();
         let idw = IDW::new(points, self.data_points.clone());
-        // Build the data
         (0..frame_size)
             .map(|f| {
                 round_and_limit_f64(
@@ -421,11 +407,8 @@ impl Polynomial {
 pub fn polynomial(data: &[f64], p_type: PolynomialType) -> Vec<u8> {
     info!("Initializing Polynomial Compressor");
     let stats = DataStats::new(data);
-    // Initialize the compressor
     let mut c = Polynomial::new(data.len(), stats.min, stats.max, p_type, stats.bitdepth);
-    // Convert the data
     c.compress(data);
-    // Convert to bytes
     c.to_bytes()
 }
 
@@ -436,14 +419,11 @@ pub fn polynomial_allowed_error(
 ) -> CompressorResult {
     info!("Initializing Polynomial Compressor");
     let stats = DataStats::new(data);
-    // Initialize the compressor
     let mut c = Polynomial::new(data.len(), stats.min, stats.max, p_type, stats.bitdepth);
-    // Convert the data
     c.compress_bounded(data, allowed_error);
     CompressorResult::new(c.to_bytes(), c.error.unwrap_or(0.0))
 }
 
-/// Uncompress
 pub fn to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
     let c = Polynomial::decompress(compressed_data);
     c.to_data(sample_number)

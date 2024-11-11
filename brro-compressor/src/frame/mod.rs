@@ -26,9 +26,7 @@ const COMPRESSION_SPEED: [i32; 7] = [i32::MAX, 4096, 2048, 1024, 512, 256, 128];
 pub struct CompressorFrame {
     /// The frame size in bytes,
     frame_size: usize,
-    /// The number of samples in this frame,
     sample_count: usize,
-    /// The compressor used in the current frame
     compressor: Compressor,
     /// Output from the compressor
     data: Vec<u8>,
@@ -48,7 +46,7 @@ impl CompressorFrame {
     }
 
     /// Calculates the size of the Frame and "closes it"
-    // TODO this is probably wrong, so we have to use the write stream to dump the bytes writen
+    // TODO this is probably wrong, so we have to use the write stream to dump the bytes written
     pub fn close(&mut self) {
         let size = size_of_val(&self.sample_count)
             + size_of_val(&self.compressor)

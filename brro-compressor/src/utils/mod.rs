@@ -20,7 +20,7 @@ pub mod writers;
 
 pub const DECIMAL_PRECISION: u32 = 5;
 
-// Is this the right place?
+// TODO: check if it is the right place?
 pub fn prev_power_of_two(n: usize) -> usize {
     // n = 0 gives highest_bit_set_idx = 0.
     let highest_bit_set_idx = 63 - (n | 1).leading_zeros();
@@ -56,11 +56,6 @@ pub fn f64_to_u64(number: f64, precision: usize) -> u64 {
     }
     let mul = [1, 10, 100, 1_000, 10_000, 100_000, 1_000_000][precision];
     (number * mul as f64) as u64
-}
-
-pub fn round_f32(x: f32, decimals: u32) -> f64 {
-    let y = 10i32.pow(decimals) as f64;
-    (x as f64 * y).round() / y
 }
 
 pub fn round_f64(x: f64, decimals: u32) -> f64 {
