@@ -88,8 +88,11 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
             read_samples(&file_path)?
         } else {
             debug!("Reading samples from csv with headers");
-            let fields = arguments.fields.clone().unwrap();
-            let headers: Vec<&str> = fields.split(",").collect();
+            let headers_option = match arguments.fields.clone() {
+                Some(fields) => fields,
+                None => "time, value".to_string(),
+            };
+            let headers: Vec<_> = headers_option.split(",").collect();
             // Assuming that header[0] is a time field and header[1] is value field
             read_samples_with_headers(&file_path, headers[0], headers[1])?
         };
@@ -209,7 +212,7 @@ struct Args {
     ///   --fields=TIME_FIELD_NAME,VALUE_FIELD_NAME
     /// It assumes that the one before comma is a name of time field and the one
     /// after comma is value field.
-    #[arg(long)]
+    #[arg(long, default_value = "time,value")]
     fields: Option<String>,
 }
 
