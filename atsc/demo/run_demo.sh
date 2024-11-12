@@ -52,7 +52,7 @@ for i in 1 3; do
   js_array="const idwData = $array_data;"
   echo "$js_array" >> $htmlfile
 
-   file_content=$(<tmp_poly.txt)
+  file_content=$(<tmp_poly.txt)
   array_data=$(echo $file_content | grep -oP '\[.*?\]')
   js_array="const polyData = $array_data;"
   echo "$js_array" >> $htmlfile
