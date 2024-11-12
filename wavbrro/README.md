@@ -56,7 +56,7 @@ Check the tests in the `wavbrro.rs` for more examples.
 WAVBRRO doesn't support the following bitdepths
 
 - Windows OS
-- Timestamps (VSRI will land here eventually)
+- Timestamps ([VSRI](https://github.com/instaclustr/atsc/tree/main/vsri) in here?)
 - Anything other than f64
 - Anything bigger than 64bit bitdepth
 
