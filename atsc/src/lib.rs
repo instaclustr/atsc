@@ -14,14 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::fs::File;
-use std::os::unix::prelude::FileExt;
-use std::path::Path;
+#![allow(clippy::new_without_default)]
+// TODO: re-enable dead code checks
+#![allow(dead_code)]
+extern crate core;
 
-pub fn write_wavbrro_file(file_path: &Path, content: &[u8]) {
-    let header: [u8; 12] = *b"WBRO0000WBRO";
-    let file = File::create(file_path).expect("Can't create file!");
-    file.write_at(&header, 0).expect("Fail to write header");
-    file.write_at(content, header.len() as u64)
-        .expect("Fail to write content");
-}
+pub mod compressor;
+pub mod data;
+pub mod frame;
+pub mod header;
+pub mod utils;
+
+pub mod csv;
+pub mod optimizer;

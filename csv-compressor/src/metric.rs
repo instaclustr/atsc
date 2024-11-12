@@ -23,9 +23,7 @@ use wavbrro::wavbrro::WavBrro;
 /// Metric is responsible for generating WavBrro and VSRI from parsed Samples
 #[derive(Default)]
 pub struct Metric {
-    /// Metric data itself
     pub wbro: WavBrro,
-    /// Metric indexes
     pub vsri: Vsri,
 }
 
@@ -54,7 +52,6 @@ impl Metric {
         Metric { wbro, vsri }
     }
 
-    /// Appends samples to the metric
     pub fn append_samples(&mut self, samples: &[Sample]) -> Result<(), Error> {
         for sample in samples {
             // For solution simplification it generates only 1 WavBrro and 1 VSRI

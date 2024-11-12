@@ -97,7 +97,7 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 /// max_ts: the highest TS available in this file
 /// vsri_segments: Description of each segment
 ///                [sample_rate (m), initial_point(x,y), # of samples(length)]
-/// Each segments describes a line with the form of mX + B that has a lenght
+/// Each segments describes a line with the form of mX + B that has a length
 /// of # of samples.
 #[derive(Debug, Default, Clone, Encode, Decode)]
 pub struct Vsri {

@@ -92,7 +92,7 @@ impl WavBrro {
         self.sample_count += 1;
     }
 
-    // This should be generic, but first implementation is going to be Vec f64
+    // TODO: This should be generic, but first implementation is going to be Vec f64
     // This consumes self!
     pub fn get_samples(self) -> Vec<f64> {
         self.chunks.into_iter().flatten().collect::<Vec<f64>>()
