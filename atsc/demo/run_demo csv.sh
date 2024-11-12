@@ -4,7 +4,7 @@ echo "Original Size: "
 du -sb $infilename
 for i in 1 3; do
   echo "### Error Level: $i"
-  htmlfile="comparison-error-$i.html"
+  htmlfile="comparison-error-$i-csv.html"
   cp $infilename tmp.csv
   ../../target/debug/atsc --csv --compressor fft --error $i --verbose tmp.csv > input.txt
   echo "FFT Size: "
