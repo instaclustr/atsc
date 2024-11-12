@@ -39,30 +39,6 @@ pub struct FrequencyPoint {
 }
 
 impl FrequencyPoint {
-    pub fn new(real: f32, img: f32) -> Self {
-        FrequencyPoint {
-            pos: 0,
-            freq_real: real,
-            freq_img: img,
-        }
-    }
-
-    pub fn with_position(real: f32, img: f32, pos: u16) -> Self {
-        FrequencyPoint {
-            pos,
-            freq_real: real,
-            freq_img: img,
-        }
-    }
-
-    pub fn from_complex(complex: Complex<f32>) -> Self {
-        FrequencyPoint {
-            pos: 0,
-            freq_real: complex.re,
-            freq_img: complex.im,
-        }
-    }
-
     pub fn from_complex_with_position(complex: Complex<f32>, pos: u16) -> Self {
         FrequencyPoint {
             pos,
@@ -132,15 +108,10 @@ impl Ord for FrequencyPoint {
 /// FFT Compressor. Applies FFT to a signal, picks the N best frequencies, discards the rest. Always LOSSY
 #[derive(PartialEq, Debug)]
 pub struct FFT {
-    /// Compressor ID
     pub id: u8,
-    /// Stored frequencies
     pub frequencies: Vec<FrequencyPoint>,
-    /// The maximum numeric value of the points in the frame
     pub max_value: f32,
-    /// The minimum numeric value of the points in the frame
     pub min_value: f32,
-    /// Compression error
     pub error: Option<f64>,
 }
 
@@ -391,7 +362,7 @@ impl FFT {
     }
 
     /// Compresses data via FFT
-    /// The set of frequencies to store is 1/100 of the data lenght OR 3, which is bigger.
+    /// The set of frequencies to store is 1/100 of the data length OR 3, which is bigger.
     pub fn compress(&mut self, data: &[f64]) {
         if self.max_value == self.min_value {
             debug!("Same max and min, we're done here!");
@@ -415,8 +386,6 @@ impl FFT {
         buffer.truncate(size);
         self.frequencies = FFT::fft_trim(&mut buffer, max_freq);
     }
-
-    /// Decompresses data
     pub fn decompress(data: &[u8]) -> Self {
         let config = BinConfig::get();
         let (fft, _) = bincode::decode_from_slice(data, config).unwrap();

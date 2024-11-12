@@ -89,7 +89,6 @@ mod tests {
             TempDir::new("test_read_samples").expect("Unable to create temporary directory");
         let path = temp_dir.path().join("samples.csv");
 
-        // Writing content to test file
         let mut file = File::create(&path).expect("Unable to create test file");
         file.write_all(csv_content.as_bytes())
             .expect("Unable to write data");

@@ -69,7 +69,6 @@ impl Decode for Constant {
     ) -> Result<Self, ::bincode::error::DecodeError> {
         let id = Decode::decode(decoder)?;
         let bitdepth = Decode::decode(decoder)?;
-        // Here is where the pig twists the tail
         let constant: f64 = match bitdepth {
             Bitdepth::U8 => {
                 debug!("Decoding as u8");
@@ -112,11 +111,6 @@ impl Constant {
         }
     }
 
-    /// This compressor is about having a single constant for the whole segment
-    pub fn set_constant(&mut self, constant_value: f64) {
-        self.constant = constant_value;
-    }
-
     /// Receives a data stream and generates a Constant
     pub fn decompress(data: &[u8]) -> Self {
         let config = BinConfig::get();
@@ -126,7 +120,6 @@ impl Constant {
 
     /// This function transforms the structure into a Binary stream
     pub fn to_bytes(&self) -> Vec<u8> {
-        // Use Bincode and flate2-rs? Do this at the Stream Level?
         let config = BinConfig::get();
         bincode::encode_to_vec(self, config).unwrap()
     }
@@ -141,9 +134,7 @@ impl Constant {
 
 pub fn constant_compressor(data: &[f64], stats: DataStats) -> CompressorResult {
     debug!("Initializing Constant Compressor. Error and Stats provided");
-    // Initialize the compressor
     let c = Constant::new(data.len(), stats.min, stats.bitdepth);
-    // Convert to bytes
     CompressorResult::new(c.to_bytes(), 0.0)
 }
 

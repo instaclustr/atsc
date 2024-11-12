@@ -46,7 +46,6 @@ fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Processes all files in a given directory.
 fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
     // Assuming you want to process each file inside this directory
     for entry in std::fs::read_dir(arguments.input.clone())? {
@@ -67,7 +66,6 @@ fn process_directory(arguments: &Args) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Processes a single file.
 fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), Box<dyn Error>> {
     debug!("Processing single file...");
     if arguments.uncompress {
@@ -143,7 +141,6 @@ fn decompress_data(compressed_data: &[u8]) -> Vec<f64> {
 #[derive(Parser, Default, Debug)]
 #[command(author, version, about="A Time-Series compressor", long_about = None)]
 struct Args {
-    /// input file
     input: PathBuf,
 
     /// Select a compressor, default is auto

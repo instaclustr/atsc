@@ -16,18 +16,14 @@ limitations under the License.
 
 use crate::{
     compressor::Compressor,
-    types,
     utils::{f64_to_u64, prev_power_of_two},
 };
-use log::debug;
-use types::metric_tag::MetricTag;
 
 pub mod utils;
 
 /// Max Frame size, this can aprox. 36h of data at 1point/sec rate, a little more than 1 week at 1point/5sec
 /// and 1 month (30 days) at 1 point/20sec.
 /// This would be aprox. 1MB of Raw data (131072 * 64bits).
-/// We wouldn't want to decompressed a ton of uncessary data, but for historical view of the data, looking into 1day/week/month at once is very reasonable
 const MAX_FRAME_SIZE: usize = 131072; // 2^17
 /// The Min frame size is one that allows our compressors potentially achieve 100x compression. Currently the most
 /// limited one is the FFT compressor, that needs 3 frequencies at minimum, 3x100 = 300, next power of 2 is 512.
@@ -59,20 +55,6 @@ impl OptimizerPlan {
         }
     }
 
-    /// Creates an optimal plan for compression for the data set provided bound by a given error
-    pub fn plan_bounded(data: &[f64], max_error: f32) -> Self {
-        // TODO: Check error limits
-        let c_data = OptimizerPlan::clean_data(data);
-        let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
-        let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, Some(max_error));
-        OptimizerPlan {
-            data: c_data,
-            chunk_sizes: chunks,
-            compressors: optimizer,
-        }
-    }
-
-    /// Sets a given compressor for all data chunks
     pub fn set_compressor(&mut self, compressor: Compressor) {
         let new_compressors = vec![compressor; self.compressors.len()];
         self.compressors = new_compressors;
@@ -127,14 +109,11 @@ impl OptimizerPlan {
     }
 
     /// Walks the data, checks how much variability is in the data, and assigns a compressor based on that
-    /// NOTE: Is this any good?
     fn get_compressor(data: &[f64]) -> Compressor {
         let _ = data.iter().map(|&f| f64_to_u64(f, 0));
-        // For now, let's just return FFT
         Compressor::FFT
     }
 
-    /// Assigns a compressor to a chunk of data
     fn assign_compressor(
         clean_data: &[f64],
         chunks: &[usize],
@@ -153,17 +132,6 @@ impl OptimizerPlan {
         }
         selection
     }
-}
-
-/// This should look at the data and return an optimized dataset for a specific compressor,
-/// If a compressor is hand picked, this should be skipped.
-pub fn process_data(wav_data: &[f64], tag: &MetricTag) -> Vec<f64> {
-    debug!("Tag: {:?} Len: {}", tag, wav_data.len());
-    wav_data
-        .iter()
-        .filter(|x| !(x.is_nan() || x.is_infinite()))
-        .copied()
-        .collect()
 }
 
 #[cfg(test)]

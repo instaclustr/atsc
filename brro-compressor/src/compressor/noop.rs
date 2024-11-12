@@ -34,17 +34,14 @@ impl Noop {
             data: Vec::with_capacity(sample_count),
         }
     }
-    ///Optimize
     pub fn optimize(data: &[f64]) -> Vec<i64> {
         let mut out_vec = Vec::with_capacity(data.len());
         for &element in data {
-            // Round the floating-point number before casting to i64
             out_vec.push(element.round() as i64);
         }
         out_vec
     }
 
-    /// "Compress"
     pub fn compress(&mut self, data: &[f64]) {
         self.data = Noop::optimize(data);
         debug!(
@@ -67,7 +64,6 @@ impl Noop {
         bincode::encode_to_vec(self, config).unwrap()
     }
 
-    /// Returns an array of data
     pub fn to_data(&self, _frame_size: usize) -> Vec<i64> {
         self.data.clone()
     }
@@ -118,7 +114,7 @@ mod tests {
     fn test_optimize() {
         // Test case with floating-point numbers that have fractional parts
         let input_data = [1.5, 2.7, 3.3, 4.9];
-        let expected_output = [2, 3, 3, 5]; // Rounded to the nearest integer
+        let expected_output = [2, 3, 3, 5];
 
         let result = Noop::optimize(&input_data);
         assert_eq!(result, expected_output);
