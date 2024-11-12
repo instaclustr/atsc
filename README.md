@@ -22,7 +22,7 @@ The fastest way to test ATSC is with a CSV file!
 3. Run it
 
 ```bash
-atsc -csv <input-file>
+cargo run --release -- -csv <input-file>
 ```
 
 ## Documentation
