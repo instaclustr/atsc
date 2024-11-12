@@ -15,9 +15,7 @@ limitations under the License.
 */
 
 // Import necessary libraries
-use brro_compressor::compressor::polynomial::{
-    polynomial, polynomial_allowed_error, to_data, PolynomialType,
-};
+use atsc::compressor::polynomial::{polynomial, polynomial_allowed_error, to_data, PolynomialType};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 // Define example sample data

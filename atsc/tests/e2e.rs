@@ -1,4 +1,4 @@
-use brro_compressor::utils::error::calculate_error;
+use atsc::utils::error::calculate_error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use wavbrro::wavbrro::WavBrro;
@@ -117,7 +117,7 @@ fn prepare_test_dir() -> PathBuf {
 
 /// Runs compressor binary with provided arguments.
 fn run_compressor(args: &[&str]) {
-    let compressor_bin = env!("CARGO_BIN_EXE_brro-compressor");
+    let compressor_bin = env!("CARGO_BIN_EXE_atsc");
     let exit_status = std::process::Command::new(compressor_bin)
         .args(args)
         .status()
