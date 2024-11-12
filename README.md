@@ -8,7 +8,7 @@
 2. [Documentation](#documentation)
 3. [Building ATSC](#building-atsc)
 4. [What is ATSC?](#what-is-atsc)
-5. [Where does ATSC fits?](#where-does-atsc-fits)
+5. [Where does ATSC fit?](#where-does-atsc-fit)
 6. [ATSC Usage](#atsc-usage)
 7. [Releases](#releases)
 8. [Roadmap](#roadmap)
@@ -70,7 +70,7 @@ For a more detailed insight into ATSC read the paper here: [ATSC - A novel appro
 
 Currently, ATSC uses an internal format to process time series (WBRO) and outputs a compressed format (BRO). A CSV to WBRO format is available here: [CSV Compressor](https://github.com/instaclustr/atsc/tree/main/csv-compressor)
 
-## Where does ATSC fits?
+## Where does ATSC fit?
 
 ATSC fits in any place that needs space reduction in trade for precision.
 ATSC is to time series what JPG/MP3 is to image/audio.
@@ -97,20 +97,27 @@ Those files would work as input for the compressor.
 
 Compressor usage:
 
-```bash
+```txt
 Usage: atsc [OPTIONS] <INPUT>
 
 Arguments:
   <INPUT>  input file
 
-   --compressor <COMPRESSOR>
+      --compressor <COMPRESSOR>
           Select a compressor, default is auto [default: auto] [possible values: auto, noop, fft, constant, polynomial, idw]
   -e, --error <ERROR>
-          Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 5 (5%). 0 is lossless compression 50 will do a median filter on the data. In between will pick optimize for the error [default: 5]
+          Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 5 (5%).
+          0 is lossless compression
+          50 will do a median filter on the data.
+          In between will pick optimize for the error [default: 5]
   -u
           Uncompresses the input file/directory
   -c, --compression-selection-sample-level <COMPRESSION_SELECTION_SAMPLE_LEVEL>
-          Samples the input data instead of using all the data for selecting the optimal compressor. Only impacts speed, might or not increased compression ratio. For best results use 0 (default). Only works when compression = Auto. 0 will use all the data (slowest) 6 will sample 128 data points (fastest) [default: 0]
+          Samples the input data instead of using all the data for selecting the optimal compressor.
+          Only impacts speed, might or not increased compression ratio. For best results use 0 (default).
+          Only works when compression = Auto.
+          0 will use all the data (slowest)
+          6 will sample 128 data points (fastest) [default: 0]
       --verbose
           Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
       --csv
@@ -118,7 +125,10 @@ Arguments:
       --no-header
           Defines if the CSV has no header
       --fields <FIELDS>
-          Defines names of fields in CSV file. It should follow this format: --fields=TIME_FIELD_NAME,VALUE_FIELD_NAME It assumes that the one before comma is a name of time field and the one after comma is value field
+          Defines names of fields in CSV file. It should follow this format:
+            --fields=TIME_FIELD_NAME,VALUE_FIELD_NAME
+          It assumes that the one before comma is a name of time field and the one
+          after comma is value field. [default: time,value]
   -h, --help
           Print help
   -V, --version

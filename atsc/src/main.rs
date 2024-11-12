@@ -181,7 +181,7 @@ struct Args {
     /// 0 is lossless compression
     /// 50 will do a median filter on the data.
     /// In between will pick optimize for the error
-    #[arg(short, long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(0..51))]
+    #[arg(short, long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(0..51), verbatim_doc_comment )]
     error: u8,
 
     /// Uncompresses the input file/directory
@@ -193,7 +193,7 @@ struct Args {
     /// Only works when compression = Auto.
     /// 0 will use all the data (slowest)
     /// 6 will sample 128 data points (fastest)
-    #[arg(short, long, default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..7))]
+    #[arg(short, long, default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..7), verbatim_doc_comment )]
     compression_selection_sample_level: u8,
 
     /// Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
@@ -212,7 +212,7 @@ struct Args {
     ///   --fields=TIME_FIELD_NAME,VALUE_FIELD_NAME
     /// It assumes that the one before comma is a name of time field and the one
     /// after comma is value field.
-    #[arg(long, default_value = "time,value")]
+    #[arg(long, default_value = "time,value", verbatim_doc_comment)]
     fields: Option<String>,
 }
 
