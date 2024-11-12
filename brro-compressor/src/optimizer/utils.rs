@@ -26,17 +26,11 @@ pub enum Bitdepth {
 }
 /// Data structure that holds statictical information about the data provided
 pub struct DataStats {
-    // Max value
     pub max: f64,
-    // Max value location in the array
     pub max_loc: usize,
-    // Min value
     pub min: f64,
-    // Min value location in the array
     pub min_loc: usize,
-    // Mean of the data
     pub mean: f64,
-    // Bitdepth that this data can be
     pub bitdepth: Bitdepth,
     pub fractional: bool,
 }
@@ -70,7 +64,7 @@ impl DataStats {
         }
         mean /= data.len() as f64;
         // Check max size of values
-        // For very large numbers (i32 and i64), it might be ideal to detect the dc component
+        // TODO: for very large numbers (i32 and i64), it might be ideal to detect the dc component
         // of the signal. And then remove it later
         let max_int = split_n(max).0; // This is the DC component
         let min_int = split_n(min).0;
@@ -118,19 +112,6 @@ impl DataStats {
         }
     }
 }
-
-fn as_i8(value: f64) -> i8 {
-    split_n(value).0 as i8
-}
-
-fn as_i16(value: f64) -> i16 {
-    split_n(value).0 as i16
-}
-
-fn as_i32(value: f64) -> i32 {
-    split_n(value).0 as i32
-}
-
 fn split_n(x: f64) -> (i64, f64) {
     const FRACT_SCALE: f64 = 1.0 / (65536.0 * 65536.0 * 65536.0 * 65536.0); // 1_f64.exp(-64)
     const STORED_MANTISSA_DIGITS: u32 = f64::MANTISSA_DIGITS - 1;
@@ -177,57 +158,6 @@ fn split_n(x: f64) -> (i64, f64) {
         (0, 0.0)
     }
 }
-
-fn analyze_data(data: &Vec<f64>) -> (i32, i64, bool) {
-    let mut min: f64 = 0.0;
-    let mut max: f64 = 0.0;
-    let mut fractional = false;
-    for value in data {
-        let t_value = *value;
-        if split_n(t_value).1 != 0.0 {
-            fractional = true;
-        }
-        if t_value > max {
-            max = t_value
-        };
-        if t_value < min {
-            min = t_value
-        };
-    }
-    // Check max size of values
-    // For very large numbers (i32 and i64), it might be ideal to detect the dc component
-    // of the signal. And then remove it later
-    let max_int = split_n(max).0; // This is the DC component
-    let min_int = split_n(min).0;
-
-    // Finding the bitdepth without the DC component
-    let recommended_bitdepth = find_bitdepth(max_int - min_int, min_int);
-    debug!(
-        "Recommended Bitdepth: {}, Fractional: {}",
-        recommended_bitdepth, fractional
-    );
-    (recommended_bitdepth, min_int, fractional)
-}
-
-fn find_bitdepth(max_int: i64, min_int: i64) -> i32 {
-    // Check where those ints fall into
-    let bitdepth = match max_int {
-        _ if max_int <= u8::MAX.into() => 8,
-        _ if max_int <= i16::MAX.into() => 16,
-        _ if max_int <= i32::MAX.into() => 32,
-        _ => 64,
-    };
-
-    let bitdepth_signed = match min_int {
-        _ if min_int == 0 => 8,
-        _ if min_int >= i16::MIN.into() => 16,
-        _ if min_int >= i32::MIN.into() => 32,
-        _ => 64,
-    };
-
-    bitdepth.max(bitdepth_signed)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
