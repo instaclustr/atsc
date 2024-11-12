@@ -11,7 +11,7 @@ for i in 1 3; do
   du -sb tmp.bro
   ../../target/debug/atsc -u --verbose tmp.bro > tmp_fft.txt
   cp $infilename tmp.csv
-  ../../target/debug/atsc --csv  --compressor idw --error $i tmp.csv > /dev/null
+  ../../target/debug/atsc --csv --compressor idw --error $i tmp.csv > /dev/null
   echo "IDW Size: "
   du -sb tmp.bro
   ../../target/debug/atsc -u --verbose tmp.bro > tmp_idw.txt
@@ -19,7 +19,7 @@ for i in 1 3; do
   ../../target/debug/atsc --csv --compressor polynomial --error $i tmp.csv > /dev/null
   echo "Polynomial Size: "
   du -sb tmp.bro
-  ../../target/debug/brro-compressor -u --verbose tmp.bro > tmp_poly.txt
+  ../../target/debug/atsc -u --verbose tmp.bro > tmp_poly.txt
 
   # Create HTML file
   echo "<!DOCTYPE html>" > $htmlfile
@@ -99,6 +99,7 @@ for i in 1 3; do
 
   rm tmp.csv
   rm tmp.bro
+  rm tmp.wbro
   rm tmp_fft.txt
   rm tmp_idw.txt
   rm tmp_poly.txt

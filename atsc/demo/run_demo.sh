@@ -19,7 +19,7 @@ for i in 1 3; do
   ../../target/debug/atsc --compressor polynomial --error $i tmp.wbro > /dev/null
   echo "Polynomial Size: "
   du -sb tmp.bro
-  ../../target/debug/brro-compressor -u --verbose tmp.bro > tmp_poly.txt
+  ../../target/debug/atsc -u --verbose tmp.bro > tmp_poly.txt
 
   # Create HTML file
   echo "<!DOCTYPE html>" > $htmlfile

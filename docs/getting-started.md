@@ -25,7 +25,7 @@ How to build and/or run ATSC
 5. Run it
 
     ```bash
-    atsc -csv <input-file>
+    atsc --csv <input-file>
     ```
 
 ## Docker container
@@ -39,5 +39,5 @@ WIP
 3. Run it
 
 ```bash
-atsc -csv <input-file>
+atsc --csv <input-file>
 ```
