@@ -20,6 +20,12 @@ Arguments:
           Samples the input data instead of using all the data for selecting the optimal compressor. Only impacts speed, might or not increased compression ratio. For best results use 0 (default). Only works when compression = Auto. 0 will use all the data (slowest) 6 will sample 128 data points (fastest) [default: 0]
       --verbose
           Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
+      --csv
+          Defines user input as a CSV file
+      --no-header
+          Defines if the CSV has no header
+      --fields <FIELDS>
+          Defines names of fields in CSV file. It should follow this format: --fields=TIME_FIELD_NAME,VALUE_FIELD_NAME It assumes that the one before comma is a name of time field and the one after comma is value field
   -h, --help
           Print help
   -V, --version
