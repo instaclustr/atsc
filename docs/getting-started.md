@@ -22,7 +22,13 @@ How to build and/or run ATSC
 
     **Note**: ATSC was originally built with a specific format in mind `WBRO`. For information about this format and how to use it check the [WAVBRRO](https://github.com/instaclustr/atsc/tree/main/wavbrro) library documentation.
 
-5. Run it
+5. Move the `atsc` executable
+
+    ```bash
+    mv target/release/atsc atsc
+    ```
+
+6. Execute it
 
     ```bash
     atsc --csv <input-file>
