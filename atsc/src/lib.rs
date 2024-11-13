@@ -17,6 +17,7 @@ limitations under the License.
 #![allow(clippy::new_without_default)]
 // TODO: re-enable dead code checks
 #![allow(dead_code)]
+extern crate core;
 
 pub mod compressor;
 pub mod data;
@@ -24,4 +25,5 @@ pub mod frame;
 pub mod header;
 pub mod utils;
 
+mod csv;
 pub mod optimizer;
