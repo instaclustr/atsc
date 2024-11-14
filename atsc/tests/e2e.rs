@@ -1,7 +1,6 @@
+use atsc::csv::{read_samples, read_samples_with_headers};
 use atsc::utils::error::calculate_error;
 use std::fs;
-use std::fs::File;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use wavbrro::wavbrro::WavBrro;
 
@@ -51,27 +50,55 @@ fn test_compressor_auto_lossy() {
 
 #[test]
 fn test_csv_input_compression_with_header() {
-    let test_dir = tempfile::tempdir().unwrap().into_path();
-    let filepath = test_dir.join("test-csv.csv");
-
-    let mut file = File::create(&filepath).unwrap();
-    let content = "time,value\n1625097600,123.45\n1625184000,678.90\n";
-    file.write_all(content.as_bytes()).unwrap();
+    let filepath = Path::new("./tests/csv/cpu_utilization.csv");
+    let test_dir = prepare_test_dir_and_copy_file(filepath);
+    let csv_file_path = test_dir.join("cpu_utilization.csv");
 
     run_compressor(&[
         "--compressor",
-        "fft",
+        "noop",
         "--error",
         "5",
         "--csv",
         "--fields=time,value",
-        filepath.to_str().unwrap(),
+        csv_file_path.to_str().unwrap(),
     ]);
 
-    run_compressor(&["-u", test_dir.join("test-csv.bro").to_str().unwrap()]);
+    run_compressor(&["-u", test_dir.join("cpu_utilization.bro").to_str().unwrap()]);
 
-    let uncompressed_samples = WavBrro::from_file(&test_dir.join("test-csv.wbro")).unwrap();
-    let original_samples = vec![123.45f64, 678.9f64];
+    let uncompressed_samples = WavBrro::from_file(&test_dir.join("cpu_utilization.wbro")).unwrap();
+    let original_samples = read_values_from_csv(&csv_file_path, false);
+
+    let err = calculate_error(&original_samples, &uncompressed_samples);
+
+    assert!(
+        err <= 0.05,
+        "Error: {}\nOriginal    : {:?}\nUncompressed: {:?}",
+        err,
+        original_samples,
+        uncompressed_samples
+    );
+}
+
+#[test]
+fn test_csv_input_compression_with_header_no_fields() {
+    let filepath = Path::new("./tests/csv/cpu_utilization.csv");
+    let test_dir = prepare_test_dir_and_copy_file(filepath);
+    let csv_file_path = test_dir.join("cpu_utilization.csv");
+
+    run_compressor(&[
+        "--compressor",
+        "noop",
+        "--error",
+        "5",
+        "--csv",
+        csv_file_path.to_str().unwrap(),
+    ]);
+
+    run_compressor(&["-u", test_dir.join("cpu_utilization.bro").to_str().unwrap()]);
+
+    let uncompressed_samples = WavBrro::from_file(&test_dir.join("cpu_utilization.wbro")).unwrap();
+    let original_samples = read_values_from_csv(&csv_file_path, false);
 
     let err = calculate_error(&original_samples, &uncompressed_samples);
 
@@ -86,27 +113,31 @@ fn test_csv_input_compression_with_header() {
 
 #[test]
 fn test_csv_input_compression_without_header() {
-    let test_dir = tempfile::tempdir().unwrap().into_path();
-    let filepath = test_dir.join("test-csv.csv");
-
-    let mut file = File::create(&filepath).unwrap();
-    let content = "123.45\n678.90\n";
-    file.write_all(content.as_bytes()).unwrap();
+    let filepath = Path::new("./tests/csv/cpu_utilization_no_headers_only_values.csv");
+    let test_dir = prepare_test_dir_and_copy_file(filepath);
+    let csv_file_path = test_dir.join("cpu_utilization_no_headers_only_values.csv");
 
     run_compressor(&[
         "--compressor",
-        "fft",
+        "noop",
         "--error",
         "5",
         "--csv",
         "--no-header",
-        filepath.to_str().unwrap(),
+        csv_file_path.to_str().unwrap(),
     ]);
 
-    run_compressor(&["-u", test_dir.join("test-csv.bro").to_str().unwrap()]);
+    run_compressor(&[
+        "-u",
+        test_dir
+            .join("cpu_utilization_no_headers_only_values.bro")
+            .to_str()
+            .unwrap(),
+    ]);
 
-    let uncompressed_samples = WavBrro::from_file(&test_dir.join("test-csv.wbro")).unwrap();
-    let original_samples = vec![123.45f64, 678.9f64];
+    let uncompressed_samples =
+        WavBrro::from_file(&test_dir.join("cpu_utilization_no_headers_only_values.wbro")).unwrap();
+    let original_samples = read_values_from_csv(&csv_file_path, true);
 
     let err = calculate_error(&original_samples, &uncompressed_samples);
 
@@ -187,6 +218,13 @@ fn prepare_test_dir() -> PathBuf {
     test_dir
 }
 
+/// Prepares test directory and copies file to it.
+fn prepare_test_dir_and_copy_file(filepath: &Path) -> PathBuf {
+    let test_dir = tempfile::tempdir().unwrap().into_path();
+    fs::copy(filepath, test_dir.join(filepath.file_name().unwrap())).unwrap();
+    test_dir
+}
+
 /// Runs compressor binary with provided arguments.
 fn run_compressor(args: &[&str]) {
     let compressor_bin = env!("CARGO_BIN_EXE_atsc");
@@ -218,4 +256,16 @@ fn compare_samples_with_allowed_error(original: &Path, uncompressed: &Path) {
         original_samples,
         uncompressed_samples
     );
+}
+
+/// Reads csv file and returns the content of value field.
+/// If no_headers = false it assumes --fields="time,value"
+fn read_values_from_csv(csv_file_path: &Path, no_headers: bool) -> Vec<f64> {
+    let samples = if no_headers {
+        read_samples(csv_file_path).unwrap()
+    } else {
+        read_samples_with_headers(csv_file_path, "time", "value").unwrap()
+    };
+
+    samples.into_iter().map(|sample| sample.value).collect()
 }
