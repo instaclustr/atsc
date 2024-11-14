@@ -15,10 +15,10 @@ limitations under the License.
 */
 
 use crate::metric::Metric;
-use brro_compressor::compressor::Compressor;
-use brro_compressor::data::CompressedStream;
-use brro_compressor::optimizer::OptimizerPlan;
-use brro_compressor::utils::readers::bro_reader::read_file;
+use atsc::compressor::Compressor;
+use atsc::data::CompressedStream;
+use atsc::optimizer::OptimizerPlan;
+use atsc::utils::readers::bro_reader::read_file;
 use clap::{arg, Parser};
 use log::debug;
 use std::fs;

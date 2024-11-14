@@ -1,4 +1,4 @@
-# FFT-compression Maintainers
+# ATSC Maintainers
 
 ## Maintainers
 

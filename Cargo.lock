@@ -99,6 +99,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
+name = "atsc"
+version = "0.5.0"
+dependencies = [
+ "average",
+ "bincode",
+ "clap",
+ "criterion",
+ "env_logger",
+ "hound",
+ "inverse_distance_weight",
+ "log",
+ "median",
+ "num-traits",
+ "rand 0.8.5",
+ "regex",
+ "rustfft",
+ "splines",
+ "tempfile",
+ "wavbrro",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -156,28 +178,6 @@ dependencies = [
  "radium",
  "tap",
  "wyz",
-]
-
-[[package]]
-name = "brro-compressor"
-version = "0.5.0"
-dependencies = [
- "average",
- "bincode",
- "clap",
- "criterion",
- "env_logger",
- "hound",
- "inverse_distance_weight",
- "log",
- "median",
- "num-traits",
- "rand 0.8.5",
- "regex",
- "rustfft",
- "splines",
- "tempfile",
- "wavbrro",
 ]
 
 [[package]]
@@ -426,7 +426,7 @@ dependencies = [
 name = "csv-compressor"
 version = "0.1.0"
 dependencies = [
- "brro-compressor",
+ "atsc",
  "clap",
  "csv",
  "env_logger",

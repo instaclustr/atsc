@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use brro_compressor::compressor::Compressor;
-use brro_compressor::data::CompressedStream;
-use brro_compressor::optimizer::OptimizerPlan;
-use brro_compressor::utils::readers::bro_reader;
+use atsc::compressor::Compressor;
+use atsc::data::CompressedStream;
+use atsc::optimizer::OptimizerPlan;
+use atsc::utils::readers::bro_reader;
 use clap::{arg, command, Parser};
 use log::{debug, error};
 use std::error::Error;

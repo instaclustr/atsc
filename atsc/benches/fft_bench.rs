@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use brro_compressor::compressor::fft::{fft, fft_allowed_error, fft_set, fft_to_data, FFT};
+use atsc::compressor::fft::{fft, fft_allowed_error, fft_set, fft_to_data, FFT};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::path::PathBuf;
 use wavbrro::wavbrro::WavBrro;

@@ -21,7 +21,7 @@ This project adheres to a code of conduct that is based on respect, collaboratio
 
 ### Reporting Issues
 
-If you encounter a bug, performance issue, or have a suggestion for an enhancement, please open an issue in our [GitHub repository](https://github.com/instaclustr/fft-compression/issues). Make sure to provide as much detail as possible to help us understand the problem or suggestion. **But check for existing issues first!**
+If you encounter a bug, performance issue, or have a suggestion for an enhancement, please open an issue in our [GitHub repository](https://github.com/instaclustr/atsc/issues). Make sure to provide as much detail as possible to help us understand the problem or suggestion. **But check for existing issues first!**
 
 When reporting an issue, please include:
 - A clear and descriptive title.
@@ -45,7 +45,7 @@ We accept contributions via Pull Requests (PRs). Before submitting a PR, please 
 
 #### How to Create a Pull Request (PR)
 
-1. Go to the [GitHub repository](https://github.com/instaclustr/fft-compression).
+1. Go to the [GitHub repository](https://github.com/instaclustr/atsc).
 2. Click on the "Pull Requests" tab.
 3. Press the **"New pull request"** button.
 4. Select the **base repository** and the branch where you want to merge your changes (`main`).
@@ -100,6 +100,6 @@ Feel free to contribute to these ongoing efforts or propose your own enhancement
 
 We value your feedback and suggestions! If you have any ideas on how to improve the BRRO Compressor, please don't hesitate to share them. You can do so by:
 
-- Opening a new issue labeled as a `suggestion` in our [GitHub repository](https://github.com/instaclustr/fft-compression).
+- Opening a new issue labeled as a `suggestion` in our [GitHub repository](https://github.com/instaclustr/atsc).
 
 Your input helps us shape the future of the project, and we appreciate any suggestions or feedback you can provide.

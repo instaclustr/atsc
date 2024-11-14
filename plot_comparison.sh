@@ -4,22 +4,22 @@ error=$1
 
 cp ../../wbro-july/$filename.wbro tmp.wbro 
 
-target/debug/brro-compressor --compressor fft --error $error --verbose tmp.wbro > ../../comparison-$filename.m
-target/debug/brro-compressor -u --verbose tmp.bro >> ../../comparison-$filename.m
+target/debug/atsc --compressor fft --error $error --verbose tmp.wbro > ../../comparison-$filename.m
+target/debug/atsc -u --verbose tmp.bro >> ../../comparison-$filename.m
 
 sed -i -e 's/Output/output_fft/g'  ../../comparison-$filename.m
 
 cp ../../wbro-july/$filename.wbro tmp.wbro 
 
-target/debug/brro-compressor --compressor idw --error $error --verbose tmp.wbro > /dev/null
-target/debug/brro-compressor -u --verbose tmp.bro >> ../../comparison-$filename.m
+target/debug/atsc --compressor idw --error $error --verbose tmp.wbro > /dev/null
+target/debug/atsc -u --verbose tmp.bro >> ../../comparison-$filename.m
 
 sed -i -e 's/Output/output_idw/g'  ../../comparison-$filename.m
 
 cp ../../wbro-july/$filename.wbro tmp.wbro 
 
-target/debug/brro-compressor --compressor polynomial --error $error --verbose tmp.wbro > /dev/null
-target/debug/brro-compressor -u --verbose tmp.bro >> ../../comparison-$filename.m
+target/debug/atsc --compressor polynomial --error $error --verbose tmp.wbro > /dev/null
+target/debug/atsc -u --verbose tmp.bro >> ../../comparison-$filename.m
 
 sed -i -e 's/Output/output_poly/g'  ../../comparison-$filename.m
 

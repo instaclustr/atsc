@@ -1,5 +1,5 @@
 [package]
-name = "brro-compressor"
+name = "atsc"
 version = "0.5.0"
 authors = ["Carlos Rolo <carlos.rolo@netapp.com>"]
 edition = "2021"
