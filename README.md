@@ -2,15 +2,15 @@
 
 ## Documentation
 
-For full documentation please go to [Docs](https://github.com/instaclustr/fft-compression/tree/main/docs)
+For full documentation please go to [Docs](https://github.com/instaclustr/atsc/tree/main/docs)
 
 ## Building ATSC
 
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/instaclustr/fft-compression
-   cd fft-compression
+   git clone https://github.com/instaclustr/atsc
+   cd atsc
    ```
 
 2. Build the project:
@@ -38,7 +38,7 @@ Internally ATSC uses the following methods for time series fitting:
 
 For a more detailed insight into ATSC read the paper here: [ATSC - A novel approach to time-series compression](https://some.url.com)
 
-Currently, ATSC uses an internal format to process time series (WBRO) and outputs a compressed format (BRO). A CSV to WBRO format is available here: [CSV Compressor](https://github.com/instaclustr/fft-compression/tree/main/csv-compressor)
+Currently, ATSC uses an internal format to process time series (WBRO) and outputs a compressed format (BRO). A CSV to WBRO format is available here: [CSV Compressor](https://github.com/instaclustr/atsc/tree/main/csv-compressor)
 
 ## Where does ATSC fits?
 
@@ -61,8 +61,8 @@ Example of use cases:
 
 ### Usage
 
-ATSC relies on files with a WBRO extension to operate, learn more about that here: [WBRO - A time series format](https://github.com/instaclustr/fft-compression/tree/main/wavbrro)
-You can also compress from CSV with the provided [CSV tool](https://github.com/instaclustr/fft-compression/tree/main/csv-compressor)
+ATSC relies on files with a WBRO extension to operate, learn more about that here: [WBRO - A time series format](https://github.com/instaclustr/atsc/tree/main/wavbrro)
+You can also compress from CSV with the provided [CSV tool](https://github.com/instaclustr/atsc/tree/main/csv-compressor)
 Those files would work as input for the compressor.
 
 Compressor usage:

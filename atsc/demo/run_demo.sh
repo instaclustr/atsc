@@ -11,37 +11,37 @@ do
 
     cp $infilename tmp.wbro 
 
-    ../../target/debug/brro-compressor --compressor fft --error $i --verbose tmp.wbro > $mfile
+    ../../target/debug/atsc --compressor fft --error $i --verbose tmp.wbro > $mfile
     echo "FFT Size: "
     du -sb tmp.bro
-    ../../target/debug/brro-compressor -u --verbose tmp.bro >> $mfile
+    ../../target/debug/atsc -u --verbose tmp.bro >> $mfile
 
     sed -i -e 's/Output/output_fft/g'  $mfile
 
     cp $infilename tmp.wbro 
 
-    ../../target/debug/brro-compressor --compressor idw --error $i tmp.wbro > /dev/null
+    ../../target/debug/atsc --compressor idw --error $i tmp.wbro > /dev/null
     echo "IDW Size: "
     du -sb tmp.bro
-    ../../target/debug/brro-compressor -u --verbose tmp.bro >> $mfile
+    ../../target/debug/atsc -u --verbose tmp.bro >> $mfile
 
     sed -i -e 's/Output/output_idw/g'  $mfile
 
     cp $infilename tmp.wbro 
 
-    ../../target/debug/brro-compressor --compressor polynomial --error $i tmp.wbro > /dev/null
+    ../../target/debug/atsc --compressor polynomial --error $i tmp.wbro > /dev/null
     echo "Polynomial Size: "
     du -sb tmp.bro
-    ../../target/debug/brro-compressor -u --verbose tmp.bro >> $mfile
+    ../../target/debug/atsc -u --verbose tmp.bro >> $mfile
 
     sed -i -e 's/Output/output_poly/g'  $mfile
 
     cp $infilename tmp.wbro 
 
-    ../../target/debug/brro-compressor --error $i tmp.wbro > /dev/null
+    ../../target/debug/atsc --error $i tmp.wbro > /dev/null
     echo "Auto Size: "
     du -sb tmp.bro
-    ../../target/debug/brro-compressor -u --verbose tmp.bro >> $mfile
+    ../../target/debug/atsc -u --verbose tmp.bro >> $mfile
 
     sed -i -e 's/Output/output_auto/g'  $mfile
 
