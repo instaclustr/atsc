@@ -2,7 +2,7 @@ use std::fs::{File, OpenOptions};
 use std::path::Path;
 
 #[derive(Debug, thiserror::Error)]
-enum Error {
+pub enum Error {
     #[error("Failed to open csv file")]
     OpenFileFailed,
 
@@ -25,15 +25,15 @@ enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, PartialEq)]
-struct Sample {
-    timestamp: i64,
-    value: f64,
+pub struct Sample {
+    pub timestamp: i64,
+    pub value: f64,
 }
 
 /// read_samples_with_headers reads samples from the given file.
 /// It expects that timestamps are stored under timestamp_field field header
 /// and values are stored under value_field.
-fn read_samples_with_headers(
+pub fn read_samples_with_headers(
     filepath: &Path,
     timestamp_field: &str,
     value_field: &str,
@@ -75,9 +75,9 @@ fn read_samples_with_headers(
 /// read_samples reads samples from the given file.
 /// It assumes that file contains no headers and
 /// consists of only a single field with values.
-fn read_samples(filepath: &Path) -> Result<Vec<Sample>> {
+pub fn read_samples(filepath: &Path) -> Result<Vec<Sample>> {
     let mut reader = open_csv_reader(filepath, false)?;
-    
+
     // Collect samples
     let mut samples = Vec::new();
     for record in reader.records() {
@@ -93,7 +93,7 @@ fn read_samples(filepath: &Path) -> Result<Vec<Sample>> {
             value,
         });
     }
-    
+
     Ok(samples)
 }
 

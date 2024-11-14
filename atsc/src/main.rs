@@ -80,12 +80,37 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
             file_path.set_extension("wbro");
             WavBrro::to_file_with_data(&file_path, &decompressed_data)
         }
+    } else if arguments.csv {
+        // Read samples from csv and compress it
+        let samples = if arguments.no_header {
+            debug!("Reading samples from csv with no header");
+            read_samples(&file_path)?
+        } else {
+            debug!("Reading samples from csv with headers");
+            let headers: Vec<&str> = arguments.fields.split(",").collect();
+            // Assuming that header[0] is a time field and header[1] is value field
+            read_samples_with_headers(&file_path, headers[0], headers[1])?
+        };
+
+        let data: Vec<f64> = samples.into_iter().map(|sample| sample.value).collect();
+
+        if arguments.verbose {
+            println!("Input={:?}", data);
+        }
+
+        // Compress
+        let compressed_data = compress_data(&data, arguments);
+
+        // Write
+        file_path.set_extension("bro");
+        std::fs::write(file_path, compressed_data)?;
     } else {
         // Read an WavBRRO file and compress it
         let data = WavBrro::from_file(&file_path)?;
         if arguments.verbose {
             println!("Input={:?}", data);
         }
+
         //compress
         let compressed_data = compress_data(&data, arguments);
 
@@ -169,6 +194,21 @@ struct Args {
     /// Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
     #[arg(long, action)]
     verbose: bool,
+
+    /// Defines user input as a CSV file
+    #[arg(long, action)]
+    csv: bool,
+
+    /// Defines if the CSV has no header
+    #[arg(long, action)]
+    no_header: bool,
+
+    /// Defines names of fields in CSV file. It should follow this format:
+    ///   --fields=TIME_FIELD_NAME,VALUE_FIELD_NAME
+    /// It assumes that the one before comma is a name of time field and the one
+    /// after comma is value field.
+    #[arg(long)]
+    fields: String,
 }
 
 #[derive(clap::ValueEnum, Default, Clone, Debug)]

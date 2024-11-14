@@ -25,5 +25,5 @@ pub mod frame;
 pub mod header;
 pub mod utils;
 
-mod csv;
+pub mod csv;
 pub mod optimizer;
