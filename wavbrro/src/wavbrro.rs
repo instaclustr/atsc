@@ -1,3 +1,19 @@
+/*
+Copyright 2024 NetApp, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 use rkyv::{Archive, Deserialize, Serialize};
 use std::path::Path;
 use std::{error, fmt, io, result};
@@ -76,7 +92,7 @@ impl WavBrro {
         self.sample_count += 1;
     }
 
-    // This should be generic, but first implementation is going to be Vec f64
+    // TODO: This should be generic, but first implementation is going to be Vec f64
     // This consumes self!
     pub fn get_samples(self) -> Vec<f64> {
         self.chunks.into_iter().flatten().collect::<Vec<f64>>()

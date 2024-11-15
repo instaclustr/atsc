@@ -1,8 +1,6 @@
 [workspace]
 members = [
-    "brro-compressor",
-    "optimizer",
-    "prometheus-remote",
+    "atsc",
     "tools",
     "wavbrro",
     "vsri",

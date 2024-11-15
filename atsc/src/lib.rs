@@ -14,6 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-pub mod read;
-pub mod wavbrro;
-pub mod write;
+#![allow(clippy::new_without_default)]
+// TODO: re-enable dead code checks
+#![allow(dead_code)]
+extern crate core;
+
+pub mod compressor;
+pub mod data;
+pub mod frame;
+pub mod header;
+pub mod utils;
+
+pub mod csv;
+pub mod optimizer;

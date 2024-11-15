@@ -14,6 +14,4 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-pub mod read;
-pub mod wavbrro;
-pub mod write;
+pub mod bro_reader;

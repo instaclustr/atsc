@@ -1,8 +1,24 @@
+/*
+Copyright 2024 NetApp, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 use crate::metric::Metric;
-use brro_compressor::compressor::Compressor;
-use brro_compressor::data::CompressedStream;
-use brro_compressor::optimizer::OptimizerPlan;
-use brro_compressor::utils::readers::bro_reader::read_file;
+use atsc::compressor::Compressor;
+use atsc::data::CompressedStream;
+use atsc::optimizer::OptimizerPlan;
+use atsc::utils::readers::bro_reader::read_file;
 use clap::{arg, Parser};
 use log::debug;
 use std::fs;
@@ -18,7 +34,6 @@ mod metric;
     author, version, about = "A Time-Series compressor utilizes Brro Compressor for CSV format", long_about = None
 )]
 pub struct Args {
-    /// Path to input
     input: PathBuf,
 
     /// Defines where the result will be stored
@@ -76,7 +91,6 @@ enum CompressorType {
     Idw,
 }
 
-/// Compresses the data based on the provided tag and arguments.
 fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
     debug!("Compressing data!");
     //let optimizer_results = optimizer::process_data(vec, tag);
@@ -131,7 +145,6 @@ fn process_args(args: Args) {
         .unwrap_or_else(|| args.input.clone())
         .clone();
 
-    // uncompressing input
     if args.uncompress {
         debug!("Starting uncompressing of {:?}", &args.input);
         if let Some(data) = read_file(&args.input).expect("failed to read bro file") {
