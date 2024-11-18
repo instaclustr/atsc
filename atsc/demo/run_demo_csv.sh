@@ -4,19 +4,19 @@ echo "Original Size: "
 du -sb $infilename
 for i in 1 3; do
   echo "### Error Level: $i"
-  htmlfile="comparison-error-$i.html"
-  cp $infilename tmp.wbro
-  ../../target/debug/atsc --compressor fft --error $i --verbose tmp.wbro > input.txt
+  htmlfile="comparison-error-$i-csv.html"
+  cp $infilename tmp.csv
+  ../../target/debug/atsc --csv --compressor fft --error $i --verbose tmp.csv > input.txt
   echo "FFT Size: "
   du -sb tmp.bro
   ../../target/debug/atsc -u --verbose tmp.bro > tmp_fft.txt
-  cp $infilename tmp.wbro
-  ../../target/debug/atsc --compressor idw --error $i tmp.wbro > /dev/null
+  cp $infilename tmp.csv
+  ../../target/debug/atsc --csv --compressor idw --error $i tmp.csv > /dev/null
   echo "IDW Size: "
   du -sb tmp.bro
   ../../target/debug/atsc -u --verbose tmp.bro > tmp_idw.txt
-  cp $infilename tmp.wbro
-  ../../target/debug/atsc --compressor polynomial --error $i tmp.wbro > /dev/null
+  cp $infilename tmp.csv
+  ../../target/debug/atsc --csv --compressor polynomial --error $i tmp.csv > /dev/null
   echo "Polynomial Size: "
   du -sb tmp.bro
   ../../target/debug/atsc -u --verbose tmp.bro > tmp_poly.txt
@@ -97,8 +97,9 @@ for i in 1 3; do
   echo "</body>" >> $htmlfile
   echo "</html>" >> $htmlfile
 
-  rm tmp.wbro
+  rm tmp.csv
   rm tmp.bro
+  rm tmp.wbro
   rm tmp_fft.txt
   rm tmp_idw.txt
   rm tmp_poly.txt
