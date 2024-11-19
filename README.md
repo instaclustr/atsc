@@ -6,9 +6,9 @@
 
 1. [TL;DR;](#tldr)
 2. [What is ATSC?](#what-is-atsc)
-3. [Documentation](#documentation)
-4. [Building ATSC](#building-atsc)
-5. [When to use ATSC?](#when-to-use-atsc)
+3. [When to use ATSC?](#when-to-use-atsc)
+4. [Documentation](#documentation)
+5. [Building ATSC](#building-atsc)
 6. [ATSC Usage](#atsc-usage)
 7. [Releases](#releases)
 8. [Roadmap](#roadmap)
@@ -21,9 +21,9 @@ The fastest way to test ATSC is with a CSV file!
 2. Pick a CSV file from [tests folder](https://github.com/instaclustr/atsc/tree/main/atsc/tests/csv) (Those will have the expected internal format).  
 3. Execute the following command:
 
-```bash
-cargo run --release -- --csv <input-file>
-```
+    ```bash
+    cargo run --release -- --csv <input-file>
+    ```
 
 4. You have a compressed timeseries!
 
@@ -53,6 +53,19 @@ For a more detailed insight into ATSC read the paper here: [ATSC - A novel appro
 
 ATSC input can be an internal format developed to process time series (WBRO), or a CSV. It outputs a compressed format (BRO). A CSV to WBRO format is available here: [CSV Compressor](https://github.com/instaclustr/atsc/tree/main/csv-compressor)
 
+## When to use ATSC?
+
+ATSC fits in any place that needs space reduction in trade for precision.
+ATSC is to time series what JPG/MP3 is to image/audio.
+If there is no need of absolute precision of the output vs the original input, you could probably use ATSC.
+
+Example of use cases:
+
+* In places where time series are rolled over, ATSC is a perfect fit. It would probably offer more space savings without any meaningful loss in precision.
+* Time series that are under sampled (e.g. once every 20sec). With ATSC you can greatly increase sample rate (e.g. once per second) without losing space.
+* Long, slow moving data series (e.g. Weather data). Those will most probably follow an easy to fit pattern
+* Data that is meant to be visualized by humans and not machine processed (e.g. Operation teams). With such a small error, under 1%, it shouldn't impact analysis.
+
 ## Documentation
 
 For full documentation please go to [Docs](https://github.com/instaclustr/atsc/tree/main/docs)
@@ -71,19 +84,6 @@ For full documentation please go to [Docs](https://github.com/instaclustr/atsc/t
    ```bash
    cargo build --release
    ```
-
-## When to use ATSC?
-
-ATSC fits in any place that needs space reduction in trade for precision.
-ATSC is to time series what JPG/MP3 is to image/audio.
-If there is no need of absolute precision of the output vs the original input, you could probably use ATSC.
-
-Example of use cases:
-
-* In places where time series are rolled over, ATSC is a perfect fit. It would probably offer more space savings without any meaningful loss in precision.
-* Time series that are under sampled (e.g. once every 20sec). With ATSC you can greatly increase sample rate (e.g. once per second) without losing space.
-* Long, slow moving data series (e.g. Weather data). Those will most probably follow an easy to fit pattern
-* Data that is meant to be visualized by humans and not machine processed (e.g. Operation teams). With such a small error, under 1%, it shouldn't impact analysis.
 
 ## ATSC Usage
 
@@ -162,6 +162,7 @@ atsc -u <input-file>
 * Improved Benchmark and testing
 * Improved FFT compression
 * Improved Polynomial compression
+* Demo files and generation scripts
 * Several fixes and cleanups
 
 ### v0.6 - 09/11/2024
