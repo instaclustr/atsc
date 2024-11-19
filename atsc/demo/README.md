@@ -1,8 +1,20 @@
 # Demos
 
+## What are demos?
+
+ATSC is a lossy compressor tool, as such, the output time series will not match the input one.
+
+With this in mind it could be important to visualize the difference between output and input and verify if the error introduced is within the expectations.
+
+So demos were created with the intent of having a quick way to display input vs output for a provided metric. The demo scripts will run the ATSC compressor with 2 different error levels and with all the available compression options.
+
+The output HTML files (for error levels 1% and 3%) can then be used to visualize and compare the different results with the input file and evaluate the result of ATSC compression.
+
+Three demo output files are provided so that comparison can be made without needing to run the compressor even once if a quick evaluation is needed. Or if you are curious what is this all about!
+
 ## Contents
 
-This folder contain scripts to generate the demo `html` files.
+This folder contains scripts to generate the demo `html` files.
 
 The demo scripts generate 2 comparison files. One for all compressors (`FFT`, `IDW` and `Polynomial`) with an error of 1% and another with a 3% error.
 
