@@ -12,6 +12,12 @@ The output HTML files (for error levels 1% and 3%) can then be used to visualize
 
 Three demo output files are provided so that comparison can be made without needing to run the compressor even once if a quick evaluation is needed. Or if you are curious what is this all about!
 
+## What is in each file?
+
+Each HTML file renders the output of all compressor options (`FFT`, `IDW` and `Polynomial`) with an error indicated in the file name (1% or 3%). Also, the input data is rendered.
+
+On top, it is possible to click in each option to hide display each option and have a visual comparison between options.
+
 ## Contents
 
 This folder contains scripts to generate the demo `html` files.
@@ -34,7 +40,7 @@ The files are the following:
 
 ## Create your own demo files
 
-1. change into the current directory:
+1. Change into the current directory:
 
     ```bash
         cd atsc/demo
