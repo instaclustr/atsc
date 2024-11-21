@@ -100,7 +100,7 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
 name = "atsc"
-version = "0.5.0"
+version = "0.7.0"
 dependencies = [
  "average",
  "bincode",
@@ -1414,7 +1414,7 @@ checksum = "9dcc60c0624df774c82a0ef104151231d37da4962957d691c011c852b2473314"
 
 [[package]]
 name = "vsri"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "log",

@@ -1,6 +1,6 @@
 [package]
 name = "atsc"
-version = "0.5.0"
+version = "0.7.0"
 authors = ["Carlos Rolo <carlos.rolo@netapp.com>"]
 edition = "2021"
 license = "Apache-2.0"

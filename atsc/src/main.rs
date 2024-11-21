@@ -177,11 +177,11 @@ struct Args {
     #[arg(long, value_enum, default_value = "auto")]
     compressor: CompressorType,
 
-    /// Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 5 (5%).
+    /// Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 3 (3%).
     /// 0 is lossless compression
     /// 50 will do a median filter on the data.
     /// In between will pick optimize for the error
-    #[arg(short, long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(0..51), verbatim_doc_comment )]
+    #[arg(short, long, default_value_t = 3, value_parser = clap::value_parser!(u8).range(0..51), verbatim_doc_comment )]
     error: u8,
 
     /// Uncompresses the input file/directory

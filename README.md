@@ -5,10 +5,10 @@
 ## Table of Contents
 
 1. [TL;DR;](#tldr)
-2. [Documentation](#documentation)
-3. [Building ATSC](#building-atsc)
-4. [What is ATSC?](#what-is-atsc)
-5. [Where does ATSC fit?](#where-does-atsc-fit)
+2. [What is ATSC?](#what-is-atsc)
+3. [When to use ATSC?](#when-to-use-atsc)
+4. [Documentation](#documentation)
+5. [Building ATSC](#building-atsc)
 6. [ATSC Usage](#atsc-usage)
 7. [Releases](#releases)
 8. [Roadmap](#roadmap)
@@ -18,12 +18,53 @@
 The fastest way to test ATSC is with a CSV file!
 
 1. Download the latest [release](https://github.com/instaclustr/atsc/releases)
-2. Get a CSV file with the proper format (or get one from [tests folder](https://github.com/instaclustr/atsc/tree/main/atsc/tests/csv))
-3. Run it
+2. Pick a CSV file from [tests folder](https://github.com/instaclustr/atsc/tree/main/atsc/tests/csv) (Those will have the expected internal format).  
+3. Execute the following command:
 
-```bash
-cargo run --release -- --csv <input-file>
-```
+    ```bash
+    cargo run --release -- --csv <input-file>
+    ```
+
+4. You have a compressed timeseries!
+
+## What is ATSC?
+
+Advanced Time Series Compressor (in short: ATSC), is a configurable, *lossy* compressor that uses the characteristics of a time-series to create a function approximation of the time series.
+
+This way, ATSC only needs to store the parametrization of the function and not the data.
+
+ATSC draws inspiration from established compression and signal analysis techniques, achieving significant compression ratios.
+
+In internal testing ATSC compressed from 46x to 880x the monitoring timeseries of our databases with a fitting error within 1% of the original time-series.
+
+In some cases, ATSC would produce highly compressed data without any data loss (Perfect fitting functions).
+ATSC is meant to be used with long term storage of time series, as it benefits from more points to do a better fitting.
+
+The decompression of data is faster (up to 40x) vs a slower compression speed, as it is expected that the data might be compressed once and decompressed several times.
+
+Internally ATSC uses the following methods for time series fitting:
+
+* FFT (Fast Fourier Transforms)
+* Constant
+* Interpolation - Catmull-Rom
+* Interpolation - Inverse Distance Weight
+
+For a more detailed insight into ATSC read the paper here: [ATSC - A novel approach to time-series compression](https://github.com/instaclustr/atsc/tree/main/paper/ATCS-AdvancedTimeSeriesCompressor.pdf)
+
+ATSC input can be an internal format developed to process time series (WBRO), or a CSV. It outputs a compressed format (BRO). A CSV to WBRO format is available here: [CSV Compressor](https://github.com/instaclustr/atsc/tree/main/csv-compressor)
+
+## When to use ATSC?
+
+ATSC fits in any place that needs space reduction in trade for precision.
+ATSC is to time series what JPG/MP3 is to image/audio.
+If there is no need of absolute precision of the output vs the original input, you could probably use ATSC.
+
+Example of use cases:
+
+* In places where time series are rolled over, ATSC is a perfect fit. It would probably offer more space savings without any meaningful loss in precision.
+* Time series that are under sampled (e.g. once every 20sec). With ATSC you can greatly increase sample rate (e.g. once per second) without losing space.
+* Long, slow moving data series (e.g. Weather data). Those will most probably follow an easy to fit pattern
+* Data that is meant to be visualized by humans and not machine processed (e.g. Operation teams). With such a small error, under 1%, it shouldn't impact analysis.
 
 ## Documentation
 
@@ -44,50 +85,11 @@ For full documentation please go to [Docs](https://github.com/instaclustr/atsc/t
    cargo build --release
    ```
 
-## What is ATSC?
-
-Advanced Time Series Compressor (in short: ATSC), is a configurable, *lossy* compressor that uses the characteristics of a time-series to create a function approximation of the time series.
-
-This way, ATSC only needs to store the parametrization of the function and not the data.
-
-ATSC draws inspiration from established compression and signal analysis techniques, achieving significant compression ratios.
-
-In internal testing ATSC compressed from 46 times to 880 times the time series of our databases with a fitting error within 1% of the original time-series.
-
-In some cases, ATSC would produce highly compressed data without any data loss (Perfect fitting functions).
-ATSC is meant to be used in long term storage of time series, as it benefits from more points to do a better fitting.
-
-The decompression of data is faster (up to 40x) vs a slower compression speed, as it is expected that the data might be compressed once and decompressed several times.
-
-Internally ATSC uses the following methods for time series fitting:
-
-* FFT (Fast Fourier Transforms)
-* Constant
-* Interpolation - Catmull-Rom
-* Interpolation - Inverse Distance Weight
-
-For a more detailed insight into ATSC read the paper here: [ATSC - A novel approach to time-series compression](https://github.com/instaclustr/atsc/tree/main/paper/ATCS-AdvancedTimeSeriesCompressor.pdf)
-
-Currently, ATSC uses an internal format to process time series (WBRO) and outputs a compressed format (BRO). A CSV to WBRO format is available here: [CSV Compressor](https://github.com/instaclustr/atsc/tree/main/csv-compressor)
-
-## Where does ATSC fit?
-
-ATSC fits in any place that needs space reduction in trade for precision.
-ATSC is to time series what JPG/MP3 is to image/audio.
-If there is no need of absolute precision of the output vs the original input, you could probably use ATSC.
-
-Example of use cases:
-
-* In places where time series are rolled over, ATSC is a perfect fit. It would probably offer more space savings without any meaningful loss in precision.
-* Time series that are under sampled (e.g. once every 20sec). With ATSC you can greatly increase sample rate (e.g. once per second) without losing space.
-* Long, slow moving data series (e.g. Weather data). Those will most probably follow an easy to fit pattern
-* Data that is meant to be visualized by humans and not machine processed (e.g. Operation teams). With such a small error, under 1%, it shouldn't impact analysis.
-
 ## ATSC Usage
 
 ### Prerequisites
 
-* Ensure you have [Rust](https://www.rust-lang.org/tools/install) and Cargo installed on your system.
+* Ensure you have [Rust](https://www.rust-lang.org/tools/install) installed on your system.
 
 ### Usage
 
@@ -152,6 +154,20 @@ atsc -u <input-file>
 ```
 
 ## Releases
+
+### v0.7 - 20/11/2024
+
+* Added CSV Support
+* Greatly improved documentation
+* Improved Benchmark and testing
+* Improved FFT compression
+* Improved Polynomial compression
+* Demo files and generation scripts
+* Several fixes and cleanups
+
+### v0.6 - 09/11/2024
+
+* Internal release
 
 ### v0.5 - 30/11/2023
 
