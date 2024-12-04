@@ -12,6 +12,7 @@
 6. [ATSC Usage](#atsc-usage)
 7. [Releases](#releases)
 8. [Roadmap](#roadmap)
+9. [Support Status](#support-status)
 
 ## TL;DR
 
@@ -183,3 +184,7 @@ atsc -u <input-file>
 * Dynamic function loading (e.g. providing more functions without touching the whole code base)
 * Global/Per frame error storage
 * Efficient error
+
+## Support Status
+
+Please see https://www.instaclustr.com/support/documentation/announcements/instaclustr-open-source-project-status/ for Instaclustr support status of this project

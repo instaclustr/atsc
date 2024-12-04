@@ -1,0 +1,3 @@
+ATSC Compressor
+Copyright 2024 NetApp, Inc.
+This product includes software developed at NetApp Instaclustr (http://www.instaclustr.com/).
