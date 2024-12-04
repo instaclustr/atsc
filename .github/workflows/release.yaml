@@ -1,0 +1,32 @@
+---
+name: "tagged-release"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  prepublish-check:
+    name: "Check that the project is releaseable"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run checks
+        run: atsc/release/is_releasable.sh
+
+  publish-binary:
+    name: "Publish Binary to GitHub"
+    needs: prepublish-check
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build & test
+        run: atsc/release/build_release.sh
+      - name: Publish
+        uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: false
+          files: |
+            *.tar.gz
