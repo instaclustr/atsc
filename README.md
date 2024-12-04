@@ -1,6 +1,24 @@
-# BRRO Compressor
+# ATSC - Clickhouse integration build
 
-Version: 0.5 Released: 30/11/2023
+**NOTE**: This is not in sync with the latest release.
+
+The ATSC compressor hasn't been integrated into the official ClickHouse repository. However, you can try it out using our repository at Instaclustr. To do so, follow the link below and clone the  following fork: <https://github.com/instaclustr/ClickHouse/tree/rust-brro-success-without-bridge-backup>
+
+Once cloned, you can build both the ClickHouse server and client. The build and setup process is identical to the official documentation: (<https://clickhouse.com/docs/en/development/developer-instruction>). After building, you will have ClickHouse running with the integrated ATSC compressor.
+
+Once the build is done creating tables can be done the following way:
+
+```sql
+CREATE TABLE sensors_atsc (  
+    sensor_id UInt16,  
+    location UInt32,  
+    timestamp DateTime,  
+    pressure Float64 CODEC(BRRO('Auto')),  
+    temperature Float64 CODEC(BRRO('Auto', 3)),  
+) 
+ENGINE = MergeTree  
+ORDER BY (sensor_id, location, timestamp);
+```
 
 ## Major Changes
 
