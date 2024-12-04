@@ -14,6 +14,6 @@ cp ../../target/release/atsc atsc
 # extract the crate version from Cargo.toml
 CRATE_VERSION="$(cargo metadata --format-version 1 --offline --no-deps | jq -c -M -r '.packages[] | select(.name == "atsc") | .version')"
 tar -cvzf out.tar.gz atsc
-mv out.tar.gz atsc-linux_amd64-${CRATE_VERSION}.tar.gz
+mv out.tar.gz ../../atsc-linux_amd64-${CRATE_VERSION}.tar.gz
 
 rm -rf atsc
