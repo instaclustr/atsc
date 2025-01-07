@@ -1,8 +1,8 @@
-# Contributing to ATSC Compressor
+# Contributing to ATSC
 
-Thank you for considering contributing to the ATSC Compressor project! Whether it's a bug report, new feature, correction, or additional documentation, we greatly value and appreciate your efforts to improve this project.
+Thank you for considering contributing to the ATSC project! Whether it's a bug report, new feature, correction, or additional documentation, we greatly value and appreciate your efforts to improve this project.
 
-Below are the guidelines for contributing to the ATSC Compressor. Please take a moment to review them before submitting your contributions.
+Below are the guidelines for contributing to the ATSC. Please take a moment to review them before submitting your contributions.
 
 ## Table of Contents
 - [Code of Conduct](#code-of-conduct)
@@ -89,7 +89,7 @@ Good documentation is crucial for the usability and maintainability of the proje
 
 ## Roadmap
 
-We have a long-term vision for the ATSC Compressor project, and we encourage contributors to get involved with features that are planned for future releases. Below is a brief overview of our current roadmap:
+We have a long-term vision for the ATSC project, and we encourage contributors to get involved with features that are planned for future releases. Below is a brief overview of our current roadmap:
 
 - Implement streaming compression/decompression.
 - Expand frames to allow new data to be appended to existing frames.
@@ -98,7 +98,7 @@ Feel free to contribute to these ongoing efforts or propose your own enhancement
 
 ## Feedback and Suggestions
 
-We value your feedback and suggestions! If you have any ideas on how to improve the ATSC Compressor, please don't hesitate to share them. You can do so by:
+We value your feedback and suggestions! If you have any ideas on how to improve the ATSC, please don't hesitate to share them. You can do so by:
 
 - Opening a new issue labeled as a `suggestion` in our [GitHub repository](https://github.com/instaclustr/atsc).
 
