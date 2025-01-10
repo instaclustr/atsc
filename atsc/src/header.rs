@@ -39,7 +39,7 @@ impl Decode for CompressorHeader {
         };
         let current_version = env!("CARGO_PKG_VERSION").to_string();
         trace!("Versions: c:{} h:{}", current_version, header.version);
-        match compare(current_version.clone(), header.version.clone()) {
+        match compare(&current_version, &header.version) {
             Ok(Cmp::Lt) => panic!(
                 "Can't decompress! File is version ({}) is higher than compressor version ({})!",
                 header.version, current_version
