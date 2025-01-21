@@ -28,6 +28,19 @@ pub struct CompressorHeader {
     frame_count: i16,
 }
 
+fn verify_header_versions(header: &CompressorHeader) {
+    let current_version = env!("CARGO_PKG_VERSION").to_string();
+    trace!("Versions: c:{} h:{}", current_version, header.version);
+    match compare(&current_version, &header.version) {
+        Ok(Cmp::Lt) => panic!(
+            "Can't decompress! File is version ({}) is higher than compressor version ({})!",
+            header.version, current_version
+        ),
+        Ok(Cmp::Eq | Cmp::Gt) => debug!("File version: {}", header.version),
+        _ => panic!("Wrong version number!"),
+    }
+}
+
 impl Decode for CompressorHeader {
     fn decode<__D: ::bincode::de::Decoder>(
         decoder: &mut __D,
@@ -37,16 +50,7 @@ impl Decode for CompressorHeader {
             version: Decode::decode(decoder)?,
             frame_count: Decode::decode(decoder)?,
         };
-        let current_version = env!("CARGO_PKG_VERSION").to_string();
-        trace!("Versions: c:{} h:{}", current_version, header.version);
-        match compare(&current_version, &header.version) {
-            Ok(Cmp::Lt) => panic!(
-                "Can't decompress! File is version ({}) is higher than compressor version ({})!",
-                header.version, current_version
-            ),
-            Ok(Cmp::Eq | Cmp::Gt) => debug!("File version: {}", header.version),
-            _ => panic!("Wrong version number!"),
-        }
+        verify_header_versions(&header);
         Ok(header)
     }
 }
@@ -60,16 +64,7 @@ impl<'__de> ::bincode::BorrowDecode<'__de> for CompressorHeader {
             version: bincode::BorrowDecode::borrow_decode(decoder)?,
             frame_count: bincode::BorrowDecode::borrow_decode(decoder)?,
         };
-        let current_version = env!("CARGO_PKG_VERSION").to_string();
-        trace!("Versions: c:{} h:{}", current_version, header.version);
-        match compare(current_version.clone(), header.version.clone()) {
-            Ok(Cmp::Lt) => panic!(
-                "Can't decompress! File is version ({}) is higher than compressor version ({})!",
-                header.version, current_version
-            ),
-            Ok(Cmp::Eq | Cmp::Gt) => debug!("File version: {}", header.version),
-            _ => panic!("Wrong version number!"),
-        }
+        verify_header_versions(&header);
         Ok(header)
     }
 }
@@ -104,7 +99,7 @@ mod tests {
         let b = cs.to_bytes();
         let cs2 = CompressedStream::from_bytes(&b);
         assert_eq!(
-            compare(env!("CARGO_PKG_VERSION").to_string(), cs2.header.version),
+            compare(env!("CARGO_PKG_VERSION"), cs2.header.version),
             Ok(Cmp::Eq)
         );
     }
@@ -118,7 +113,7 @@ mod tests {
         let b = cs.to_bytes();
         let cs2 = CompressedStream::from_bytes(&b);
         assert_eq!(
-            compare(env!("CARGO_PKG_VERSION").to_string(), cs2.header.version),
+            compare(env!("CARGO_PKG_VERSION"), cs2.header.version),
             Ok(Cmp::Gt)
         );
     }
