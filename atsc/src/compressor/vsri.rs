@@ -57,8 +57,7 @@ impl VSRI {
     /// Returns an array of data. It creates an array of data the size of the frame with a constant value
     /// and pushes the residuals to the right place.
     pub fn to_data(&self) -> Vec<i32> {
-        let data = self.vsri.get_all_timestamps();
-        data
+        self.vsri.get_all_timestamps()
     }
 }
 
