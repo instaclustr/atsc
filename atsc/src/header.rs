@@ -14,16 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::panic;
-
-//use bincode::{Decode, Encode};
 use log::{debug, trace};
+use std::panic;
 
 /*  The current file version.
     On file read, compressors check the version and uncompress accordingly to that (of fail)
 */
 const CURRENT_VERSION: u32 = 1;
-/* Encode,  */
 #[derive(Debug, Clone)]
 pub struct CompressorHeader {
     initial_segment: [u8; 4],
@@ -45,35 +42,6 @@ fn verify_header_versions(version: u32) {
         }
     }
 }
-/*
-impl Decode for CompressorHeader {
-    fn decode<__D: ::bincode::de::Decoder>(
-        decoder: &mut __D,
-    ) -> Result<Self, ::bincode::error::DecodeError> {
-        let header = Self {
-            initial_segment: Decode::decode(decoder)?,
-            version: Decode::decode(decoder)?,
-            frame_count: Decode::decode(decoder)?,
-        };
-        verify_header_versions(&header);
-        Ok(header)
-    }
-}
-
-impl<'__de> ::bincode::BorrowDecode<'__de> for CompressorHeader {
-    fn borrow_decode<__D: ::bincode::de::BorrowDecoder<'__de>>(
-        decoder: &mut __D,
-    ) -> Result<Self, ::bincode::error::DecodeError> {
-        let header = Self {
-            initial_segment: bincode::BorrowDecode::borrow_decode(decoder)?,
-            version: bincode::BorrowDecode::borrow_decode(decoder)?,
-            frame_count: bincode::BorrowDecode::borrow_decode(decoder)?,
-        };
-        verify_header_versions(&header);
-        Ok(header)
-    }
-}
-*/
 
 impl CompressorHeader {
     pub fn new() -> Self {
@@ -87,6 +55,10 @@ impl CompressorHeader {
 
     pub fn add_frame(&mut self) {
         self.frame_count += 1;
+    }
+
+    pub fn get_frame_count(&mut self) -> u8 {
+        self.frame_count
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

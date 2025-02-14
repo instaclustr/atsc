@@ -40,6 +40,7 @@ impl CompressedStream {
         compressor_frame.compress(chunk);
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
+        self.header.add_frame();
     }
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
@@ -48,6 +49,7 @@ impl CompressedStream {
         compressor_frame.compress(chunk);
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
+        self.header.add_frame();
     }
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
@@ -70,6 +72,7 @@ impl CompressedStream {
         }
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
+        self.header.add_frame();
     }
 
     /// Transforms the whole CompressedStream into bytes to be written to a file
@@ -127,6 +130,18 @@ mod tests {
     }
 
     #[test]
+    fn test_frame_count() {
+        let vector1 = vec![1.0; 1024];
+        let mut cs = CompressedStream::new();
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        println!("{:?}", cs.header.get_frame_count());
+        assert_eq!(
+            usize::from(cs.header.get_frame_count()),
+            cs.data_frames.len()
+        );
+    }
+
+    #[test]
     fn test_to_bytes() {
         let vector1 = vec![1.0; 1024];
         let mut cs = CompressedStream::new();
@@ -134,7 +149,7 @@ mod tests {
         let b = cs.to_bytes();
         assert_eq!(
             b,
-            [66, 82, 82, 79, 5, 48, 46, 55, 46, 50, 0, 1, 41, 251, 0, 4, 3, 3, 30, 3, 1]
+            [66, 82, 82, 79, 1, 0, 0, 0, 1, 1, 41, 251, 0, 4, 3, 3, 30, 3, 1]
         );
     }
 
