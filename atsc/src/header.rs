@@ -25,7 +25,6 @@ const CURRENT_VERSION: u32 = 1;
 pub struct CompressorHeader {
     initial_segment: [u8; 4],
     pub version: u32,
-    // We should go unsigned
     frame_count: u8,
 }
 
@@ -48,7 +47,6 @@ impl CompressorHeader {
         CompressorHeader {
             initial_segment: *b"BRRO",
             version: CURRENT_VERSION,
-            // We have to limit the bytes of the header
             frame_count: 0,
         }
     }
