@@ -17,10 +17,10 @@ limitations under the License.
 use crate::compressor::{BinConfig, Compressor};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
-use bincode::{Decode, Encode};
+//use bincode::{Decode, Encode};
 use log::debug;
 
-#[derive(Encode, Decode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct CompressedStream {
     pub header: CompressorHeader,
     data_frames: Vec<CompressorFrame>,
@@ -74,17 +74,29 @@ impl CompressedStream {
 
     /// Transforms the whole CompressedStream into bytes to be written to a file
     pub fn to_bytes(self) -> Vec<u8> {
-        // Will this chain encode??
+        let mut out = Vec::new();
         let config = BinConfig::get();
-        bincode::encode_to_vec(self, config).unwrap()
+        out.extend_from_slice(&self.header.to_bytes());
+        out.extend_from_slice(&bincode::encode_to_vec(self.data_frames, config).unwrap());
+        out
     }
 
     /// Gets a binary stream and generates a Compressed Stream, at this point, anything inside the stream is
     /// still in the compressed state
     pub fn from_bytes(data: &[u8]) -> Self {
         let config = BinConfig::get();
-        let (compressed_stream, _) = bincode::decode_from_slice(data, config).unwrap();
-        compressed_stream
+        // Split the binary data into header and data
+        let (binary_header, binary_data) = data.split_at(9);
+        let header = CompressorHeader::from_bytes(
+            binary_header
+                .try_into()
+                .expect("Header with incorrect length!"),
+        );
+        let (data_frames, _) = bincode::decode_from_slice(binary_data, config).unwrap();
+        CompressedStream {
+            header,
+            data_frames,
+        }
     }
     pub fn decompress(&self) -> Vec<f64> {
         self.data_frames

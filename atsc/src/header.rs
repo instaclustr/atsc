@@ -16,31 +16,36 @@ limitations under the License.
 
 use std::panic;
 
-use bincode::{Decode, Encode};
+//use bincode::{Decode, Encode};
 use log::{debug, trace};
-use version_compare::{compare, Cmp};
 
-#[derive(Encode, Debug, Clone)]
+/*  The current file version.
+    On file read, compressors check the version and uncompress accordingly to that (of fail)
+*/
+const CURRENT_VERSION: u32 = 1;
+/* Encode,  */
+#[derive(Debug, Clone)]
 pub struct CompressorHeader {
     initial_segment: [u8; 4],
-    pub version: String,
+    pub version: u32,
     // We should go unsigned
-    frame_count: i16,
+    frame_count: u8,
 }
 
-fn verify_header_versions(header: &CompressorHeader) {
-    let current_version = env!("CARGO_PKG_VERSION").to_string();
-    trace!("Versions: c:{} h:{}", current_version, header.version);
-    match compare(&current_version, &header.version) {
-        Ok(Cmp::Lt) => panic!(
+fn verify_header_versions(version: u32) {
+    let current_version = CURRENT_VERSION;
+    trace!("Versions: c:{} h:{}", current_version, version);
+    match current_version.cmp(&version) {
+        std::cmp::Ordering::Less => panic!(
             "Can't decompress! File is version ({}) is higher than compressor version ({})!",
-            header.version, current_version
+            version, current_version
         ),
-        Ok(Cmp::Eq | Cmp::Gt) => debug!("File version: {}", header.version),
-        _ => panic!("Wrong version number!"),
+        std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => {
+            debug!("File version: {}", version)
+        }
     }
 }
-
+/*
 impl Decode for CompressorHeader {
     fn decode<__D: ::bincode::de::Decoder>(
         decoder: &mut __D,
@@ -68,13 +73,13 @@ impl<'__de> ::bincode::BorrowDecode<'__de> for CompressorHeader {
         Ok(header)
     }
 }
+*/
 
 impl CompressorHeader {
     pub fn new() -> Self {
-        const VERSION: &str = env!("CARGO_PKG_VERSION");
         CompressorHeader {
             initial_segment: *b"BRRO",
-            version: VERSION.to_string(),
+            version: CURRENT_VERSION,
             // We have to limit the bytes of the header
             frame_count: 0,
         }
@@ -83,39 +88,52 @@ impl CompressorHeader {
     pub fn add_frame(&mut self) {
         self.frame_count += 1;
     }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        // Converts header to a byte vector, little endian
+        let mut vec = Vec::new();
+        // Add initial_segment
+        vec.extend_from_slice(&self.initial_segment);
+        // Add version (u32 as 4 bytes)
+        vec.extend_from_slice(&self.version.to_le_bytes());
+        // Add frame_count
+        vec.push(self.frame_count);
+
+        vec
+    }
+
+    pub fn from_bytes(data: [u8; 9]) -> Self {
+        // Extract initial_segment
+        let initial_segment = [data[0], data[1], data[2], data[3]];
+        // Extract version (u32 from 4 bytes)
+        let version = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+        // Extract frame_count
+        let frame_count = data[8];
+        verify_header_versions(version);
+        CompressorHeader {
+            initial_segment,
+            version,
+            frame_count,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::compressor::Compressor;
     use crate::data::CompressedStream;
+    use crate::header::CURRENT_VERSION;
 
     #[test]
-    fn test_same_version() {
+    fn test_same_version_or_smaller() {
         let vector1 = vec![1.0; 1024];
         let mut cs = CompressedStream::new();
         cs.compress_chunk_with(&vector1, Compressor::Constant);
         let b = cs.to_bytes();
-        let cs2 = CompressedStream::from_bytes(&b);
-        assert_eq!(
-            compare(env!("CARGO_PKG_VERSION"), cs2.header.version),
-            Ok(Cmp::Eq)
-        );
-    }
-
-    #[test]
-    fn test_smaller_version() {
-        let vector1 = vec![1.0; 1024];
-        let mut cs = CompressedStream::new();
-        cs.header.version = "0.1.0".to_owned();
-        cs.compress_chunk_with(&vector1, Compressor::Constant);
-        let b = cs.to_bytes();
-        let cs2 = CompressedStream::from_bytes(&b);
-        assert_eq!(
-            compare(env!("CARGO_PKG_VERSION"), cs2.header.version),
-            Ok(Cmp::Gt)
-        );
+        // Read the first 8 Bytes, check version on the 5th to 8th byte
+        let version_bytes: [u8; 4] = [b[4], b[5], b[6], b[7]];
+        let version_number = u32::from_le_bytes(version_bytes);
+        assert_eq!(version_number, CURRENT_VERSION);
     }
 
     #[test]
@@ -123,7 +141,7 @@ mod tests {
     fn test_higher_version() {
         let vector1 = vec![1.0; 1024];
         let mut cs = CompressedStream::new();
-        cs.header.version = "9.9.9".to_owned();
+        cs.header.version = 9;
         cs.compress_chunk_with(&vector1, Compressor::Constant);
         let b = cs.to_bytes();
         CompressedStream::from_bytes(&b);
