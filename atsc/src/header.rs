@@ -18,7 +18,7 @@ use log::{debug, trace};
 use std::panic;
 
 /*  The current file version.
-    On file read, compressors check the version and uncompress accordingly to that (of fail)
+    On file read, compressors check the version and uncompress accordingly to that (or fail)
 */
 const CURRENT_VERSION: u32 = 1;
 #[derive(Debug, Clone)]
@@ -33,7 +33,7 @@ fn verify_header_versions(version: u32) {
     trace!("Versions: c:{} h:{}", current_version, version);
     match current_version.cmp(&version) {
         std::cmp::Ordering::Less => panic!(
-            "Can't decompress! File is version ({}) is higher than compressor version ({})!",
+            "Can't decompress! File is version ({}) which is higher than compressor version ({})!",
             version, current_version
         ),
         std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => {
@@ -59,17 +59,13 @@ impl CompressorHeader {
         self.frame_count
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        // Converts header to a byte vector, little endian
-        let mut vec = Vec::new();
+    pub fn to_bytes(&self, writer: &mut Vec<u8>) {
         // Add initial_segment
-        vec.extend_from_slice(&self.initial_segment);
+        writer.extend_from_slice(&self.initial_segment);
         // Add version (u32 as 4 bytes)
-        vec.extend_from_slice(&self.version.to_le_bytes());
+        writer.extend_from_slice(&self.version.to_le_bytes());
         // Add frame_count
-        vec.push(self.frame_count);
-
-        vec
+        writer.push(self.frame_count);
     }
 
     pub fn from_bytes(data: [u8; 9]) -> Self {
