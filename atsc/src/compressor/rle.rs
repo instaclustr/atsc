@@ -22,19 +22,20 @@ use crate::{
 use super::BinConfig;
 use bincode::{Decode, Encode};
 use log::debug;
+use std::collections::HashMap;
 
-const CONSTANT_COMPRESSOR_ID: u8 = 60;
+const RLE_COMPRESSOR_ID: u8 = 60;
 
-/// Compressor frame for static data, stores the value and nothing else.
+/// Run Length Encoding compressor
 #[derive(PartialEq, Debug, Clone)]
-pub struct Constant {
+pub struct RLE {
     pub id: u8,
-    pub constant: f64,
+    pub rle: Vec<(f64, Vec<usize>)>,
     // For internal use only
     bitdepth: Bitdepth,
 }
 
-impl Encode for Constant {
+impl Encode for RLE {
     fn encode<__E: ::bincode::enc::Encoder>(
         &self,
         encoder: &mut __E,
@@ -63,7 +64,7 @@ impl Encode for Constant {
     }
 }
 
-impl Decode for Constant {
+impl Decode for RLE {
     fn decode<__D: ::bincode::de::Decoder>(
         decoder: &mut __D,
     ) -> Result<Self, ::bincode::error::DecodeError> {
@@ -101,12 +102,38 @@ impl Decode for Constant {
 }
 
 impl RLE {
-    /// Creates a new instance of the Constant compressor with the size needed to handle the worst case
-    pub fn new(_sample_count: usize, constant_value: f64, bitdepth: Bitdepth) -> Self {
-        debug!("Constant compressor");
-        Constant {
-            id: CONSTANT_COMPRESSOR_ID,
-            constant: constant_value,
+    /// Creates a new instance of the RLE compressor with the size needed to handle the worst case
+    /// The "trick" here is to use a Hashmap for faster performance during the encoding process.
+    /// and then convert it to a Vec<(f64, Vec<usize>)> for optimal space usage.
+    pub fn new(_sample_count: usize, data: &[f64], bitdepth: Bitdepth) -> Self {
+        debug!("RLE compressor");
+        // Capacity is 10% of the date lenght in the worst case scenario
+        let capacity = (data.len() * 0.1) as usize;
+        let mut encoded: HashMap<f64, Vec<usize>> = HashMap::with_capacity(capacity);
+        let mut i = 0;
+        let len = data.len();
+    
+        while i < len {
+            let value = data[i];
+            let mut count = 1;
+    
+            while i + 1 < len && data[i + 1] == value count += 1;
+                i += 1;
+            }
+    
+            encoded.entry(value).or_insert_with(Vec::new).push(i - count + 1);
+            i += 1;
+        }
+    
+        // Convert HashMap to Vec<(RLE, Vec<usize>)>
+        let mut result: Vec<(f64, Vec<usize>)> = Vec::with_capacity(encoded.len());
+        for (value, indices) in encoded {
+            result.push((value, indices));
+        }
+
+        RLE {
+            id: RLE_COMPRESSOR_ID,
+            rle: result,
             bitdepth,
         }
     }
@@ -124,22 +151,29 @@ impl RLE {
         bincode::encode_to_vec(self, config).unwrap()
     }
 
-    /// Returns an array of data. It creates an array of data the size of the frame with a constant value
-    /// and pushes the residuals to the right place.
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
-        let data = vec![self.constant; frame_size];
-        data
+        let mut data = vec![0; frame_size];
+        // Walk the structure and generate the data vec
+        for (value, indices) in self.rle {
+            for &start_index in indices {
+                let mut i = start_index;
+                while i < length && data[i] == 0 {
+                    data[i] = *value;
+                    i += 1;
+                }
+            }
+        }
     }
 }
 
 pub fn rle_compressor(data: &[f64], stats: DataStats) -> CompressorResult {
-    debug!("Initializing Constant Compressor. Error and Stats provided");
-    let c = Constant::new(data.len(), stats.min, stats.bitdepth);
+    debug!("Initializing RLE Compressor. Error and Stats provided");
+    let c = RLE::new(data, data, stats.bitdepth);
     CompressorResult::new(c.to_bytes(), 0.0)
 }
 
 pub fn rle_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
-    let c = Constant::decompress(compressed_data);
+    let c = RLE::decompress(compressed_data);
     c.to_data(sample_number)
 }
 
@@ -148,21 +182,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_constant_u8() {
-        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
+    fn test_rle_u8() {
+        let vector1 = vec![1.0, 1.0, 1.0, 1.0,
+                            2.0, 2.0,
+                            1.0, 1.0, 1.0, 1.0,
+                            2.0, 2.0,
+                            3.0, 3.0, 3.0, 3.0, 3.0, 3.0,
+                            1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
         let stats = DataStats::new(&vector1);
         assert_eq!(
-            Constant::new(vector1.len(), stats.min, stats.bitdepth).to_bytes(),
+            RLE::new(vector1.len(), &vector1, stats.bitdepth).to_bytes(),
             [30, 3, 1]
         );
     }
 
     #[test]
-    fn test_constant_f64() {
+    fn test_rle_f64() {
         let vector1 = vec![1.23456, 1.23456, 1.23456, 1.23456, 1.23456];
         let stats = DataStats::new(&vector1);
         assert_eq!(
-            Constant::new(vector1.len(), stats.min, stats.bitdepth).to_bytes(),
+            RLE::new(vector1.len(), &vector1, stats.bitdepth).to_bytes(),
             [30, 0, 56, 50, 143, 252, 193, 192, 243, 63]
         );
     }
@@ -171,8 +210,8 @@ mod tests {
     fn test_compression() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
         let stats = DataStats::new(&vector1);
-        let c = Constant::new(vector1.len(), stats.min, stats.bitdepth).to_bytes();
-        let c2 = constant_to_data(vector1.len(), &c);
+        let c = RLE::new(vector1.len(), &vector1, stats.bitdepth).to_bytes();
+        let c2 = rle_to_data(vector1.len(), &c);
 
         assert_eq!(vector1, c2);
     }
