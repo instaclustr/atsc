@@ -79,7 +79,7 @@ impl CompressedStream {
     pub fn to_bytes(self) -> Vec<u8> {
         let mut out = Vec::new();
         let config = BinConfig::get();
-        &self.header.to_bytes(&mut out);
+        self.header.to_bytes(&mut out);
         bincode::encode_into_std_write(self.data_frames, &mut out, config).unwrap();
         out
     }
