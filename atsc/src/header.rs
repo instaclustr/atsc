@@ -14,25 +14,102 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use bincode::{Decode, Encode};
+use log::{debug, trace};
+use std::panic;
 
-#[derive(Encode, Decode, Debug, Clone)]
+/*  The current file version.
+    On file read, compressors check the version and uncompress accordingly to that (or fail)
+*/
+const CURRENT_VERSION: u32 = 1;
+#[derive(Debug, Clone)]
 pub struct CompressorHeader {
-    initial_segment: [u8; 4],
-    // We should go unsigned
-    frame_count: i16,
+    pub version: u32,
+    frame_count: u8,
+}
+
+fn verify_header_versions(version: u32) {
+    let current_version = CURRENT_VERSION;
+    trace!("Versions: c:{} h:{}", current_version, version);
+    match current_version.cmp(&version) {
+        std::cmp::Ordering::Less => panic!(
+            "Can't decompress! File is version ({}) which is higher than compressor version ({})!",
+            version, current_version
+        ),
+        std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => {
+            debug!("File version: {}", version)
+        }
+    }
 }
 
 impl CompressorHeader {
     pub fn new() -> Self {
         CompressorHeader {
-            initial_segment: *b"BRRO",
-            // We have to limit the bytes of the header
+            version: CURRENT_VERSION,
             frame_count: 0,
         }
     }
 
     pub fn add_frame(&mut self) {
         self.frame_count += 1;
+    }
+
+    pub fn get_frame_count(&mut self) -> u8 {
+        self.frame_count
+    }
+
+    pub fn to_bytes(&self, writer: &mut Vec<u8>) {
+        // Add initial_segment
+        writer.extend_from_slice(b"BRRO");
+        // Add version (u32 as 4 bytes)
+        writer.extend_from_slice(&self.version.to_le_bytes());
+        // Add frame_count
+        writer.push(self.frame_count);
+    }
+
+    pub fn from_bytes(data: [u8; 9]) -> Self {
+        // Extract initial_segment
+        let initial_segment = [data[0], data[1], data[2], data[3]];
+        if initial_segment != *b"BRRO" {
+            panic!("Magic bytes are not correct!");
+        }
+        // Extract version (u32 from 4 bytes)
+        let version = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+        // Extract frame_count
+        let frame_count = data[8];
+        verify_header_versions(version);
+        CompressorHeader {
+            version,
+            frame_count,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::compressor::Compressor;
+    use crate::data::CompressedStream;
+    use crate::header::CURRENT_VERSION;
+
+    #[test]
+    fn test_same_version_or_smaller() {
+        let vector1 = vec![1.0; 1024];
+        let mut cs = CompressedStream::new();
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        let b = cs.to_bytes();
+        // Read the first 8 Bytes, check version on the 5th to 8th byte
+        let version_bytes: [u8; 4] = [b[4], b[5], b[6], b[7]];
+        let version_number = u32::from_le_bytes(version_bytes);
+        assert_eq!(version_number, CURRENT_VERSION);
+    }
+
+    #[test]
+    #[should_panic(expected = "is higher than compressor version")]
+    fn test_higher_version() {
+        let vector1 = vec![1.0; 1024];
+        let mut cs = CompressedStream::new();
+        cs.header.version = 9;
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        let b = cs.to_bytes();
+        CompressedStream::from_bytes(&b);
     }
 }
