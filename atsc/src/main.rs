@@ -137,6 +137,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
     match arguments.compressor {
         CompressorType::Noop => op.set_compressor(Compressor::Noop),
         CompressorType::Constant => op.set_compressor(Compressor::Constant),
+        CompressorType::Rle => op.set_compressor(Compressor::RLE),
         CompressorType::Fft => op.set_compressor(Compressor::FFT),
         CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
         CompressorType::Idw => op.set_compressor(Compressor::Idw),
@@ -144,7 +145,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
     }
     for (cpr, data) in op.get_execution().into_iter() {
         debug!("Chunk size: {}", data.len());
-        // If compressor is a losseless one, compress with the error defined, or default
+        // If compressor is a lossy one, compress with the error defined, or default
         match arguments.compressor {
             CompressorType::Fft
             | CompressorType::Polynomial
@@ -155,6 +156,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
                 arguments.error as f32 / 100.0,
                 arguments.compression_selection_sample_level as usize,
             ),
+            // If compressor is a lossless one, just compress
             _ => cs.compress_chunk_with(data, cpr.to_owned()),
         }
     }
@@ -225,6 +227,7 @@ enum CompressorType {
     Constant,
     Polynomial,
     Idw,
+    Rle,
 }
 
 fn main() {

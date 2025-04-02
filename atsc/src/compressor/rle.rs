@@ -45,19 +45,19 @@ impl Encode for RLE {
         match &self.bitdepth {
             Bitdepth::U8 => {
                 debug!("Encoding as u8");
-                Encode::encode(&(self.constant as u8), encoder)?;
+                Encode::encode(&(self.rle as u8), encoder)?;
             }
             Bitdepth::I16 => {
                 debug!("Encoding as i16");
-                Encode::encode(&(self.constant as i16), encoder)?;
+                Encode::encode(&(self.rle as i16), encoder)?;
             }
             Bitdepth::I32 => {
                 debug!("Encoding as i32");
-                Encode::encode(&(self.constant as i32), encoder)?;
+                Encode::encode(&(self.rle as i32), encoder)?;
             }
             Bitdepth::F64 => {
                 debug!("Encoding as f64");
-                Encode::encode(&self.constant, encoder)?;
+                Encode::encode(&self.rle, encoder)?;
             }
         }
         Ok(())
@@ -105,26 +105,30 @@ impl RLE {
     /// Creates a new instance of the RLE compressor with the size needed to handle the worst case
     /// The "trick" here is to use a Hashmap for faster performance during the encoding process.
     /// and then convert it to a Vec<(f64, Vec<usize>)> for optimal space usage.
-    pub fn new(_sample_count: usize, data: &[f64], bitdepth: Bitdepth) -> Self {
+    pub fn new(data: &[f64], bitdepth: Bitdepth) -> Self {
         debug!("RLE compressor");
         // Capacity is 10% of the date lenght in the worst case scenario
-        let capacity = (data.len() * 0.1) as usize;
+        let len = data.len();
+        let capacity = (len as f64 * 0.1) as usize;
         let mut encoded: HashMap<f64, Vec<usize>> = HashMap::with_capacity(capacity);
         let mut i = 0;
-        let len = data.len();
-    
+
         while i < len {
             let value = data[i];
             let mut count = 1;
-    
-            while i + 1 < len && data[i + 1] == value count += 1;
+
+            while i + 1 < len && data[i + 1] == value {
+                count += 1;
                 i += 1;
             }
-    
-            encoded.entry(value).or_insert_with(Vec::new).push(i - count + 1);
+
+            encoded
+                .entry(value)
+                .or_insert_with(Vec::new)
+                .push(i - count + 1);
             i += 1;
         }
-    
+
         // Convert HashMap to Vec<(RLE, Vec<usize>)>
         let mut result: Vec<(f64, Vec<usize>)> = Vec::with_capacity(encoded.len());
         for (value, indices) in encoded {
@@ -152,23 +156,24 @@ impl RLE {
     }
 
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
-        let mut data = vec![0; frame_size];
+        let mut data: Vec<f64> = vec![0.0; frame_size];
         // Walk the structure and generate the data vec
-        for (value, indices) in self.rle {
-            for &start_index in indices {
-                let mut i = start_index;
-                while i < length && data[i] == 0 {
+        for (value, indices) in &self.rle {
+            for start_index in indices {
+                let mut i = *start_index;
+                while i < frame_size && data[i] == 0.0 {
                     data[i] = *value;
                     i += 1;
                 }
             }
         }
+        data
     }
 }
 
 pub fn rle_compressor(data: &[f64], stats: DataStats) -> CompressorResult {
     debug!("Initializing RLE Compressor. Error and Stats provided");
-    let c = RLE::new(data, data, stats.bitdepth);
+    let c = RLE::new(data, stats.bitdepth);
     CompressorResult::new(c.to_bytes(), 0.0)
 }
 
@@ -183,17 +188,12 @@ mod tests {
 
     #[test]
     fn test_rle_u8() {
-        let vector1 = vec![1.0, 1.0, 1.0, 1.0,
-                            2.0, 2.0,
-                            1.0, 1.0, 1.0, 1.0,
-                            2.0, 2.0,
-                            3.0, 3.0, 3.0, 3.0, 3.0, 3.0,
-                            1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+        let vector1 = vec![
+            1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0,
+            3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+        ];
         let stats = DataStats::new(&vector1);
-        assert_eq!(
-            RLE::new(vector1.len(), &vector1, stats.bitdepth).to_bytes(),
-            [30, 3, 1]
-        );
+        assert_eq!(RLE::new(&vector1, stats.bitdepth).to_bytes(), [30, 3, 1]);
     }
 
     #[test]
@@ -201,7 +201,7 @@ mod tests {
         let vector1 = vec![1.23456, 1.23456, 1.23456, 1.23456, 1.23456];
         let stats = DataStats::new(&vector1);
         assert_eq!(
-            RLE::new(vector1.len(), &vector1, stats.bitdepth).to_bytes(),
+            RLE::new(&vector1, stats.bitdepth).to_bytes(),
             [30, 0, 56, 50, 143, 252, 193, 192, 243, 63]
         );
     }
@@ -210,7 +210,7 @@ mod tests {
     fn test_compression() {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
         let stats = DataStats::new(&vector1);
-        let c = RLE::new(vector1.len(), &vector1, stats.bitdepth).to_bytes();
+        let c = RLE::new(&vector1, stats.bitdepth).to_bytes();
         let c2 = rle_to_data(vector1.len(), &c);
 
         assert_eq!(vector1, c2);
