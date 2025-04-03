@@ -97,6 +97,7 @@ impl Compressor {
             Compressor::Noop => CompressorResult::new(noop(data), 0.0),
             Compressor::FFT => fft_compressor(data, max_error, stats),
             Compressor::Constant => constant_compressor(data, stats),
+            Compressor::RLE => rle_compressor(data, stats),
             Compressor::Polynomial => {
                 polynomial_allowed_error(data, max_error, PolynomialType::Polynomial)
             }
