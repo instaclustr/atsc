@@ -21,8 +21,8 @@ use crate::{
 
 use super::BinConfig;
 use bincode::{Decode, Encode};
-use log::debug;
-use std::collections::HashMap;
+use log::{debug, trace};
+use std::collections::BTreeMap;
 
 const RLE_COMPRESSOR_ID: u8 = 60;
 
@@ -31,7 +31,6 @@ const RLE_COMPRESSOR_ID: u8 = 60;
 pub struct RLE {
     pub id: u8,
     pub rle: Vec<(f64, Vec<usize>)>,
-    // For internal use only
     bitdepth: Bitdepth,
 }
 
@@ -45,15 +44,15 @@ impl Encode for RLE {
         match &self.bitdepth {
             Bitdepth::U8 => {
                 debug!("Encoding as u8");
-                Encode::encode(&(self.rle as u8), encoder)?;
+                Encode::encode(&self.rle_as_u8(), encoder)?;
             }
             Bitdepth::I16 => {
                 debug!("Encoding as i16");
-                Encode::encode(&(self.rle as i16), encoder)?;
+                Encode::encode(&self.rle_as_i16(), encoder)?;
             }
             Bitdepth::I32 => {
                 debug!("Encoding as i32");
-                Encode::encode(&(self.rle as i32), encoder)?;
+                Encode::encode(&self.rle_as_i32(), encoder)?;
             }
             Bitdepth::F64 => {
                 debug!("Encoding as f64");
@@ -70,71 +69,133 @@ impl Decode for RLE {
     ) -> Result<Self, ::bincode::error::DecodeError> {
         let id = Decode::decode(decoder)?;
         let bitdepth = Decode::decode(decoder)?;
-        let constant: f64 = match bitdepth {
+        let rle: Vec<(f64, Vec<usize>)> = match bitdepth {
             Bitdepth::U8 => {
                 debug!("Decoding as u8");
-                let const_u8: u8 = Decode::decode(decoder)?;
-                const_u8 as f64
+                let rle_u8: Vec<(u8, Vec<usize>)> = Decode::decode(decoder)?;
+                RLE::rle_u8_into(rle_u8)
             }
             Bitdepth::I16 => {
                 debug!("Decoding as i16");
-                let const_i16: i16 = Decode::decode(decoder)?;
-                const_i16 as f64
+                let rle_i16: Vec<(i16, Vec<usize>)> = Decode::decode(decoder)?;
+                RLE::rle_i16_into(rle_i16)
             }
             Bitdepth::I32 => {
                 debug!("Decoding as i32");
-                let const_i32: i32 = Decode::decode(decoder)?;
-                const_i32 as f64
+                let rle_i32: Vec<(i32, Vec<usize>)> = Decode::decode(decoder)?;
+                RLE::rle_i32_into(rle_i32)
             }
             Bitdepth::F64 => {
                 debug!("Decoding as f64");
-                let const_f64: f64 = Decode::decode(decoder)?;
-                const_f64
+                let rle_f64: Vec<(f64, Vec<usize>)> = Decode::decode(decoder)?;
+                rle_f64
             }
         };
 
-        Ok(Self {
-            id,
-            constant,
-            bitdepth,
-        })
+        Ok(Self { id, rle, bitdepth })
     }
 }
 
 impl RLE {
-    /// Creates a new instance of the RLE compressor with the size needed to handle the worst case
-    /// The "trick" here is to use a Hashmap for faster performance during the encoding process.
+    // Helper functions to convert the RLE data to different types
+    fn rle_as_u8(&self) -> Vec<(u8, Vec<usize>)> {
+        let mut result: Vec<(u8, Vec<usize>)> = Vec::new();
+        for (value, indices) in &self.rle {
+            result.push((*value as u8, indices.clone()));
+        }
+        result
+    }
+
+    fn rle_as_i16(&self) -> Vec<(i16, Vec<usize>)> {
+        let mut result: Vec<(i16, Vec<usize>)> = Vec::new();
+        for (value, indices) in &self.rle {
+            result.push((*value as i16, indices.clone()));
+        }
+        result
+    }
+
+    fn rle_as_i32(&self) -> Vec<(i32, Vec<usize>)> {
+        let mut result: Vec<(i32, Vec<usize>)> = Vec::new();
+        for (value, indices) in &self.rle {
+            result.push((*value as i32, indices.clone()));
+        }
+        result
+    }
+
+    pub fn rle_u8_into(rle_u8: Vec<(u8, Vec<usize>)>) -> Vec<(f64, Vec<usize>)> {
+        let mut result: Vec<(f64, Vec<usize>)> = Vec::new();
+        for (value, indices) in &rle_u8 {
+            result.push((*value as f64, indices.clone()));
+        }
+        result
+    }
+
+    pub fn rle_i16_into(rle_i16: Vec<(i16, Vec<usize>)>) -> Vec<(f64, Vec<usize>)> {
+        let mut result: Vec<(f64, Vec<usize>)> = Vec::new();
+        for (value, indices) in &rle_i16 {
+            result.push((*value as f64, indices.clone()));
+        }
+        result
+    }
+
+    pub fn rle_i32_into(rle_i32: Vec<(i32, Vec<usize>)>) -> Vec<(f64, Vec<usize>)> {
+        let mut result: Vec<(f64, Vec<usize>)> = Vec::new();
+        for (value, indices) in &rle_i32 {
+            result.push((*value as f64, indices.clone()));
+        }
+        result
+    }
+
+    /// Creates a new instance of the index based RLE compressor with the size needed to handle the worst case
+    /// The "trick" here is to use a BTreeMap for faster performance during the encoding process.
     /// and then convert it to a Vec<(f64, Vec<usize>)> for optimal space usage.
+    /// NOTE: HashMap is faster, but we need to outcome to be always the same for the same input, which is not guaranteed
+    /// with HashMap.
     pub fn new(data: &[f64], bitdepth: Bitdepth) -> Self {
         debug!("RLE compressor");
         // Capacity is 10% of the date lenght in the worst case scenario
         let len = data.len();
-        let capacity = (len as f64 * 0.1) as usize;
-        let mut encoded: HashMap<f64, Vec<usize>> = HashMap::with_capacity(capacity);
+        let mut encoded: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
         let mut i = 0;
+        // This is where we found the first value of the current sequence
+        let mut current_index: usize = 0;
 
         while i < len {
             let value = data[i];
-            let mut count = 1;
 
-            while i + 1 < len && data[i + 1] == value {
-                count += 1;
+            if i + 1 < len && data[i + 1] == value {
                 i += 1;
+                continue;
+            } else if i + 1 >= len || data[i + 1] != value {
+                trace!("Value Change! Storing value: {}", value);
+                // Next value is different so store the current index
+                // First check if we have the value in the map
+                match encoded.get(&value.to_bits()) {
+                    Some(indices) => {
+                        trace!("Found value in map: {:?}", indices);
+                        // We have the value in the map, so we need to add the current index
+                        let mut indices = indices.clone();
+                        indices.push(current_index);
+                        encoded.insert(value.to_bits(), indices);
+                    }
+                    None => {
+                        trace!("Not found value in map!");
+                        // We don't have the value in the map, so we need to create a new entry
+                        encoded.insert(value.to_bits(), vec![current_index]);
+                    }
+                }
+                // Now we need to update the current index (it will start on the next value)
+                current_index = i + 1;
             }
-
-            encoded
-                .entry(value)
-                .or_insert_with(Vec::new)
-                .push(i - count + 1);
             i += 1;
         }
-
+        trace!("Encoded: {:?}", encoded);
         // Convert HashMap to Vec<(RLE, Vec<usize>)>
         let mut result: Vec<(f64, Vec<usize>)> = Vec::with_capacity(encoded.len());
         for (value, indices) in encoded {
-            result.push((value, indices));
+            result.push((f64::from_bits(value), indices));
         }
-
+        trace!("Vector: {:?}", result);
         RLE {
             id: RLE_COMPRESSOR_ID,
             rle: result,
@@ -157,14 +218,33 @@ impl RLE {
 
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
         let mut data: Vec<f64> = vec![0.0; frame_size];
-        // Walk the structure and generate the data vec
+
+        // Optimize allocation, 1st: Calculate the total number of elements in the flattened vector
+        let total_elements: usize = self.rle.iter().map(|(_, indices)| indices.len()).sum();
+
+        // 2nd: Reserve the exact capacity for the flattened vector
+        let mut flattened: Vec<(usize, f64)> = Vec::with_capacity(total_elements);
+
+        // Flatten the RLE representation into a vector of (index, value) pairs
         for (value, indices) in &self.rle {
-            for start_index in indices {
-                let mut i = *start_index;
-                while i < frame_size && data[i] == 0.0 {
-                    data[i] = *value;
-                    i += 1;
-                }
+            for &index in indices.iter() {
+                flattened.push((index, *value));
+            }
+        }
+
+        // Sort the flattened vector by index
+        flattened.sort_unstable_by_key(|&(index, _)| index);
+
+        // Fill the sequence based on the sorted (index, value) pairs
+        for i in 0..flattened.len() {
+            let (start_index, value) = flattened[i];
+            let end_index = if i + 1 < flattened.len() {
+                flattened[i + 1].0
+            } else {
+                frame_size
+            };
+            for idx in data.iter_mut().take(end_index).skip(start_index) {
+                *idx = value;
             }
         }
         data
@@ -187,13 +267,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_for_constant() {
+        let vector1 = vec![1.0; 512];
+        let stats = DataStats::new(&vector1);
+        let rle = RLE::new(&vector1, stats.bitdepth);
+        assert_eq!(rle.to_bytes(), [60, 3, 1, 1, 1, 0]);
+    }
+
+    #[test]
+    fn test_simple_validator() {
+        let vector1 = vec![
+            1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0,
+        ];
+        let stats = DataStats::new(&vector1);
+        let rle = RLE::new(&vector1, stats.bitdepth);
+        assert_eq!(
+            rle.to_bytes(),
+            [60, 3, 5, 1, 1, 0, 2, 1, 1, 3, 1, 3, 4, 1, 6, 5, 1, 10]
+        );
+    }
+
+    #[test]
     fn test_rle_u8() {
         let vector1 = vec![
             1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0,
             3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
         ];
         let stats = DataStats::new(&vector1);
-        assert_eq!(RLE::new(&vector1, stats.bitdepth).to_bytes(), [30, 3, 1]);
+        assert_eq!(
+            RLE::new(&vector1, stats.bitdepth).to_bytes(),
+            [60, 3, 3, 1, 3, 0, 6, 18, 2, 2, 4, 10, 3, 1, 12]
+        );
     }
 
     #[test]
@@ -202,17 +306,30 @@ mod tests {
         let stats = DataStats::new(&vector1);
         assert_eq!(
             RLE::new(&vector1, stats.bitdepth).to_bytes(),
-            [30, 0, 56, 50, 143, 252, 193, 192, 243, 63]
+            [60, 0, 1, 56, 50, 143, 252, 193, 192, 243, 63, 1, 0]
         );
     }
 
     #[test]
     fn test_compression() {
-        let vector1 = vec![1.0, 1.0, 1.0, 1.0, 1.0];
+        let vector1 = vec![
+            1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0,
+        ];
         let stats = DataStats::new(&vector1);
         let c = RLE::new(&vector1, stats.bitdepth).to_bytes();
         let c2 = rle_to_data(vector1.len(), &c);
+        assert_eq!(vector1, c2);
+    }
 
+    #[test]
+    fn test_compression_2() {
+        let vector1 = vec![
+            1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0,
+            3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+        ];
+        let stats = DataStats::new(&vector1);
+        let c = RLE::new(&vector1, stats.bitdepth).to_bytes();
+        let c2 = rle_to_data(vector1.len(), &c);
         assert_eq!(vector1, c2);
     }
 }

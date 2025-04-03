@@ -68,7 +68,7 @@ impl Compressor {
             Compressor::Constant => constant_compressor(data, stats).compressed_data,
             Compressor::Polynomial => polynomial(data, PolynomialType::Polynomial),
             Compressor::Idw => polynomial(data, PolynomialType::Idw),
-            Compressor::RLE => rle_compressor(data),
+            Compressor::RLE => rle_compressor(data, stats).compressed_data,
             _ => todo!(),
         }
     }
@@ -86,7 +86,7 @@ impl Compressor {
             Compressor::Idw => {
                 polynomial_allowed_error(data, max_error, PolynomialType::Idw).compressed_data
             }
-            Compressor::RLE => rle_compressor(data).compressed_data,
+            Compressor::RLE => rle_compressor(data, stats).compressed_data,
             _ => todo!(),
         }
     }
@@ -112,6 +112,7 @@ impl Compressor {
             Compressor::Constant => constant_to_data(samples, data),
             Compressor::Polynomial => to_data(samples, data),
             Compressor::Idw => to_data(samples, data),
+            Compressor::RLE => rle_to_data(samples, data),
             _ => todo!(),
         }
     }
