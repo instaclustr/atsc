@@ -42,6 +42,11 @@ fn test_polynomial() {
 }
 
 #[test]
+fn test_rle() {
+    test_suite("rle");
+}
+
+#[test]
 fn test_auto() {
     test_suite("auto");
 }
