@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use atsc::compressor::Compressor;
+use atsc::compressor::{vsri, Compressor};
 use atsc::csv::{read_samples, read_samples_with_headers};
 use atsc::data::CompressedStream;
 use atsc::optimizer::OptimizerPlan;
@@ -24,6 +24,18 @@ use log::{debug, error};
 use std::error::Error;
 use std::path::PathBuf;
 use wavbrro::wavbrro::WavBrro;
+
+/// Process VSRI
+/// Function to write out VSRI, since it is straight forward can be written out immediately
+fn write_vsri(vsri_data: &[i32], file_path: &mut PathBuf) -> Result<(), Box<dyn Error>> {
+    // Need special stream for VSRI
+    let mut cs = CompressedStream::new();
+    // Compress a VSRI
+    file_path.set_extension("vsri");
+    cs.compress_vsri(&vsri_data);
+    std::fs::write(file_path, cs.to_bytes())?;
+    Ok(())
+}
 
 /// Processes the given input based on the provided arguments.
 fn process_args(arguments: &Args) -> Result<(), Box<dyn Error>> {
@@ -96,9 +108,14 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
             // Assuming that header[0] is a time field and header[1] is value field
             read_samples_with_headers(&file_path, headers[0], headers[1])?
         };
-
+        // Timestamp needs to be compressed as VSRI
+        let timestamps: Vec<i32> = (&samples)
+            .into_iter()
+            .map(|sample| sample.timestamp as i32)
+            .collect();
         let data: Vec<f64> = samples.into_iter().map(|sample| sample.value).collect();
-
+        // Compress the timestamps and write them
+        write_vsri(&timestamps, &mut file_path.clone())?;
         if arguments.verbose {
             println!("Input={:?}", data);
         }
@@ -112,12 +129,7 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
                 if arguments.verbose {
                     println!("Input={:?}", vsri_data);
                 }
-                // Need special stream for VSRI
-                let mut cs = CompressedStream::new();
-                // Compress a VSRI
-                file_path.set_extension("vsri");
-                cs.compress_vsri(&vsri_data);
-                cs.to_bytes()
+
             }
             _ => {
                 // Read an WavBRRO file and compress it
