@@ -17,12 +17,12 @@ limitations under the License.
 use crate::compressor::{BinConfig, Compressor};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
-use bincode::{Decode, Encode};
+//use bincode::{Decode, Encode};
 use log::debug;
 
-#[derive(Encode, Decode, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct CompressedStream {
-    header: CompressorHeader,
+    pub header: CompressorHeader,
     data_frames: Vec<CompressorFrame>,
 }
 
@@ -40,6 +40,7 @@ impl CompressedStream {
         compressor_frame.compress(chunk);
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
+        self.header.add_frame();
     }
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
@@ -48,6 +49,7 @@ impl CompressedStream {
         compressor_frame.compress(chunk);
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
+        self.header.add_frame();
     }
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
@@ -70,21 +72,34 @@ impl CompressedStream {
         }
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
+        self.header.add_frame();
     }
 
     /// Transforms the whole CompressedStream into bytes to be written to a file
     pub fn to_bytes(self) -> Vec<u8> {
-        // Will this chain encode??
+        let mut out = Vec::new();
         let config = BinConfig::get();
-        bincode::encode_to_vec(self, config).unwrap()
+        self.header.to_bytes(&mut out);
+        bincode::encode_into_std_write(self.data_frames, &mut out, config).unwrap();
+        out
     }
 
     /// Gets a binary stream and generates a Compressed Stream, at this point, anything inside the stream is
     /// still in the compressed state
     pub fn from_bytes(data: &[u8]) -> Self {
         let config = BinConfig::get();
-        let (compressed_stream, _) = bincode::decode_from_slice(data, config).unwrap();
-        compressed_stream
+        // Split the binary data into header and data
+        let (binary_header, binary_data) = data.split_at(9);
+        let header = CompressorHeader::from_bytes(
+            binary_header
+                .try_into()
+                .expect("Header with incorrect length!"),
+        );
+        let (data_frames, _) = bincode::decode_from_slice(binary_data, config).unwrap();
+        CompressedStream {
+            header,
+            data_frames,
+        }
     }
     pub fn decompress(&self) -> Vec<f64> {
         self.data_frames
@@ -115,12 +130,27 @@ mod tests {
     }
 
     #[test]
+    fn test_frame_count() {
+        let vector1 = vec![1.0; 1024];
+        let mut cs = CompressedStream::new();
+        cs.compress_chunk_with(&vector1, Compressor::Constant);
+        println!("{:?}", cs.header.get_frame_count());
+        assert_eq!(
+            usize::from(cs.header.get_frame_count()),
+            cs.data_frames.len()
+        );
+    }
+
+    #[test]
     fn test_to_bytes() {
         let vector1 = vec![1.0; 1024];
         let mut cs = CompressedStream::new();
         cs.compress_chunk_with(&vector1, Compressor::Constant);
         let b = cs.to_bytes();
-        assert_eq!(b, [66, 82, 82, 79, 0, 1, 41, 251, 0, 4, 3, 3, 30, 3, 1]);
+        assert_eq!(
+            b,
+            [66, 82, 82, 79, 1, 0, 0, 0, 1, 1, 41, 251, 0, 4, 3, 3, 30, 3, 1]
+        );
     }
 
     #[test]
