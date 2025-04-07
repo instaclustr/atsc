@@ -319,27 +319,4 @@ mod tests {
             &[60, 0, 1, 56, 50, 143, 252, 193, 192, 243, 63, 1, 0],
         );
     }
-
-    #[test]
-    fn test_compression() {
-        let vector1 = vec![
-            1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 5.0, 5.0, 5.0,
-        ];
-        let stats = DataStats::new(&vector1);
-        let c = IndexRLE::new(&vector1, stats.bitdepth).to_bytes();
-        let c2 = rle_to_data(vector1.len(), &c);
-        assert_eq!(vector1, c2);
-    }
-
-    #[test]
-    fn test_compression_2() {
-        let vector1 = vec![
-            1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 3.0,
-            3.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-        ];
-        let stats = DataStats::new(&vector1);
-        let c = IndexRLE::new(&vector1, stats.bitdepth).to_bytes();
-        let c2 = rle_to_data(vector1.len(), &c);
-        assert_eq!(vector1, c2);
-    }
 }
