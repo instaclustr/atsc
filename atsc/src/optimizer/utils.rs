@@ -158,6 +158,7 @@ fn split_n(x: f64) -> (i64, f64) {
         (0, 0.0)
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

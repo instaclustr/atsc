@@ -34,6 +34,11 @@ fn test_compressor_noop() {
 }
 
 #[test]
+fn test_compressor_rle() {
+    test_lossless_compression("rle")
+}
+
+#[test]
 fn test_compressor_fft_lossy() {
     test_lossy_compression("fft")
 }

@@ -74,7 +74,7 @@ impl CompressorFrame {
         // We need enough samples to do decent compression, minimum is 128 (2^7)
         let data_sample = COMPRESSION_SPEED[compression_speed] as usize;
         // Eligible compressors for use
-        let compressor_list = [Compressor::FFT, Compressor::Polynomial];
+        let compressor_list = [Compressor::FFT, Compressor::Polynomial, Compressor::RLE];
         // Do a statistical analysis of the data, let's see if we can pick a compressor out of this.
         let stats = DataStats::new(data);
         // Checking the statistical analysis and chose, if possible, a compressor

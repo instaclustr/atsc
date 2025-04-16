@@ -49,6 +49,7 @@ Internally ATSC uses the following methods for time series fitting:
 * Constant
 * Interpolation - Catmull-Rom
 * Interpolation - Inverse Distance Weight
+* RLE (Run Length Encoder)
 
 For a more detailed insight into ATSC read the paper here: [ATSC - A novel approach to time-series compression](https://github.com/instaclustr/atsc/tree/main/paper/ATCS-AdvancedTimeSeriesCompressor.pdf)
 

@@ -23,11 +23,13 @@ use self::constant::{constant_compressor, constant_to_data};
 use self::fft::{fft, fft_compressor, fft_to_data};
 use self::noop::{noop, noop_to_data};
 use self::polynomial::{polynomial, polynomial_allowed_error, to_data, PolynomialType};
+use self::rle::{rle_compressor, rle_to_data};
 
 pub mod constant;
 pub mod fft;
 pub mod noop;
 pub mod polynomial;
+pub mod rle;
 
 #[derive(Encode, Decode, Default, Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum Compressor {
@@ -38,6 +40,7 @@ pub enum Compressor {
     Constant,
     Polynomial,
     Auto,
+    RLE,
 }
 
 /// Struct to store the results of a compression round. Will be used to pick the best compressor.
@@ -65,6 +68,7 @@ impl Compressor {
             Compressor::Constant => constant_compressor(data, stats).compressed_data,
             Compressor::Polynomial => polynomial(data, PolynomialType::Polynomial),
             Compressor::Idw => polynomial(data, PolynomialType::Idw),
+            Compressor::RLE => rle_compressor(data, stats).compressed_data,
             _ => todo!(),
         }
     }
@@ -82,6 +86,7 @@ impl Compressor {
             Compressor::Idw => {
                 polynomial_allowed_error(data, max_error, PolynomialType::Idw).compressed_data
             }
+            Compressor::RLE => rle_compressor(data, stats).compressed_data,
             _ => todo!(),
         }
     }
@@ -92,6 +97,7 @@ impl Compressor {
             Compressor::Noop => CompressorResult::new(noop(data), 0.0),
             Compressor::FFT => fft_compressor(data, max_error, stats),
             Compressor::Constant => constant_compressor(data, stats),
+            Compressor::RLE => rle_compressor(data, stats),
             Compressor::Polynomial => {
                 polynomial_allowed_error(data, max_error, PolynomialType::Polynomial)
             }
@@ -107,6 +113,7 @@ impl Compressor {
             Compressor::Constant => constant_to_data(samples, data),
             Compressor::Polynomial => to_data(samples, data),
             Compressor::Idw => to_data(samples, data),
+            Compressor::RLE => rle_to_data(samples, data),
             _ => todo!(),
         }
     }

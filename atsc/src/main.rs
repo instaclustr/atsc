@@ -129,22 +129,24 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
 /// Compresses the data based on the provided tag and arguments.
 fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
     debug!("Compressing data!");
-    //let optimizer_results = optimizer::process_data(vec, tag);
     // Create Optimization Plan and Stream for the data.
     let mut op = OptimizerPlan::plan(vec);
     let mut cs = CompressedStream::new();
+    let mut frame_number = 1;
     // Assign the compressor if it was selected
     match arguments.compressor {
         CompressorType::Noop => op.set_compressor(Compressor::Noop),
         CompressorType::Constant => op.set_compressor(Compressor::Constant),
+        CompressorType::Rle => op.set_compressor(Compressor::RLE),
         CompressorType::Fft => op.set_compressor(Compressor::FFT),
         CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
         CompressorType::Idw => op.set_compressor(Compressor::Idw),
         CompressorType::Auto => op.set_compressor(Compressor::Auto),
     }
     for (cpr, data) in op.get_execution().into_iter() {
-        debug!("Chunk size: {}", data.len());
-        // If compressor is a losseless one, compress with the error defined, or default
+        debug!("--- Frame {}. Chunk size: {}", frame_number, data.len());
+        frame_number += 1;
+        // If compressor is a lossy one, compress with the error defined, or default
         match arguments.compressor {
             CompressorType::Fft
             | CompressorType::Polynomial
@@ -155,6 +157,7 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
                 arguments.error as f32 / 100.0,
                 arguments.compression_selection_sample_level as usize,
             ),
+            // If compressor is a lossless one, just compress
             _ => cs.compress_chunk_with(data, cpr.to_owned()),
         }
     }
@@ -225,6 +228,7 @@ enum CompressorType {
     Constant,
     Polynomial,
     Idw,
+    Rle,
 }
 
 fn main() {
