@@ -1,4 +1,5 @@
 use atsc::csv::{read_samples, read_samples_with_headers};
+use atsc::data::CompressedStream;
 use atsc::utils::error::calculate_error;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -148,6 +149,86 @@ fn test_csv_input_compression_without_header() {
         original_samples,
         uncompressed_samples
     );
+}
+
+#[test]
+fn test_vsri_roundtrip() {
+    // Test that VSRI compression and decompression works correctly
+    // Note: CSV timestamp parsing is not yet implemented (all timestamps are 0),
+    // so we verify VSRI works with a simple timestamp sequence
+    
+    let test_dir = tempfile::tempdir().unwrap().into_path();
+    let vsri_file_path = test_dir.join("test.vsri");
+
+    // Create test timestamps
+    let original_timestamps: Vec<i32> = (0..100)
+        .map(|i| 1730419200 + i * 20) // 20 second intervals
+        .collect();
+
+    // Manually compress and write VSRI
+    let mut cs = CompressedStream::new();
+    cs.compress_vsri(&original_timestamps);
+    let vsri_bytes = cs.to_bytes();
+    fs::write(&vsri_file_path, &vsri_bytes).unwrap();
+
+    // Verify VSRI file was created
+    assert!(
+        vsri_file_path.exists(),
+        "VSRI file should be created at {:?}",
+        vsri_file_path
+    );
+
+    // Read and verify VSRI file can be deserialized
+    let read_bytes = fs::read(&vsri_file_path).unwrap();
+    let compressed_stream = CompressedStream::from_bytes(&read_bytes);
+    let decompressed_timestamps = compressed_stream.decompress_vsri();
+
+    // Verify timestamps match
+    assert_eq!(
+        original_timestamps.len(),
+        decompressed_timestamps.len(),
+        "Timestamp count mismatch"
+    );
+    
+    assert_eq!(
+        original_timestamps, decompressed_timestamps,
+        "Timestamps should match after roundtrip"
+    );
+}
+
+#[test]
+fn test_csv_vsri_file_creation() {
+    // Test that CSV compression creates VSRI files
+    // Note: CSV timestamp parsing is not yet implemented (timestamps are hardcoded to 0)
+    // This test verifies the integration works, though full timestamp fidelity requires CSV parser implementation
+    let filepath = Path::new("./tests/csv/cpu_utilization.csv");
+    let test_dir = prepare_test_dir_and_copy_file(filepath);
+    let csv_file_path = test_dir.join("cpu_utilization.csv");
+    let vsri_file_path = test_dir.join("cpu_utilization.vsri");
+
+    // Compress CSV (this should create .vsri file for timestamps)
+    run_compressor(&[
+        "--compressor",
+        "noop",
+        "--csv",
+        "--fields=time,value",
+        csv_file_path.to_str().unwrap(),
+    ]);
+
+    // Verify VSRI file was created
+    assert!(
+        vsri_file_path.exists(),
+        "VSRI file should be created during CSV compression at {:?}",
+        vsri_file_path
+    );
+
+    // Verify it can be read back without error
+    let vsri_bytes = fs::read(&vsri_file_path).unwrap();
+    let compressed_stream = CompressedStream::from_bytes(&vsri_bytes);
+    let _timestamps = compressed_stream.decompress_vsri();
+    
+    // Note: Currently CSV timestamps are all 0, so VSRI creates a degenerate segment
+    // Once CSV timestamp parsing is implemented, this test should verify full fidelity
 }
 
 fn test_lossless_compression(compressor: &str) {
