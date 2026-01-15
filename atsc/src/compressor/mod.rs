@@ -125,7 +125,9 @@ impl Compressor {
             Compressor::VSRI => {
                 // VSRI data should be decompressed using decompress_vsri, but if called through
                 // the f64 path, return empty to avoid panic
-                log::warn!("Attempted to decompress VSRI frame as f64 data, returning empty vector");
+                log::warn!(
+                    "Attempted to decompress VSRI frame as f64 data, returning empty vector"
+                );
                 Vec::new()
             }
         }

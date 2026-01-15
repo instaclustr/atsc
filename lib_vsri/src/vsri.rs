@@ -479,12 +479,18 @@ impl Vsri {
             match i {
                 1 => {
                     min_ts = line.trim().parse::<i32>().map_err(|e| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid min_ts: {}", e))
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Invalid min_ts: {}", e),
+                        )
                     })?;
                 }
                 2 => {
                     max_ts = line.trim().parse::<i32>().map_err(|e| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid max_ts: {}", e))
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Invalid max_ts: {}", e),
+                        )
                     })?;
                 }
                 _ => {
@@ -493,10 +499,16 @@ impl Vsri {
                         .map(|value| value.trim().parse::<i32>())
                         .collect::<Result<Vec<i32>, _>>()
                         .map_err(|e| {
-                            std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid segment: {}", e))
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!("Invalid segment: {}", e),
+                            )
                         })?;
                     let segment: [i32; 4] = values.try_into().map_err(|_| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, "Segment must have exactly 4 values")
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Segment must have exactly 4 values",
+                        )
                     })?;
                     segments.push(segment);
                 }

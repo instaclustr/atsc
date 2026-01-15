@@ -119,30 +119,7 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
         if arguments.verbose {
             println!("Input={:?}", data);
         }
-        /*        let compressed_data = match arguments.compressor {
-            CompressorType::Vsri => {
-                // Get data in i32 format!
-                let vsri_data = [
-                    1729606100, 1729606120, 1729606140, 1729606160, 1729606180, 1729606200,
-                    1729606220,
-                ];
-                if arguments.verbose {
-                    println!("Input={:?}", vsri_data);
-                }
-
-            }
-            _ => {
-                // Read an WavBRRO file and compress it
-                let data = WavBrro::from_file(&file_path)?;
-                if arguments.verbose {
-                    println!("Input={:?}", data);
-                }
-                file_path.set_extension("bro");
-                //compress
-                compress_data(&data, arguments)
-            }
-        }; */
-        // Compress
+        // Compress the data
         let compressed_data = compress_data(&data, arguments);
 
         // Write
