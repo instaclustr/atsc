@@ -1,5 +1,6 @@
 /target
 *.flac
 .vscode/settings.json
+tmp
 
 .idea
