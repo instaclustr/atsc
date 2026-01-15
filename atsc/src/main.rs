@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use atsc::compressor::{vsri, Compressor};
+use atsc::compressor::Compressor;
 use atsc::csv::{read_samples, read_samples_with_headers};
 use atsc::data::CompressedStream;
 use atsc::optimizer::OptimizerPlan;
@@ -32,7 +32,7 @@ fn write_vsri(vsri_data: &[i32], file_path: &mut PathBuf) -> Result<(), Box<dyn 
     let mut cs = CompressedStream::new();
     // Compress a VSRI
     file_path.set_extension("vsri");
-    cs.compress_vsri(&vsri_data);
+    cs.compress_vsri(vsri_data);
     std::fs::write(file_path, cs.to_bytes())?;
     Ok(())
 }
@@ -109,8 +109,8 @@ fn process_single_file(mut file_path: PathBuf, arguments: &Args) -> Result<(), B
             read_samples_with_headers(&file_path, headers[0], headers[1])?
         };
         // Timestamp needs to be compressed as VSRI
-        let timestamps: Vec<i32> = (&samples)
-            .into_iter()
+        let timestamps: Vec<i32> = samples
+            .iter()
             .map(|sample| sample.timestamp as i32)
             .collect();
         let data: Vec<f64> = samples.into_iter().map(|sample| sample.value).collect();

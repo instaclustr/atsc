@@ -68,7 +68,8 @@ impl Compressor {
             Compressor::Constant => constant_compressor(data, stats).compressed_data,
             Compressor::Polynomial => polynomial(data, PolynomialType::Polynomial),
             Compressor::Idw => polynomial(data, PolynomialType::Idw),
-            _ => todo!(),
+            Compressor::Auto => panic!("Auto compressor requires bounded compression with error threshold"),
+            Compressor::VSRI => panic!("VSRI compressor is for timestamps (i32), use compress_vsri instead"),
         }
     }
 
@@ -85,7 +86,8 @@ impl Compressor {
             Compressor::Idw => {
                 polynomial_allowed_error(data, max_error, PolynomialType::Idw).compressed_data
             }
-            _ => todo!(),
+            Compressor::Auto => panic!("Auto compressor should use optimizer module for selection"),
+            Compressor::VSRI => panic!("VSRI compressor is for timestamps (i32), use compress_vsri instead"),
         }
     }
 
@@ -99,7 +101,8 @@ impl Compressor {
                 polynomial_allowed_error(data, max_error, PolynomialType::Polynomial)
             }
             Compressor::Idw => polynomial_allowed_error(data, max_error, PolynomialType::Idw),
-            _ => todo!(),
+            Compressor::Auto => panic!("Auto compressor should use optimizer module for selection"),
+            Compressor::VSRI => panic!("VSRI compressor is for timestamps (i32), not f64 data"),
         }
     }
 
@@ -110,7 +113,8 @@ impl Compressor {
             Compressor::Constant => constant_to_data(samples, data),
             Compressor::Polynomial => to_data(samples, data),
             Compressor::Idw => to_data(samples, data),
-            _ => todo!(),
+            Compressor::Auto => panic!("Auto is a meta-compressor, actual compressor type should be stored in frame"),
+            Compressor::VSRI => panic!("VSRI compressor is for timestamps (i32), use decompress_vsri instead"),
         }
     }
 
@@ -123,13 +127,7 @@ impl Compressor {
     }
 }
 
-pub struct BinConfig {
-    config: Configuration,
-}
-
-impl BinConfig {
-    pub fn get() -> Configuration {
-        // Little endian and Variable int encoding
-        config::standard()
-    }
+/// Returns the standard bincode configuration (little endian, variable int encoding)
+pub fn bincode_config() -> Configuration {
+    config::standard()
 }

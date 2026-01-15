@@ -22,7 +22,7 @@ use bincode::{Decode, Encode};
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{cmp::Ordering, collections::BinaryHeap};
 
-use super::{BinConfig, CompressorResult};
+use super::{bincode_config, CompressorResult};
 use log::{debug, error, info, trace, warn};
 
 const FFT_COMPRESSOR_ID: u8 = 15;
@@ -387,13 +387,13 @@ impl FFT {
         self.frequencies = FFT::fft_trim(&mut buffer, max_freq);
     }
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
+        let config = bincode_config();
         let (fft, _) = bincode::decode_from_slice(data, config).unwrap();
         fft
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let config = BinConfig::get();
+        let config = bincode_config();
         bincode::encode_to_vec(self, config).unwrap()
     }
 

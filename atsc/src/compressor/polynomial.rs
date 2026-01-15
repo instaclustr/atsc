@@ -17,14 +17,11 @@ limitations under the License.
 use crate::optimizer::utils::{Bitdepth, DataStats};
 use crate::utils::{error::calculate_error, round_and_limit_f64, round_f64, DECIMAL_PRECISION};
 
-use super::{BinConfig, CompressorResult};
+use super::{bincode_config, CompressorResult};
 use bincode::{Decode, Encode};
 use inverse_distance_weight::IDW;
 use log::{debug, info, trace};
 use splines::{Interpolation, Key, Spline};
-
-const POLYNOMIAL_COMPRESSOR_ID: u8 = 0;
-const IDW_COMPRESSOR_ID: u8 = 1;
 
 #[derive(Encode, Decode, Default, Debug, Clone, PartialEq)]
 pub enum PolynomialType {
@@ -314,13 +311,13 @@ impl Polynomial {
     }
 
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
+        let config = bincode_config();
         let (poly, _) = bincode::decode_from_slice(data, config).unwrap();
         poly
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let config = BinConfig::get();
+        let config = bincode_config();
         bincode::encode_to_vec(self, config).unwrap()
     }
 

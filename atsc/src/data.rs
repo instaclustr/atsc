@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::compressor::{BinConfig, Compressor};
+use crate::compressor::{bincode_config, Compressor};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
 use bincode::{Decode, Encode};
@@ -83,14 +83,14 @@ impl CompressedStream {
     /// Transforms the whole CompressedStream into bytes to be written to a file
     pub fn to_bytes(self) -> Vec<u8> {
         // Will this chain encode??
-        let config = BinConfig::get();
+        let config = bincode_config();
         bincode::encode_to_vec(self, config).unwrap()
     }
 
     /// Gets a binary stream and generates a Compressed Stream, at this point, anything inside the stream is
     /// still in the compressed state
     pub fn from_bytes(data: &[u8]) -> Self {
-        let config = BinConfig::get();
+        let config = bincode_config();
         let (compressed_stream, _) = bincode::decode_from_slice(data, config).unwrap();
         compressed_stream
     }

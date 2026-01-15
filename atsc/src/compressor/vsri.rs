@@ -16,7 +16,7 @@ limitations under the License.
 
 use crate::compressor::CompressorResult;
 
-use super::BinConfig;
+use super::bincode_config;
 use bincode::{Decode, Encode};
 use lib_vsri::vsri::Vsri;
 use log::debug;
@@ -42,7 +42,7 @@ impl VSRI {
 
     /// Receives a data stream and generates a Constant
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
+        let config = bincode_config();
         let (ct, _) = bincode::decode_from_slice(data, config).unwrap();
         ct
     }
@@ -50,7 +50,7 @@ impl VSRI {
     /// This function transforms the structure into a Binary stream
     pub fn to_bytes(&self) -> Vec<u8> {
         // Use Bincode and flate2-rs? Do this at the Stream Level?
-        let config = BinConfig::get();
+        let config = bincode_config();
         bincode::encode_to_vec(self, config).unwrap()
     }
 

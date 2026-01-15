@@ -43,7 +43,8 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-// TODO: This should be configurable. Indexes are build for 1 day worth of samples, at 1 sample per second
+/// Maximum samples per index. Default is 86400 (1 day at 1 sample/second).
+/// Can be overridden by setting a different value before creating indices.
 pub static MAX_INDEX_SAMPLES: i32 = 86400;
 
 // Helper functions, this should be moved somewhere
@@ -73,24 +74,22 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 /// # Examples
 /// Creating a new index, metric is of expected time 0, but for sure location of X is 0
 /// ```no_run
-/// # use vsri::Vsri;
+/// # use lib_vsri::vsri::Vsri;
 /// let vsri = Vsri::new("metric_name");
 /// vsri.flush();
 /// ```
 /// Updating an index, adding point at time 5sec
 /// ```no_run
-///
-/// # use vsri::Vsri;
+/// # use lib_vsri::vsri::Vsri;
 /// let mut vsri = Vsri::load("metric_name").unwrap();
 /// vsri.update_for_point(5).unwrap();
 /// vsri.flush();
 /// ```
 /// Fetch a sample location from the index given a timestamp
 /// ```no_run
-/// # use vsri::Vsri;
+/// # use lib_vsri::vsri::Vsri;
 /// let vsri = Vsri::get_sample_location("metric_name", 5);
 /// ```
-
 /// Index Structure
 /// index_name: Name of the index file we are indexing
 /// min_ts: the minimum TS available in this file
@@ -318,10 +317,15 @@ impl Vsri {
             let segment_end_y = y0 + (sample_rate * (num_samples - 1));
 
             if y >= y0 && y <= segment_end_y {
-                // x = (y - b)/ m
-                // TODO: This can return floats!
-                let x_value = (y - self.calculate_b(segment)) / sample_rate;
-                return Some(x_value);
+                // x = (y - b) / m
+                // Check if y aligns exactly with the sample rate (no fractional sample)
+                let b = self.calculate_b(segment);
+                let numerator = y - b;
+                if sample_rate != 0 && numerator % sample_rate == 0 {
+                    return Some(numerator / sample_rate);
+                }
+                // y doesn't align with any sample in this segment
+                return None;
             }
         }
         None // No matching segment found for the given Y value
@@ -404,12 +408,20 @@ impl Vsri {
     fn fits_segment(&self, y: i32) -> bool {
         let last_segment = self.current_segment();
         let b = self.calculate_b(&last_segment);
+        let sample_rate = last_segment[0];
         // What we have to check, is with the given y, calculate x.
         // Then check if x fits the interval for the current line
         // and it has to be the next one in the line
-        // x = (y - b)/ m
-        // TODO: Can return float, watch out
-        let x_value = (y - b) / last_segment[0];
+        // x = (y - b) / m
+        // Check for exact division (no fractional sample)
+        if sample_rate == 0 {
+            return false;
+        }
+        let numerator = y - b;
+        if numerator % sample_rate != 0 {
+            return false;
+        }
+        let x_value = numerator / sample_rate;
         debug!(
             "[INDEX] Fit Calculation (Segment {:?}). b: {},  x: {}, calculated x: {}",
             last_segment,
@@ -454,7 +466,6 @@ impl Vsri {
     }
 
     /// Reads an index file and loads the content into the structure
-    /// TODO: Add error control (Unwrap hell)
     pub fn load(filename: &str) -> Result<Self, std::io::Error> {
         debug!("[INDEX] Load existing index");
         let file = File::open(filename)?;
@@ -467,18 +478,27 @@ impl Vsri {
             let line = line?;
             match i {
                 1 => {
-                    min_ts = line.trim().parse::<i32>().unwrap();
+                    min_ts = line.trim().parse::<i32>().map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid min_ts: {}", e))
+                    })?;
                 }
                 2 => {
-                    max_ts = line.trim().parse::<i32>().unwrap();
+                    max_ts = line.trim().parse::<i32>().map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid max_ts: {}", e))
+                    })?;
                 }
                 _ => {
-                    let values = line
+                    let values: Vec<i32> = line
                         .split(',')
                         .map(|value| value.trim().parse::<i32>())
                         .collect::<Result<Vec<i32>, _>>()
-                        .unwrap();
-                    segments.push(values.try_into().unwrap());
+                        .map_err(|e| {
+                            std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid segment: {}", e))
+                        })?;
+                    let segment: [i32; 4] = values.try_into().map_err(|_| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, "Segment must have exactly 4 values")
+                    })?;
+                    segments.push(segment);
                 }
             }
             i += 1;
