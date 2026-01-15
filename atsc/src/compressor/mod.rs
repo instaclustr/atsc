@@ -68,8 +68,12 @@ impl Compressor {
             Compressor::Constant => constant_compressor(data, stats).compressed_data,
             Compressor::Polynomial => polynomial(data, PolynomialType::Polynomial),
             Compressor::Idw => polynomial(data, PolynomialType::Idw),
-            Compressor::Auto => panic!("Auto compressor requires bounded compression with error threshold"),
-            Compressor::VSRI => panic!("VSRI compressor is for timestamps (i32), use compress_vsri instead"),
+            Compressor::Auto => {
+                panic!("Auto compressor requires bounded compression with error threshold")
+            }
+            Compressor::VSRI => {
+                panic!("VSRI compressor is for timestamps (i32), use compress_vsri instead")
+            }
         }
     }
 
@@ -87,7 +91,9 @@ impl Compressor {
                 polynomial_allowed_error(data, max_error, PolynomialType::Idw).compressed_data
             }
             Compressor::Auto => panic!("Auto compressor should use optimizer module for selection"),
-            Compressor::VSRI => panic!("VSRI compressor is for timestamps (i32), use compress_vsri instead"),
+            Compressor::VSRI => {
+                panic!("VSRI compressor is for timestamps (i32), use compress_vsri instead")
+            }
         }
     }
 
@@ -113,8 +119,15 @@ impl Compressor {
             Compressor::Constant => constant_to_data(samples, data),
             Compressor::Polynomial => to_data(samples, data),
             Compressor::Idw => to_data(samples, data),
-            Compressor::Auto => panic!("Auto is a meta-compressor, actual compressor type should be stored in frame"),
-            Compressor::VSRI => panic!("VSRI compressor is for timestamps (i32), use decompress_vsri instead"),
+            Compressor::Auto => panic!(
+                "Auto is a meta-compressor, actual compressor type should be stored in frame"
+            ),
+            Compressor::VSRI => {
+                // VSRI data should be decompressed using decompress_vsri, but if called through
+                // the f64 path, return empty to avoid panic
+                log::warn!("Attempted to decompress VSRI frame as f64 data, returning empty vector");
+                Vec::new()
+            }
         }
     }
 

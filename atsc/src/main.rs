@@ -179,7 +179,6 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
         CompressorType::Fft => op.set_compressor(Compressor::FFT),
         CompressorType::Polynomial => op.set_compressor(Compressor::Polynomial),
         CompressorType::Idw => op.set_compressor(Compressor::Idw),
-        CompressorType::Vsri => panic!("Can't provide f64 to VRSI. VSRI is i32 only."),
         CompressorType::Auto => op.set_compressor(Compressor::Auto),
     }
     for (cpr, data) in op.get_execution().into_iter() {
@@ -195,7 +194,6 @@ fn compress_data(vec: &[f64], arguments: &Args) -> Vec<u8> {
                 arguments.error as f32 / 100.0,
                 arguments.compression_selection_sample_level as usize,
             ),
-            CompressorType::Vsri => panic!("Can't provide f64 to VRSI. VSRI is i32 only."),
             _ => cs.compress_chunk_with(data, cpr.to_owned()),
         }
     }
@@ -266,7 +264,6 @@ enum CompressorType {
     Constant,
     Polynomial,
     Idw,
-    Vsri,
 }
 
 fn main() {

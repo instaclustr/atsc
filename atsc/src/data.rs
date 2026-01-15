@@ -100,6 +100,14 @@ impl CompressedStream {
             .flat_map(|f| f.decompress())
             .collect()
     }
+
+    /// Decompress VSRI data (timestamps)
+    pub fn decompress_vsri(&self) -> Vec<i32> {
+        self.data_frames
+            .iter()
+            .flat_map(|f| f.decompress_vsri())
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -151,5 +159,25 @@ mod tests {
         let cs2 = CompressedStream::from_bytes(&b);
         let out = cs2.decompress();
         assert_eq!(vector1, out);
+    }
+
+    #[test]
+    fn test_vsri_roundtrip() {
+        // Test VSRI compression and decompression
+        let timestamps = vec![100, 200, 300, 400, 500];
+        let mut cs = CompressedStream::new();
+        cs.compress_vsri(&timestamps);
+        
+        // Verify frame is tagged as VSRI
+        assert_eq!(cs.data_frames.len(), 1);
+        assert!(cs.data_frames[0].is_vsri());
+        
+        // Serialize and deserialize
+        let bytes = cs.to_bytes();
+        let cs2 = CompressedStream::from_bytes(&bytes);
+        
+        // Decompress and verify
+        let decompressed = cs2.decompress_vsri();
+        assert_eq!(timestamps, decompressed);
     }
 }

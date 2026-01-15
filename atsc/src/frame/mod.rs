@@ -58,6 +58,7 @@ impl CompressorFrame {
     /// Compress a vsri index
     pub fn compress_vsri(&mut self, data: &[i32]) {
         self.sample_count = data.len();
+        self.compressor = Compressor::VSRI;
         self.data = self.compressor.compress_vsri(data);
     }
 
@@ -161,5 +162,19 @@ impl CompressorFrame {
             self.frame_size, self.sample_count
         );
         self.compressor.decompress(self.sample_count, &self.data)
+    }
+
+    /// Decompresses a VSRI frame and returns the resulting timestamp array
+    pub fn decompress_vsri(&self) -> Vec<i32> {
+        debug!(
+            "Decompressing VSRI Frame. Size: {}, Samples: {}",
+            self.frame_size, self.sample_count
+        );
+        self.compressor.decompress_vsri(&self.data)
+    }
+
+    /// Check if this frame contains VSRI data
+    pub fn is_vsri(&self) -> bool {
+        matches!(self.compressor, Compressor::VSRI)
     }
 }
