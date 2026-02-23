@@ -30,7 +30,7 @@ If you change compressor logic, prefer adding/adjusting a Criterion benchmark al
 
 ## On-disk format compatibility (do not break silently)
 
-ATSC writes `.bro`/`.vsri` payloads using **bincode v2** (`bincode = 2.0.0-rc.3`) and a shared config (`atsc/src/compressor/mod.rs::bincode_config()`).
+ATSC writes `.bro` payloads using **bincode v2** (`bincode = 2.0.0-rc.3`) with a shared config (`atsc/src/compressor/mod.rs::BinConfig::get()`). `.vsri` files are written by the `vsri` crate as a line-based text format (not bincode).
 
 Implications:
 - **Changing the shape/order of `Encode`/`Decode` structs is format-breaking**, even if Rust still compiles.
