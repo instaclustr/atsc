@@ -5,7 +5,7 @@ This repository is a Rust workspace containing ATSC (Advanced Time Series Compre
 ## Codebase map (high-signal entry points)
 
 - **CLI**: `atsc/src/main.rs`
-  - Reads `.wbro` or `.csv`, produces `.bro` (values) and `.vsri` (timestamps when CSV).
+  - Reads `.wbro` or `.csv`, produces `.bro` (values). `.vsri` (timestamps) output for CSV is handled by the `csv-compressor` crate.
 - **Stream container (on-disk payload)**: `atsc/src/data.rs` (`CompressedStream`)
 - **Frame container (per chunk)**: `atsc/src/frame/mod.rs` (`CompressorFrame`)
 - **Header / magic**: `atsc/src/header.rs` (`"BRRO"`)
