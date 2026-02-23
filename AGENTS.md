@@ -13,7 +13,7 @@ This repository is a Rust workspace containing ATSC (Advanced Time Series Compre
   - FFT: `atsc/src/compressor/fft.rs`
   - Polynomial / IDW: `atsc/src/compressor/polynomial.rs`
   - Constant: `atsc/src/compressor/constant.rs`
-  - VSRI (timestamps): `atsc/src/compressor/vsri.rs`
+  - VSRI (timestamps): `vsri/src/lib.rs` (separate workspace crate)
 - **Chunking / planning**: `atsc/src/optimizer/mod.rs` (`OptimizerPlan`)
 
 ## How to build, test, lint, benchmark
