@@ -18,7 +18,7 @@ use crate::codec::noop::NoopCodec;
 use crate::codec::polynomial::{IdwCodec, PolynomialCodec};
 use crate::codec::{Codec, CompressConfig, CompressedFrame};
 use crate::format::header::Header;
-use crate::format::stream::{decode_header, decode_stream, encode_stream};
+use crate::format::stream::{decode_stream, encode_stream};
 use crate::optimizer::chunker::Plan;
 use crate::optimizer::select_codec;
 use crate::vsri::Vsri;
@@ -136,9 +136,7 @@ pub fn compress_with_timestamps(
 /// Returns `Err` when invariants are violated, input is invalid, or codecs are unknown.
 #[must_use = "handle the Result to observe decompression errors"]
 pub fn decompress_with_timestamps(bytes: &[u8]) -> Result<(Vec<i64>, Vec<f64>)> {
-    let header = decode_header(bytes)?;
-    let (header2, frames) = decode_stream(bytes)?;
-    debug_assert_eq!(header, header2);
+    let (header, frames) = decode_stream(bytes)?;
 
     if (header.flags & FLAG_INLINE_VSRI) == 0 {
         return Err(Error::VsriInvariantViolation(
