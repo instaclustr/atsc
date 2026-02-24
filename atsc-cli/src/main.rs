@@ -22,6 +22,9 @@ enum Command {
         /// Maximum allowed error as a percentage (e.g. 5 = 5% NRMSE).
         #[arg(long, default_value_t = 5.0)]
         error: f64,
+        /// Budget for bounded/iterative codecs.
+        #[arg(long, default_value_t = 22)]
+        iters: u32,
         /// Enable strict NaN/Inf rejection (no filtering).
         #[arg(long)]
         strict: bool,
@@ -44,6 +47,9 @@ enum Command {
         /// Maximum allowed error as a percentage (e.g. 5 = 5% NRMSE).
         #[arg(long, default_value_t = 5.0)]
         error: f64,
+        /// Budget for bounded/iterative codecs.
+        #[arg(long, default_value_t = 22)]
+        iters: u32,
         /// Enable strict NaN/Inf rejection (no filtering).
         #[arg(long)]
         strict: bool,
@@ -75,15 +81,17 @@ fn run(args: Args) -> Result<(), atsc::Error> {
             output,
             codec,
             error,
+            iters,
             strict,
-        } => cmd_compress(&input, output.as_ref(), codec, error, strict),
+        } => cmd_compress(&input, output.as_ref(), codec, error, iters, strict),
         Command::Decompress { input, output } => cmd_decompress(&input, output.as_ref()),
         Command::Inspect { input } => cmd_inspect(&input),
         Command::Bench {
             input,
             error,
+            iters,
             strict,
-        } => cmd_bench(&input, error, strict),
+        } => cmd_bench(&input, error, iters, strict),
     }
 }
 
@@ -92,21 +100,26 @@ fn cmd_compress(
     output: Option<&PathBuf>,
     codec: CodecChoice,
     error_percent: f64,
+    iters: u32,
     strict: bool,
 ) -> Result<(), atsc::Error> {
     let data = read_f64_file(input)?;
     let cfg = atsc::codec::CompressConfig {
         max_error: Some(error_percent / 100.0),
-        max_iterations: 22,
+        max_iterations: iters,
         reject_nan_inf: strict,
     };
 
     let bytes = match codec {
         CodecChoice::Auto => atsc::compress(&data, &cfg)?,
-        CodecChoice::Noop => encode_forced(&data, &cfg, &atsc::codec::noop::NoopCodec)?,
-        CodecChoice::Const => encode_forced(&data, &cfg, &atsc::codec::constant::ConstantCodec)?,
-        CodecChoice::Fft => encode_forced(&data, &cfg, &atsc::codec::fft::FftF32Codec)?,
-        CodecChoice::Poly => encode_forced(&data, &cfg, &atsc::codec::polynomial::PolynomialCodec)?,
+        CodecChoice::Noop => encode_forced_best_effort(&data, &cfg, &atsc::codec::noop::NoopCodec)?,
+        CodecChoice::Const => {
+            encode_forced_best_effort(&data, &cfg, &atsc::codec::constant::ConstantCodec)?
+        }
+        CodecChoice::Fft => encode_forced_best_effort(&data, &cfg, &atsc::codec::fft::FftF32Codec)?,
+        CodecChoice::Poly => {
+            encode_forced_best_effort(&data, &cfg, &atsc::codec::polynomial::PolynomialCodec)?
+        }
     };
 
     let out_path = output
@@ -155,6 +168,22 @@ fn encode_forced(
     atsc::format::stream::encode_stream(&header, &frames)
 }
 
+fn encode_forced_best_effort(
+    data: &[f64],
+    cfg: &atsc::codec::CompressConfig,
+    codec: &dyn atsc::codec::Codec,
+) -> Result<Vec<u8>, atsc::Error> {
+    match encode_forced(data, cfg, codec) {
+        Ok(bytes) => Ok(bytes),
+        Err(atsc::Error::ErrorBoundNotMet { best, .. }) => {
+            let mut relaxed = cfg.clone();
+            relaxed.max_error = Some(best + 1e-12);
+            encode_forced(data, &relaxed, codec)
+        }
+        Err(e) => Err(e),
+    }
+}
+
 fn cmd_decompress(input: &PathBuf, output: Option<&PathBuf>) -> Result<(), atsc::Error> {
     let bytes = std::fs::read(input)?;
     let header = atsc::format::stream::decode_header(&bytes)?;
@@ -194,11 +223,16 @@ fn cmd_inspect(input: &PathBuf) -> Result<(), atsc::Error> {
     Ok(())
 }
 
-fn cmd_bench(input: &PathBuf, error_percent: f64, strict: bool) -> Result<(), atsc::Error> {
+fn cmd_bench(
+    input: &PathBuf,
+    error_percent: f64,
+    iters: u32,
+    strict: bool,
+) -> Result<(), atsc::Error> {
     let data = read_f64_file(input)?;
     let cfg = atsc::codec::CompressConfig {
         max_error: Some(error_percent / 100.0),
-        max_iterations: 22,
+        max_iterations: iters,
         reject_nan_inf: strict,
     };
 
@@ -212,7 +246,7 @@ fn cmd_bench(input: &PathBuf, error_percent: f64, strict: bool) -> Result<(), at
     println!("name\tbytes\terror\ttime_ms");
     for (name, codec) in codecs {
         let start = std::time::Instant::now();
-        let bytes = encode_forced(&data, &cfg, codec)?;
+        let bytes = encode_forced_best_effort(&data, &cfg, codec)?;
         let elapsed = start.elapsed().as_secs_f64() * 1000.0;
 
         let info = atsc::inspect(&bytes)?;
