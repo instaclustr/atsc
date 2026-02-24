@@ -4,8 +4,8 @@
 //! hardened decode paths. See `PLAN.md` for the full architecture and format
 //! specification.
 
-pub mod codec;
 mod bytes;
+pub mod codec;
 pub mod error;
 pub mod format;
 pub mod metrics;
@@ -255,6 +255,7 @@ impl StreamWriter {
 pub struct StreamReader<'a> {
     header: Header,
     frames: Vec<CompressedFrame>,
+    frame_count: u32,
     _bytes: &'a [u8],
 }
 
@@ -266,9 +267,14 @@ impl<'a> StreamReader<'a> {
     #[must_use = "handle the Result to observe decode failures"]
     pub fn new(bytes: &'a [u8]) -> Result<Self> {
         let (header, frames) = decode_stream(bytes)?;
+        let frame_count: u32 = frames
+            .len()
+            .try_into()
+            .map_err(|_| Error::ResourceLimitExceeded("frame_count exceeds u32::MAX".into()))?;
         Ok(Self {
             header,
             frames,
+            frame_count,
             _bytes: bytes,
         })
     }
@@ -282,7 +288,7 @@ impl<'a> StreamReader<'a> {
     /// Number of frames in this stream (scanned if footer absent).
     #[must_use]
     pub fn frame_count(&self) -> u32 {
-        self.frames.len() as u32
+        self.frame_count
     }
 
     /// Borrow decoded frames.
@@ -315,7 +321,10 @@ pub fn inspect(bytes: &[u8]) -> Result<StreamInfo> {
 
     Ok(StreamInfo {
         version: header.version,
-        frame_count: frames.len() as u32,
+        frame_count: frames
+            .len()
+            .try_into()
+            .map_err(|_| Error::ResourceLimitExceeded("frame_count exceeds u32::MAX".into()))?,
         total_samples,
         has_vsri: (header.flags & FLAG_INLINE_VSRI) != 0,
         frames: infos,

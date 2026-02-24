@@ -1,7 +1,7 @@
 //! Stream encode/decode entry points.
 
-use crate::codec::CompressedFrame;
 use crate::bytes::{take_bytes, take_u32_le, take_u8};
+use crate::codec::CompressedFrame;
 use crate::error::{Error, Result};
 use crate::format::footer::{Footer, FOOTER_LEN, FOOTER_MAGIC};
 use crate::format::frame::FRAME_HEADER_LEN;
@@ -126,7 +126,7 @@ pub fn decode_stream(buf: &[u8]) -> Result<(Header, Vec<CompressedFrame>)> {
     let mut total_samples: u64 = 0;
 
     while offset < end {
-        if frames.len() as u32 >= MAX_FRAMES {
+        if frames.len() >= MAX_FRAMES as usize {
             return Err(Error::ResourceLimitExceeded(format!(
                 "frame count exceeds MAX_FRAMES ({MAX_FRAMES})"
             )));
