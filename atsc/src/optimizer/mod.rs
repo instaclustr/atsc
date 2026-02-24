@@ -25,13 +25,7 @@ pub fn select_codec(
     codecs: &[&dyn Codec],
     config: &CompressConfig,
 ) -> Result<CompressedFrame> {
-    if data.is_empty() {
-        return Err(Error::EmptyData);
-    }
-    if data.iter().any(|v| !v.is_finite()) {
-        return Err(Error::InvalidInput);
-    }
-    let stats = DataStats::new(data).ok_or(Error::EmptyData)?;
+    let stats = DataStats::new(data)?;
 
     if stats.min == stats.max {
         return ConstantCodec.compress(data, config);
