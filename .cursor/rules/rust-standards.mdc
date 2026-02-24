@@ -1,0 +1,53 @@
+---
+description: Rust coding standards for the ATSC v2 library and CLI
+globs: "**/*.rs"
+alwaysApply: false
+---
+
+# Rust Standards (ATSC v2)
+
+## Error Handling
+
+```rust
+// BAD — never in non-test code
+let val = something.unwrap();
+let val = something.expect("msg");
+panic!("something went wrong");
+
+// GOOD — propagate with ?
+let val = something?;
+
+// GOOD — return descriptive error
+return Err(Error::UnexpectedEof { offset, expected: 4 });
+```
+
+## Wire Format
+
+- All integers: little-endian (`to_le_bytes()` / `from_le_bytes()`)
+- No `usize` in encode/decode — only `u8`, `u16`, `u32`, `u64`, `i64`
+- Bounds-check every read before indexing:
+
+```rust
+// BAD
+let val = u32::from_le_bytes(buf[off..off+4].try_into().unwrap());
+
+// GOOD
+if buf.len() < off + 4 {
+    return Err(Error::UnexpectedEof { offset: off, expected: 4 });
+}
+let val = u32::from_le_bytes(buf[off..off+4].try_into().map_err(|_| {
+    Error::UnexpectedEof { offset: off, expected: 4 }
+})?);
+```
+
+## Public API
+
+- Every `pub fn` has a doc comment with `# Errors` section
+- `#[must_use]` on Result-returning functions
+- Prefer `&[T]` over `Vec<T>` in parameters
+
+## Testing
+
+- Roundtrip test for every codec
+- Corrupt-input test for every decode path
+- No test should depend on external files — use inline constants

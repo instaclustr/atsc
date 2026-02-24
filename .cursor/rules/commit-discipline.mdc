@@ -1,0 +1,38 @@
+---
+description: Commit discipline and verification rules for atsc-v2 branch
+alwaysApply: true
+---
+
+# Commit Discipline
+
+## Before Every Commit
+
+Run in this exact order. All must pass.
+
+1. `cargo fmt`
+2. `cargo clippy --workspace --all-targets -- -D warnings`
+3. `cargo test --workspace`
+4. If touching feature-gated code: `cargo test --workspace --features rayon` and/or `--features fft-f64`
+
+## One Change Per Commit
+
+- New module = 1 commit
+- Bug fix = 1 commit
+- Refactor = 1 commit
+- Never bundle unrelated changes
+
+## Message Format
+
+```
+Imperative verb + what (under 72 chars)
+
+Why this change is needed. Reference PLAN.md step if applicable.
+```
+
+## Never Commit
+
+- Code that doesn't compile
+- Code with failing tests
+- Code with clippy warnings
+- Unformatted code
+- Changes to PLAN.md without explicit approval

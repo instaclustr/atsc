@@ -1,0 +1,29 @@
+---
+description: Wire format encoding rules for ATSC v2 binary format
+globs: "atsc/src/format/**/*.rs"
+alwaysApply: false
+---
+
+# Wire Format Rules
+
+## Encoding
+
+- All integers little-endian
+- No padding, no alignment
+- No `usize` — only fixed-width types
+- Use `to_le_bytes()` / `from_le_bytes()` exclusively
+
+## Decoding Safety
+
+- Bounds-check before every slice access
+- Check resource limits before every allocation
+- Return `Error::UnexpectedEof` on truncation
+- Return `Error::ResourceLimitExceeded` on oversized claims
+- Never trust payload_len without checking against buffer remaining
+
+## Format Reference
+
+Refer to PLAN.md "Wire Format v2" section for the canonical spec:
+- Header: 6 bytes (magic ATSC + version + flags)
+- Frame: 9 + payload_len bytes (codec_id + sample_count + payload_len + payload)
+- Footer: 8 bytes (magic CSTA + frame_count)
