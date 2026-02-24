@@ -1,10 +1,7 @@
 [workspace]
 members = [
     "atsc",
-    "tools",
-    "wavbrro",
-    "vsri",
-    "csv-compressor"
+    "atsc-cli"
 ]
 resolver = "2"
 
