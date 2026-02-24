@@ -9,12 +9,20 @@ Rebuild ATSC as a **first-class, embeddable time-series compression library** wi
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Serialization | Manual byte-level encoding | Full control, zero serialization deps in hot path, optimisable per-byte |
-| Workspace | `atsc` (lib) + `atsc-cli` (bin) | Minimal surface. VSRI merged in. WavBrro, CSV, tools dropped. |
+| Workspace | `atsc` (lib) + `atsc-cli` (bin) | Minimal surface. VSRI merged in. WavBrro, CSV, tools dropped entirely. |
 | FFT precision | f32 default, f64 opt-in | Best compression ratio. f64 behind feature/config for high-precision use cases. |
+| FFT frequency encoding | Implicit ordering / bitpacked position indices | No `pos` field per-frequency. Most compact. Avoids u16/u32 width debates. |
 | Parallelism | rayon behind feature flag | Chunks are independent; multi-core speedup with zero API cost when disabled. |
 | Error metric | Single robust default (NRMSE) | Avoids MAPE zero-division, avoids SMAPE normalisation bugs. Clean, one metric. |
-| Backward compat | None | Clean break. No legacy decode paths. |
-| Dropped | `csv-compressor`, `tools`, `wavbrro` | Out of scope for v2 core. Can be built as adapters later. |
+| Error bound behavior | Codecs fail hard (`Err`); optimizer catches and retries | Codecs return `Err(ErrorBoundNotMet)`. Optimizer collects best-effort from all codecs, picks lowest error if none meet bound. |
+| NaN/Inf policy | Filter with log warning; reject flag available | Default: strip NaN/Inf, log warning, compress remaining. `CompressConfig::reject_nan_inf` flag for strict mode. |
+| Backward compat | None | Clean break. New magic `ATSC`. Old `.bro` files are not readable. |
+| Stream frame count | Footer (not header) | Enables streaming writes. Readers scan frames if footer absent (truncated stream). |
+| Decode safety | Hardcoded resource limits | Compile-time caps prevent OOM from corrupt/malicious input. |
+| VSRI invariants | Strict (4 rules) | First-frame rule, count match, strict monotonic, validated at encode/decode. |
+| Integrity checks | None | Keep format simple. Integrity is the transport layer's job. |
+| Codec evolution | New codec ID for breaking changes | No per-payload version byte. Codec IDs are cheap (u8 = 256 slots). |
+| Gibbs sizing | Frozen heuristic | Algorithm documented in spec. No extra bytes in payload. New strategy = new codec ID. |
 
 ---
 
@@ -58,10 +66,10 @@ Rebuild ATSC as a **first-class, embeddable time-series compression library** wi
 │  ┌───────────────┐  ┌────────────┐  ┌────────────────┐ │
 │  │ Codec trait    │  │ Optimizer  │  │ Wire Format    │ │
 │  │               │  │            │  │ (manual enc)   │ │
-│  │  FftCodec     │  │  plan()    │  │  Stream        │ │
+│  │  FftCodec     │  │  plan()    │  │  Header        │ │
 │  │  PolyCodec    │  │  select()  │  │  Frame         │ │
-│  │  ConstCodec   │  │  chunk()   │  │  Header        │ │
-│  │  NoopCodec    │  │            │  │                │ │
+│  │  ConstCodec   │  │  chunk()   │  │  Stream        │ │
+│  │  NoopCodec    │  │            │  │  Footer        │ │
 │  │  (IdwCodec)   │  │            │  │                │ │
 │  └───────────────┘  └────────────┘  └────────────────┘ │
 │                                                         │
@@ -82,18 +90,20 @@ Rebuild ATSC as a **first-class, embeddable time-series compression library** wi
 4. **Manual wire format.** Every byte is explicit. Frames are self-describing (codec_id + payload_len) for streaming reads.
 5. **Correct numerics.** Fix every overflow, precision loss, and metric bug.
 6. **Feature-gated extras.** `rayon` for parallelism, `fft-f64` for double-precision frequencies. Core has minimal deps.
+7. **Hardened decode.** Compile-time resource limits prevent OOM/DoS from malicious input.
+8. **Strict VSRI.** Four validated invariants ensure timestamp/value consistency.
 
 ---
 
 ## Wire Format v2
 
-No backward compatibility. Clean design.
+No backward compatibility. Clean design. New magic bytes (`ATSC`) ensure old tools fail fast on new files and vice versa.
 
 ### Stream layout
 
 ```
 ┌────────────────────────────────┐
-│ Header (8 bytes)               │
+│ Header (6 bytes)               │
 ├────────────────────────────────┤
 │ Frame 0                        │
 ├────────────────────────────────┤
@@ -102,19 +112,20 @@ No backward compatibility. Clean design.
 │ ...                            │
 ├────────────────────────────────┤
 │ Frame N-1                      │
+├────────────────────────────────┤
+│ Footer (8 bytes)               │
 └────────────────────────────────┘
 ```
 
-### Header (8 bytes, fixed)
+### Header (6 bytes, fixed)
 
 | Offset | Size | Type | Field |
 |--------|------|------|-------|
 | 0 | 4 | `[u8; 4]` | Magic: `ATSC` |
 | 4 | 1 | `u8` | Format version (starts at `1`) |
-| 5 | 1 | `u8` | Flags (bit 0: has inline VSRI frame, bits 1-7: reserved) |
-| 6 | 2 | `u16` LE | Frame count |
+| 5 | 1 | `u8` | Flags (bit 0: has inline VSRI as first frame, bits 1-7: reserved) |
 
-Magic changes from `BRRO` to `ATSC` — clean break, no ambiguity with v1 files.
+No frame count in header — it lives in the footer.
 
 ### Frame (9 + payload_len bytes)
 
@@ -125,19 +136,52 @@ Magic changes from `BRRO` to `ATSC` — clean break, no ambiguity with v1 files.
 | 5 | 4 | `u32` LE | Payload length in bytes |
 | 9 | var | `[u8]` | Codec-specific payload |
 
-Codec IDs:
+A reader can skip any frame by reading 9 bytes then seeking `payload_len` forward — no need to understand the codec.
+
+### Footer (8 bytes, fixed)
+
+| Offset | Size | Type | Field |
+|--------|------|------|-------|
+| 0 | 4 | `[u8; 4]` | Magic: `CSTA` (reverse of `ATSC` — unambiguous marker) |
+| 4 | 4 | `u32` LE | Frame count |
+
+If the footer is missing (truncated stream), readers scan frames from after the header until EOF. The footer is advisory — it's a fast-path, not a requirement.
+
+### Codec IDs
 
 | ID | Codec |
 |----|-------|
 | 0 | Noop (lossless raw f64) |
 | 1 | Constant |
-| 2 | FFT (f32 frequencies) |
-| 3 | FFT (f64 frequencies) |
+| 2 | FFT (f32 frequencies, bitpacked positions) |
+| 3 | FFT (f64 frequencies, bitpacked positions) |
 | 4 | Polynomial (CatmullRom) |
 | 5 | IDW |
 | 128 | VSRI (timestamps) |
 
-The frame header is always 9 bytes. A reader can skip any frame by reading 9 bytes then seeking `payload_len` forward — no need to understand the codec.
+### Decode resource limits (compile-time constants)
+
+```rust
+pub const MAX_FRAMES: u32 = 1_000_000;
+pub const MAX_PAYLOAD_BYTES: u32 = 256 * 1024 * 1024;  // 256 MB per frame
+pub const MAX_TOTAL_SAMPLES: u64 = 1_000_000_000;       // 1 billion samples
+pub const MAX_VSRI_SEGMENTS: u32 = 10_000_000;
+```
+
+Decode functions check these before allocating. Returns `Error::ResourceLimitExceeded` on violation.
+
+### VSRI invariants (enforced at encode and decode)
+
+1. If header flag bit 0 is set, the **first frame** must have `codec_id = 128` (VSRI).
+2. VSRI segment total sample count must equal the sum of all value frame `sample_count` fields.
+3. Timestamps must be **strictly monotonically increasing** (no duplicates).
+4. All invariant violations return `Error::VsriInvariantViolation` with a descriptive message.
+
+### NaN/Inf input policy
+
+- **Default behavior:** strip NaN and Inf values from input before compression. Log a warning with the count of removed values. The `sample_count` in the output reflects the *filtered* length.
+- **Strict mode:** if `CompressConfig::reject_nan_inf = true`, return `Error::InvalidInput` immediately when NaN/Inf is detected.
+- The library never silently changes data semantics — either it removes values with a logged warning, or it rejects outright.
 
 ### Codec-specific payloads
 
@@ -153,26 +197,35 @@ The frame header is always 9 bytes. A reader can skip any frame by reading 9 byt
 
 **FFT f32 (ID 2):**
 
-| Field | Size | Type |
-|-------|------|------|
-| min_value | 4 | `f32` LE |
-| max_value | 4 | `f32` LE |
-| freq_count | 2 | `u16` LE |
-| frequencies | `freq_count * 8` | `[FreqPoint]` |
+| Field | Size | Type | Notes |
+|-------|------|------|-------|
+| min_value | 4 | `f32` LE | Clamping floor for reconstruction |
+| max_value | 4 | `f32` LE | Clamping ceiling for reconstruction |
+| freq_count | 2 | `u16` LE | Number of retained frequencies |
+| position_index | variable | bitpacked | See below |
+| freq_values | `freq_count * 8` | `[f32 LE, f32 LE]` | (real, imag) pairs |
 
-Each `FreqPoint` = `pos: u16 LE` + `real: f32 LE` (total per point: not needed, see below — actually let me reconsider).
+**Position index encoding:** frequencies are stored sorted by magnitude (descending). Their original positions in the FFT output are encoded as a bitpacked index:
 
-Correction — each `FreqPoint`:
+- Compute `bits_per_pos = ceil(log2(fft_len))` where `fft_len` is the (frozen-heuristic) padded length.
+- Pack `freq_count` positions, each `bits_per_pos` bits wide, into a byte-aligned buffer.
+- `position_index_len = ceil(freq_count * bits_per_pos / 8)` bytes.
 
-| Field | Size | Type |
-|-------|------|------|
-| pos | 2 | `u16` LE |
-| real | 4 | `f32` LE |
-| imag | 4 | `f32` LE |
+This removes the per-frequency `pos` field entirely. For a 65536-sample FFT with 100 frequencies: `ceil(100 * 16 / 8) = 200` bytes for positions, vs. 200 bytes with u16 per-frequency — same for this case, but scales to any FFT length without type-width limits.
 
-10 bytes per frequency point. `payload_len = 4 + 4 + 2 + freq_count * 10`.
+The `fft_len` needed for decoding is deterministic from `sample_count` via the frozen Gibbs heuristic (documented below).
 
-**FFT f64 (ID 3):** same layout but `f64` for real/imag (18 bytes per point, min/max are `f64`).
+`payload_len = 4 + 4 + 2 + position_index_len + freq_count * 8`.
+
+**FFT f64 (ID 3):** same layout but `f64` for real/imag/min/max. `freq_values` = `freq_count * 16` bytes. `min_value`/`max_value` = 8 bytes each.
+
+**Frozen Gibbs heuristic (spec):** given `sample_count`:
+- If `sample_count < 128`: `fft_len = sample_count` (no padding).
+- Otherwise: `fft_len = next_smooth(sample_count)` where `next_smooth(n)` returns the smallest integer `>= n` of the form `2^a * 3^b`.
+- Padding: `prefix_len = (fft_len - sample_count) / 2`, `suffix_len = fft_len - sample_count - prefix_len`.
+- Prefix filled with `data[0]`; suffix filled with `data[last]`.
+
+This algorithm is frozen for codec IDs 2 and 3. Any change to the padding strategy requires allocating new codec IDs.
 
 **Polynomial (ID 4) / IDW (ID 5):**
 
@@ -185,7 +238,7 @@ Correction — each `FreqPoint`:
 | point_count | 4 | `u32` LE |
 | data_points | variable | encoded per bitdepth |
 
-`point_step` is now `u32` — no overflow.
+`point_step` is `u32` — no overflow.
 
 **VSRI (ID 128):**
 
@@ -233,7 +286,9 @@ fft-compression/
 │       │   ├── mod.rs
 │       │   ├── header.rs
 │       │   ├── frame.rs
-│       │   └── stream.rs
+│       │   ├── footer.rs
+│       │   ├── stream.rs
+│       │   └── limits.rs   (decode resource limits)
 │       ├── optimizer/
 │       │   ├── mod.rs
 │       │   ├── stats.rs
@@ -241,14 +296,16 @@ fft-compression/
 │       ├── vsri/
 │       │   ├── mod.rs
 │       │   └── segment.rs
-│       └── metrics.rs      (NRMSE + helpers)
+│       └── metrics.rs      (NRMSE)
 └── atsc-cli/
     ├── Cargo.toml      (bin crate, depends on atsc)
     └── src/
         └── main.rs
 ```
 
-**Dropped crates:** `wavbrro`, `csv-compressor`, `tools`, `lib_vsri` (merged into `atsc::vsri`).
+**Dropped entirely:** `wavbrro`, `csv-compressor`, `tools`, `lib_vsri` (merged into `atsc::vsri`).
+
+The CLI accepts **raw binary f64 files** as input (simple: just `N * 8` bytes of little-endian f64). No WavBrro dependency. Existing `.wbro` test data can be converted once with a one-off script.
 
 ### 1.2 Error types
 
@@ -258,6 +315,9 @@ fft-compression/
 pub enum Error {
     #[error("data is empty")]
     EmptyData,
+
+    #[error("input contains NaN or Inf values (strict mode enabled)")]
+    InvalidInput,
 
     #[error("decode: unexpected end of input at offset {offset}, expected {expected} bytes")]
     UnexpectedEof { offset: usize, expected: usize },
@@ -271,6 +331,9 @@ pub enum Error {
     #[error("decode: unknown codec id {0}")]
     UnknownCodec(u8),
 
+    #[error("decode: resource limit exceeded: {0}")]
+    ResourceLimitExceeded(String),
+
     #[error("encode: sample count {count} exceeds u32::MAX")]
     SampleCountOverflow { count: usize },
 
@@ -283,6 +346,9 @@ pub enum Error {
     #[error("vsri: timestamp {ts} is not monotonically increasing (max was {max})")]
     VsriOutOfOrder { ts: i64, max: i64 },
 
+    #[error("vsri invariant violation: {0}")]
+    VsriInvariantViolation(String),
+
     #[error("metrics: original and reconstructed lengths differ ({a} vs {b})")]
     LengthMismatch { a: usize, b: usize },
 
@@ -293,8 +359,6 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 ```
 
-No `.unwrap()` in non-test code. Every decode/encode path returns `Result`.
-
 ### 1.3 Codec trait
 
 ```rust
@@ -303,7 +367,11 @@ pub trait Codec: Send + Sync {
     fn id(&self) -> u8;
     fn name(&self) -> &'static str;
 
+    /// Compress data. Returns Err(ErrorBoundNotMet) if max_error cannot be met
+    /// within max_iterations. The optimizer catches this and selects the best
+    /// available result across all codecs.
     fn compress(&self, data: &[f64], config: &CompressConfig) -> Result<CompressedFrame>;
+
     fn decompress(&self, payload: &[u8], sample_count: u32) -> Result<Vec<f64>>;
 }
 
@@ -311,11 +379,16 @@ pub trait Codec: Send + Sync {
 pub struct CompressConfig {
     pub max_error: Option<f64>,
     pub max_iterations: u32,
+    pub reject_nan_inf: bool,
 }
 
 impl Default for CompressConfig {
     fn default() -> Self {
-        Self { max_error: Some(0.05), max_iterations: 22 }
+        Self {
+            max_error: Some(0.05),
+            max_iterations: 22,
+            reject_nan_inf: false,
+        }
     }
 }
 
@@ -338,10 +411,13 @@ pub fn encode_stream(header: &Header, frames: &[CompressedFrame]) -> Result<Vec<
 // Decode
 pub fn decode_header(buf: &[u8]) -> Result<Header>;
 pub fn decode_frame(buf: &[u8], offset: &mut usize) -> Result<CompressedFrame>;
+pub fn decode_footer(buf: &[u8]) -> Result<Option<Footer>>;
 pub fn decode_stream(buf: &[u8]) -> Result<(Header, Vec<CompressedFrame>)>;
 ```
 
-All reads are bounds-checked, returning `Error::UnexpectedEof` on truncation. Little-endian throughout.
+All reads are bounds-checked, returning `Error::UnexpectedEof` on truncation. Little-endian throughout. No padding, no alignment requirements. No `usize` in the wire format — only fixed-width integers.
+
+Decode enforces resource limits from `format::limits` before every allocation.
 
 ### 1.5 Feature flags
 
@@ -361,12 +437,13 @@ fft-f64 = []
 Port the algorithm from `atsc/src/compressor/fft.rs` into `atsc/src/codec/fft.rs`, implementing `Codec`.
 
 Fixes:
+- **Frequency positions:** bitpacked index encoding. No per-frequency `pos` field. Frequencies sorted by magnitude. Position index uses `ceil(log2(fft_len))` bits per position, byte-aligned.
 - **f64_to_f32**: return `Error::PrecisionOverflow` on non-finite result.
-- **Bounded loop**: use `(best_error - target).abs() < epsilon` instead of truncated integer comparison.
+- **Bounded loop**: use `(best_error - target).abs() < epsilon` instead of truncated integer comparison. Codec returns `Err(ErrorBoundNotMet { best, target })` if budget exhausted.
 - **Dedup stats**: single `DataStats::new(data)` call, remove manual min/max loops.
-- **Gibbs sizing**: keep the pad-with-edge-values approach; it works.
-- **f64 mode**: when feature `fft-f64` is enabled (or config flag set), store `FrequencyPoint` with f64 real/imag and use codec ID 3.
-- **Manual payload encode/decode**: replace bincode with hand-written LE byte serialization.
+- **Gibbs sizing**: frozen heuristic (documented in wire format spec above). No extra bytes in payload.
+- **f64 mode**: when feature `fft-f64` is enabled (or config flag set), store with f64 real/imag and use codec ID 3.
+- **Manual payload encode/decode**: hand-written LE byte serialization with bitpacking for positions.
 
 ### 2.2 Polynomial / IDW
 
@@ -375,8 +452,8 @@ Port into `atsc/src/codec/polynomial.rs`, implementing `Codec`.
 Fixes:
 - **`point_step`**: `u32` (was `u8` — critical overflow bug).
 - **Unify types**: single `InterpolationMethod` enum replaces `PolynomialType` + `Method`.
-- **Bounded loop fallback**: return `Error::ErrorBoundNotMet` instead of storing the entire dataset.
-- **Manual payload encode/decode**: bitdepth-aware, same as before but hand-written.
+- **Bounded loop fallback**: return `Err(ErrorBoundNotMet { best, target })` when budget exhausted.
+- **Manual payload encode/decode**: bitdepth-aware, hand-written.
 
 ### 2.3 Constant
 
@@ -384,13 +461,15 @@ Port into `atsc/src/codec/constant.rs`. Simplest codec.
 
 - Payload: 8 bytes (one f64 LE).
 - Remove unused constructor parameters.
+- Error is always 0.0 for truly constant data.
 
 ### 2.4 Noop
 
 Port into `atsc/src/codec/noop.rs`.
 
 - **Make truly lossless**: store raw f64 LE bytes. No rounding. `payload_len = sample_count * 8`.
-- This is the "I don't want any loss" escape hatch.
+- Error is always 0.0.
+- This is the "I don't want any loss" escape hatch and the fallback when all other codecs fail.
 
 ### 2.5 VSRI
 
@@ -402,7 +481,8 @@ Fixes:
 - **i64 everywhere**: no 2038 problem.
 - **Drop `index_file`**: not part of data; persistence is the caller's concern.
 - **Drop `day_elapsed_seconds` / `start_day_ts` / `MAX_INDEX_SAMPLES`**: not VSRI concerns.
-- **Proper errors**: `Error::VsriOutOfOrder` with context.
+- **Strict monotonic**: `update_for_point` rejects `ts <= max_ts` (no duplicates).
+- **Proper errors**: `Error::VsriOutOfOrder` and `Error::VsriInvariantViolation` with context.
 - **Manual encode/decode**: `Segment` array to/from bytes.
 
 ### 2.6 Error metrics
@@ -410,12 +490,15 @@ Fixes:
 New `atsc/src/metrics.rs`:
 
 ```rust
+/// Normalised Root Mean Square Error.
+/// Returns 0.0 when max == min and MSE == 0 (constant signal, perfect reconstruction).
+/// Returns Err(LengthMismatch) if slices differ in length.
 pub fn nrmse(original: &[f64], reconstructed: &[f64]) -> Result<f64>;
 ```
 
-- Returns `Result` (no panic on length mismatch).
-- NRMSE = `sqrt(MSE) / (max - min)`. Well-defined for all data (no division by zero unless constant — which gets caught by the constant codec anyway).
-- Remove MAPE, SMAPE, MAE, MSE as public API. Keep NRMSE as the single metric. Internal helpers can exist but don't need to be public.
+- NRMSE = `sqrt(MSE) / (max - min)`.
+- **Constant signal special case:** when `max == min` and `MSE == 0`, return `0.0`. If `max == min` but `MSE > 0`, this indicates a codec bug — return `f64::INFINITY` (infinite relative error) so the optimizer never selects it.
+- Single metric. No MAPE, SMAPE, MAE, MSE as public API.
 
 ---
 
@@ -435,17 +518,17 @@ pub fn select_codec(
 
 Strategy:
 1. **Constant check**: if `min == max`, use Constant immediately (0 error, 8 bytes).
-2. **Try all codecs** on the data (or a subsample if data is large and `compression_speed` allows).
-3. **Pick smallest payload** that meets the error bound.
-4. If none meet the bound, pick the one with the lowest error.
+2. **Try all codecs** on the data (or a subsample if `compression_speed` allows). Each codec returns `Ok(frame)` or `Err(ErrorBoundNotMet { best, target })`.
+3. From successful results, **pick smallest payload** that meets the error bound.
+4. If all codecs return `Err(ErrorBoundNotMet)`: collect the `best` error from each, pick the codec with the lowest `best` error, re-run it with that budget, and return its frame. **Noop is always available as a last resort** (0 error, but no compression).
 
-With `rayon` feature: trial compressions run in parallel.
+With `rayon` feature: trial compressions across codecs run in parallel.
 
 ### 3.2 Chunking
 
 - Power-of-2 chunks for FFT (keep existing logic — it works).
-- Allow the chunker to split at detected regime changes (large derivative spikes) in a future iteration. For v2.0 keep the current greedy power-of-2 approach and tune later.
 - Min chunk: 512. Max chunk: 131072. Same as today.
+- Regime-change detection deferred to a future iteration.
 
 ### 3.3 Optimizer plan
 
@@ -478,7 +561,7 @@ pub fn decompress(bytes: &[u8]) -> Result<Vec<f64>>;
 
 // === With timestamps ===
 
-/// Compress values + timestamps together (VSRI frame prepended).
+/// Compress values + timestamps together (VSRI frame prepended, flag set).
 pub fn compress_with_timestamps(
     timestamps: &[i64],
     values: &[f64],
@@ -494,13 +577,14 @@ pub struct StreamWriter { ... }
 impl StreamWriter {
     pub fn new(config: CompressConfig) -> Self;
     pub fn push(&mut self, data: &[f64]) -> Result<()>;
-    pub fn finish(self) -> Result<Vec<u8>>;
+    pub fn finish(self) -> Result<Vec<u8>>;  // writes footer with frame count
 }
 
 pub struct StreamReader<'a> { ... }
 impl<'a> StreamReader<'a> {
     pub fn new(bytes: &'a [u8]) -> Result<Self>;
     pub fn header(&self) -> &Header;
+    pub fn frame_count(&self) -> u32;  // from footer, or scanned
     pub fn frames(&self) -> FrameIter<'a>;
 }
 
@@ -510,12 +594,15 @@ pub fn inspect(bytes: &[u8]) -> Result<StreamInfo>;
 
 pub struct StreamInfo {
     pub version: u8,
-    pub frame_count: u16,
+    pub frame_count: u32,
+    pub total_samples: u64,
+    pub has_vsri: bool,
     pub frames: Vec<FrameInfo>,
 }
 
 pub struct FrameInfo {
     pub codec_name: &'static str,
+    pub codec_id: u8,
     pub sample_count: u32,
     pub payload_bytes: u32,
 }
@@ -524,13 +611,17 @@ pub struct FrameInfo {
 ### 4.2 CLI (`atsc-cli`)
 
 ```
-atsc compress <input.wbro> [-o output.atsc] [--codec auto|fft|poly|const|noop|idw] [--error 5]
-atsc decompress <input.atsc> [-o output.wbro]
+atsc compress <input> [-o output.atsc] [--codec auto|fft|poly|const|noop|idw] [--error 5] [--strict]
+atsc decompress <input.atsc> [-o output]
 atsc inspect <input.atsc>
-atsc bench <input.wbro>     # runs all codecs, prints table of ratio/error/time
+atsc bench <input>     # runs all codecs, prints table of ratio/error/time
 ```
 
-Thin wrapper. Reads `.wbro` files (WavBrro format) for input compatibility with existing test data. Output is `.atsc` (new format). The CLI does file I/O; the library never does.
+- Input: raw binary f64 files (simple `N * 8` bytes LE). No WavBrro.
+- Output: `.atsc` files (new format).
+- `--strict`: enables `reject_nan_inf`.
+- The CLI does file I/O; the library never does.
+- `atsc inspect` prints header info, frame-by-frame codec/size/samples, and footer.
 
 ---
 
@@ -539,8 +630,10 @@ Thin wrapper. Reads `.wbro` files (WavBrro format) for input compatibility with 
 ### 5.1 Testing
 
 - **Roundtrip property tests** (`proptest`): for every codec, `decompress(compress(data))` is within error bound for random data.
-- **Fuzz targets** (`cargo-fuzz`): feed random bytes to `decompress()`, `decode_stream()`, `decode_header()`. Must never panic.
-- **Wire format tests**: hand-craft byte sequences, verify decode. Encode then decode, verify roundtrip.
+- **Fuzz targets** (`cargo-fuzz`): feed random bytes to `decompress()`, `decode_stream()`, `decode_header()`. Must never panic, only return `Err`.
+- **Wire format golden tests**: hand-craft byte sequences for each codec, verify decode produces expected output. Encode then decode, verify roundtrip. Commit golden vectors to the repo.
+- **Resource limit tests**: craft payloads with `frame_count = u32::MAX`, `payload_len = u32::MAX`, etc. Verify `Error::ResourceLimitExceeded` is returned without allocating.
+- **VSRI invariant tests**: verify that encode/decode rejects non-monotonic timestamps, mismatched sample counts, missing VSRI frame when flag is set.
 - **Regression benchmarks** (Criterion): FFT compress/decompress at 256/1024/4096/65536 sizes. Polynomial same.
 
 ### 5.2 Dependencies (target)
@@ -560,7 +653,16 @@ criterion = "0.5"
 proptest = "1"
 ```
 
-That's it. No bincode, no rkyv, no hound, no regex, no average, no median, no chrono, no tempfile, no csv.
+No bincode, no rkyv, no hound, no regex, no average, no median, no chrono, no tempfile, no csv, no wavbrro.
+
+```toml
+# atsc-cli/Cargo.toml
+[dependencies]
+atsc = { path = "../atsc" }
+clap = { version = "4", features = ["derive"] }
+env_logger = "0.11"
+log = "0.4"
+```
 
 ### 5.3 CI
 
@@ -584,18 +686,19 @@ That's it. No bincode, no rkyv, no hound, no regex, no average, no median, no ch
 
 | Step | Description | Depends on |
 |------|-------------|------------|
-| 1 | Workspace restructure: create `atsc/` (lib) + `atsc-cli/` (bin), delete dropped crates | — |
+| 1 | Workspace restructure: create `atsc/` (lib) + `atsc-cli/` (bin), remove dropped crates | — |
 | 2 | `error.rs`: define `Error` enum + `Result` alias | 1 |
-| 3 | `codec/mod.rs`: define `Codec` trait, `CompressConfig`, `CompressedFrame` | 2 |
-| 4 | `format/`: implement manual wire format (header + frame encode/decode) | 2, 3 |
-| 5 | `metrics.rs`: implement NRMSE | 2 |
-| 6 | `codec/constant.rs`: implement Constant codec | 3, 4 |
-| 7 | `codec/noop.rs`: implement Noop codec (truly lossless) | 3, 4 |
-| 8 | `codec/fft.rs`: port + fix FFT codec | 3, 4, 5 |
-| 9 | `codec/polynomial.rs`: port + fix Polynomial/IDW codec | 3, 4, 5 |
-| 10 | `vsri/`: port + fix VSRI with i64 segments | 2, 4 |
-| 11 | `optimizer/`: implement chunker + codec selection | 3, 5, 6–9 |
-| 12 | Public API: `compress()`, `decompress()`, `StreamWriter`, `StreamReader` | 4, 11 |
-| 13 | `atsc-cli`: build CLI with subcommands | 12 |
-| 14 | Property tests + fuzz targets + wire format tests | 12 |
-| 15 | CI setup + lint cleanup + dependency audit | 13, 14 |
+| 3 | `format/limits.rs`: define decode resource limit constants | 2 |
+| 4 | `codec/mod.rs`: define `Codec` trait, `CompressConfig`, `CompressedFrame` | 2 |
+| 5 | `format/`: implement header + frame + footer encode/decode with limits | 2, 3, 4 |
+| 6 | `metrics.rs`: implement NRMSE with constant-signal special case | 2 |
+| 7 | `codec/constant.rs`: implement Constant codec | 4, 5 |
+| 8 | `codec/noop.rs`: implement Noop codec (truly lossless) | 4, 5 |
+| 9 | `codec/fft.rs`: port + fix FFT codec with bitpacked positions | 4, 5, 6 |
+| 10 | `codec/polynomial.rs`: port + fix Polynomial/IDW codec | 4, 5, 6 |
+| 11 | `vsri/`: port + fix VSRI with i64 segments + invariant validation | 2, 5 |
+| 12 | `optimizer/`: implement chunker + codec selection with fail-hard + fallback | 4, 6, 7–10 |
+| 13 | Public API: `compress()`, `decompress()`, `StreamWriter`, `StreamReader`, `inspect()` | 5, 11, 12 |
+| 14 | `atsc-cli`: build CLI with subcommands | 13 |
+| 15 | Property tests + fuzz targets + wire format golden tests + VSRI invariant tests | 13 |
+| 16 | CI setup + lint cleanup + dependency audit | 14, 15 |
