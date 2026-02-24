@@ -3,6 +3,7 @@
 use crate::error::Result;
 
 pub mod constant;
+pub mod fft;
 pub mod noop;
 
 /// A compression codec implementation.
