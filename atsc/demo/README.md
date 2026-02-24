@@ -14,15 +14,15 @@ Three demo output files are provided so that comparison can be made without need
 
 ## What is in each file?
 
-Each HTML file renders the output of all compressor options (`FFT`, `IDW` and `Polynomial`) with an error indicated in the file name (1% or 3%). Also, the input data is rendered.
+Each HTML file renders the output of the available v2 options (**Auto**, **FFT**, **Polynomial**) with an error indicated in the file name (1% or 3%). Also, the input data is rendered.
 
 On top, it is possible to click in each option to hide display each option and have a visual comparison between options.
 
 ## Contents
 
-This folder contains scripts to generate the demo `html` files.
+This folder contains scripts to generate demo `html` files.
 
-The demo scripts generate 2 comparison files. One for all compressors (`FFT`, `IDW` and `Polynomial`) with an error of 1% and another with a 3% error.
+The demo scripts generate 2 comparison files (1% and 3% error) under `generated/`. For v2, the plots compare **Data**, **Auto**, **FFT**, and **Polynomial** (IDW was dropped).
 
 In this folder there are 3 comparisons from some of the available uncompressed files in [tests folder](https://github.com/instaclustr/atsc/tree/v0.7/atsc/tests).
 
@@ -46,8 +46,9 @@ The files are the following:
         cd atsc/demo
     ```
 
-2. Execute the Demo. **Note**: If using a `wbro` file, run `run_demo.sh`, if using a `csv` file run `run_demo_csv.sh`
+2. Execute the Demo. If using a `.wbro` file, run `run_demo.sh` (it converts `.wbro` to raw `.f64` first). If using a `csv` file run `run_demo_csv.sh`.
 
     ```bash
-        ./run_demo_csv.sh INPUT_FILE
+        ./run_demo.sh ../tests/wbros/memory_used.wbro
+        ./run_demo_csv.sh INPUT_FILE.csv
     ```

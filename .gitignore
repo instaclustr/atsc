@@ -14,3 +14,7 @@ COMPLAIN*.md
 fuzz/artifacts/
 fuzz/corpus/
 fuzz/target/
+
+# demo outputs (generated locally)
+atsc/demo/generated/
+atsc/demo/.tmp-demo-*/
