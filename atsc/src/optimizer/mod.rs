@@ -4,6 +4,7 @@ pub mod chunker;
 pub mod stats;
 
 use crate::codec::constant::ConstantCodec;
+use crate::codec::noop::NoopCodec;
 use crate::codec::{Codec, CompressConfig, CompressedFrame};
 use crate::error::{Error, Result};
 use stats::DataStats;
@@ -36,11 +37,12 @@ pub fn select_codec(
         return ConstantCodec.compress(data, config);
     }
 
-    let results = try_all_codecs(data, codecs, config);
+    let codecs = ensure_noop(codecs);
+    let results = try_all_codecs(data, &codecs, config);
 
     let mut best_ok: Option<CompressedFrame> = None;
-    let mut best_err_bounds: Vec<(usize, f64)> = Vec::new();
-    let mut last_err: Option<Error> = None;
+    let mut best_err_bounds: Vec<(usize, f64)> = Vec::new(); // (idx, best_err)
+    let mut first_hard_err: Option<(usize, Error)> = None;
 
     for (idx, res) in results.into_iter().enumerate() {
         match res {
@@ -58,7 +60,11 @@ pub fn select_codec(
             Err(Error::ErrorBoundNotMet { best, .. }) => {
                 best_err_bounds.push((idx, best));
             }
-            Err(e) => last_err = Some(e),
+            Err(e) => {
+                if first_hard_err.is_none() {
+                    first_hard_err = Some((idx, e));
+                }
+            }
         }
     }
 
@@ -66,21 +72,37 @@ pub fn select_codec(
         return Ok(frame);
     }
 
-    // Fallback: choose lowest best error and re-run with relaxed bound.
-    if let Some((best_idx, best)) = best_err_bounds
-        .into_iter()
-        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-    {
+    // Fallback: choose lowest best error (deterministic tie-break by idx).
+    if let Some((best_idx, best)) = best_err_bounds.into_iter().min_by(|a, b| {
+        let ea = a.1;
+        let eb = b.1;
+        match (ea.is_finite(), eb.is_finite()) {
+            (true, true) => ea
+                .partial_cmp(&eb)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.0.cmp(&b.0)),
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (false, false) => a.0.cmp(&b.0),
+        }
+    }) {
         let mut relaxed = config.clone();
         relaxed.max_error = Some(best);
         if let Some(codec) = codecs.get(best_idx) {
-            if let Ok(frame) = codec.compress(data, &relaxed) {
-                return Ok(frame);
+            match codec.compress(data, &relaxed) {
+                Ok(frame) => return Ok(frame),
+                Err(e) => {
+                    if first_hard_err.is_none() {
+                        first_hard_err = Some((best_idx, e));
+                    }
+                }
             }
         }
     }
 
-    Err(last_err.unwrap_or_else(|| Error::ResourceLimitExceeded("no codecs available".into())))
+    Err(first_hard_err
+        .map(|(_, e)| e)
+        .unwrap_or_else(|| Error::ResourceLimitExceeded("no codecs available".into())))
 }
 
 fn try_all_codecs(
@@ -103,10 +125,51 @@ fn try_all_codecs(
     }
 }
 
+fn ensure_noop<'a>(codecs: &'a [&'a dyn Codec]) -> Vec<&'a dyn Codec> {
+    if codecs.is_empty() {
+        return vec![&NoopCodec];
+    }
+    if codecs.iter().any(|c| c.id() == NoopCodec::ID) {
+        return codecs.to_vec();
+    }
+    let mut out = Vec::with_capacity(codecs.len() + 1);
+    out.extend_from_slice(codecs);
+    out.push(&NoopCodec);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::codec::noop::NoopCodec;
+    use crate::codec::CompressConfig;
+
+    struct AlwaysBoundFailCodec {
+        id: u8,
+    }
+
+    impl Codec for AlwaysBoundFailCodec {
+        fn id(&self) -> u8 {
+            self.id
+        }
+
+        fn name(&self) -> &'static str {
+            "always-bound-fail"
+        }
+
+        fn compress(&self, data: &[f64], config: &CompressConfig) -> Result<CompressedFrame> {
+            let target = config.max_error.unwrap_or(0.0);
+            let _ = data;
+            Err(Error::ErrorBoundNotMet {
+                best: 0.123,
+                target,
+            })
+        }
+
+        fn decompress(&self, _payload: &[u8], _sample_count: u32) -> Result<Vec<f64>> {
+            Err(Error::UnknownCodec(self.id))
+        }
+    }
 
     #[test]
     fn selects_constant_for_constant_data() {
@@ -116,5 +179,18 @@ mod tests {
         let frame = select_codec(&data, &codecs, &cfg).unwrap();
         assert_eq!(frame.codec_id, ConstantCodec::ID);
         assert_eq!(frame.sample_count, 1024);
+    }
+
+    #[test]
+    fn guarantees_noop_fallback_for_finite_data() {
+        let data: Vec<f64> = (0..2048).map(|i| (i as f64).sin()).collect();
+        let cfg = CompressConfig {
+            max_error: Some(0.0),
+            ..Default::default()
+        };
+        let bad = AlwaysBoundFailCodec { id: 250 };
+        let codecs: [&dyn Codec; 1] = [&bad];
+        let frame = select_codec(&data, &codecs, &cfg).unwrap();
+        assert_eq!(frame.codec_id, NoopCodec::ID);
     }
 }
