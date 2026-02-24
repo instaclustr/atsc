@@ -55,7 +55,6 @@ enum CodecChoice {
     Auto,
     Fft,
     Poly,
-    Idw,
     Const,
     Noop,
 }
@@ -108,7 +107,6 @@ fn cmd_compress(
         CodecChoice::Const => encode_forced(&data, &cfg, &atsc::codec::constant::ConstantCodec)?,
         CodecChoice::Fft => encode_forced(&data, &cfg, &atsc::codec::fft::FftF32Codec)?,
         CodecChoice::Poly => encode_forced(&data, &cfg, &atsc::codec::polynomial::PolynomialCodec)?,
-        CodecChoice::Idw => encode_forced(&data, &cfg, &atsc::codec::polynomial::IdwCodec)?,
     };
 
     let out_path = output
@@ -204,12 +202,11 @@ fn cmd_bench(input: &PathBuf, error_percent: f64, strict: bool) -> Result<(), at
         reject_nan_inf: strict,
     };
 
-    let codecs: [(&str, &dyn atsc::codec::Codec); 5] = [
+    let codecs: [(&str, &dyn atsc::codec::Codec); 4] = [
         ("noop", &atsc::codec::noop::NoopCodec),
         ("const", &atsc::codec::constant::ConstantCodec),
         ("fft", &atsc::codec::fft::FftF32Codec),
         ("poly", &atsc::codec::polynomial::PolynomialCodec),
-        ("idw", &atsc::codec::polynomial::IdwCodec),
     ];
 
     println!("name\tbytes\terror\ttime_ms");

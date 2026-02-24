@@ -16,7 +16,7 @@ pub use error::{Error, Result};
 
 use crate::codec::fft::FftF32Codec;
 use crate::codec::noop::NoopCodec;
-use crate::codec::polynomial::{IdwCodec, PolynomialCodec};
+use crate::codec::polynomial::PolynomialCodec;
 use crate::codec::{Codec, CompressConfig, CompressedFrame};
 use crate::format::header::Header;
 use crate::format::stream::{decode_stream, encode_stream};
@@ -349,8 +349,8 @@ pub struct FrameInfo {
     pub payload_bytes: u32,
 }
 
-fn default_codecs() -> [&'static dyn Codec; 4] {
-    [&NoopCodec, &FftF32Codec, &PolynomialCodec, &IdwCodec]
+fn default_codecs() -> [&'static dyn Codec; 3] {
+    [&NoopCodec, &FftF32Codec, &PolynomialCodec]
 }
 
 fn codec_name(codec_id: u8) -> &'static str {
@@ -359,7 +359,6 @@ fn codec_name(codec_id: u8) -> &'static str {
         1 => "constant",
         2 => "fft-f32",
         4 => "polynomial",
-        5 => "idw",
         128 => "vsri",
         _ => "unknown",
     }
@@ -371,7 +370,6 @@ fn decompress_frame(frame: &CompressedFrame) -> Result<Vec<f64>> {
         1 => crate::codec::constant::ConstantCodec.decompress(&frame.payload, frame.sample_count),
         2 => FftF32Codec.decompress(&frame.payload, frame.sample_count),
         4 => PolynomialCodec.decompress(&frame.payload, frame.sample_count),
-        5 => IdwCodec.decompress(&frame.payload, frame.sample_count),
         _ => Err(Error::UnknownCodec(frame.codec_id)),
     }
 }

@@ -1,4 +1,4 @@
-use atsc::codec::polynomial::{IdwCodec, PolynomialCodec};
+use atsc::codec::polynomial::PolynomialCodec;
 use atsc::codec::{Codec, CompressConfig};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
@@ -48,27 +48,9 @@ fn bench_poly_decompress(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_idw_compress(c: &mut Criterion) {
-    let mut group = c.benchmark_group("idw_compress");
-    for &n in &[256usize, 1024, 4096, 65_536] {
-        let data = make_signal(n);
-        let cfg = CompressConfig {
-            max_error: None,
-            ..Default::default()
-        };
-        group.bench_with_input(BenchmarkId::from_parameter(n), &data, |b, d| {
-            b.iter(|| {
-                let _ = IdwCodec.compress(d, &cfg).unwrap();
-            })
-        });
-    }
-    group.finish();
-}
-
 criterion_group!(
     benches,
     bench_poly_compress,
-    bench_poly_decompress,
-    bench_idw_compress
+    bench_poly_decompress
 );
 criterion_main!(benches);

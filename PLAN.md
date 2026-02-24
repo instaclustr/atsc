@@ -70,7 +70,7 @@ Rebuild ATSC as a **first-class, embeddable time-series compression library** wi
 │  │  PolyCodec    │  │  select()  │  │  Frame         │ │
 │  │  ConstCodec   │  │  chunk()   │  │  Stream        │ │
 │  │  NoopCodec    │  │            │  │  Footer        │ │
-│  │  (IdwCodec)   │  │            │  │                │ │
+│  │              │  │            │  │                │ │
 │  └───────────────┘  └────────────┘  └────────────────┘ │
 │                                                         │
 │  ┌──────────┐  ┌──────────┐  ┌───────────────────────┐ │
@@ -156,7 +156,7 @@ If the footer is missing (truncated stream), readers scan frames from after the 
 | 2 | FFT (f32 frequencies, bitpacked positions) |
 | 3 | Reserved (deprecated: FFT f64 was removed from v2) |
 | 4 | Polynomial (CatmullRom) |
-| 5 | IDW |
+| 5 | Reserved (deprecated: IDW was removed from v2) |
 | 128 | VSRI (timestamps) |
 
 ### Decode resource limits (compile-time constants)
@@ -227,7 +227,7 @@ The `fft_len` needed for decoding is deterministic from `sample_count` via the f
 
 This algorithm is frozen for codec ID 2. Any change to the padding strategy requires allocating new codec IDs.
 
-**Polynomial (ID 4) / IDW (ID 5):**
+**Polynomial (ID 4):**
 
 | Field | Size | Type |
 |-------|------|------|
@@ -610,7 +610,7 @@ pub struct FrameInfo {
 ### 4.2 CLI (`atsc-cli`)
 
 ```
-atsc compress <input> [-o output.atsc] [--codec auto|fft|poly|const|noop|idw] [--error 5] [--strict]
+atsc compress <input> [-o output.atsc] [--codec auto|fft|poly|const|noop] [--error 5] [--strict]
 atsc decompress <input.atsc> [-o output]
 atsc inspect <input.atsc>
 atsc bench <input>     # runs all codecs, prints table of ratio/error/time
@@ -643,7 +643,6 @@ atsc bench <input>     # runs all codecs, prints table of ratio/error/time
 thiserror = "2"
 rustfft = "6.1"
 splines = "4.3"
-inverse_distance_weight = "0.1"
 log = "0.4"
 rayon = { version = "1", optional = true }
 

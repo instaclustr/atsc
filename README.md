@@ -108,7 +108,7 @@ Arguments:
   <INPUT>  input file
 
       --compressor <COMPRESSOR>
-          Select a compressor, default is auto [default: auto] [possible values: auto, noop, fft, constant, polynomial, idw]
+          Select a compressor, default is auto [default: auto] [possible values: auto, noop, fft, constant, polynomial]
   -e, --error <ERROR>
           Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 5 (5%).
           0 is lossless compression

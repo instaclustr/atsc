@@ -1,4 +1,4 @@
-//! Polynomial (CatmullRom) and IDW codecs.
+//! Polynomial (CatmullRom) codec.
 //!
 //! These codecs store a subset of samples and reconstruct the remaining points
 //! using interpolation. The payload layout follows `PLAN.md` (v2 wire format).
@@ -7,7 +7,6 @@ use crate::bytes::{take_f64_le, take_u32_le, take_u8};
 use crate::codec::{Codec, CompressConfig, CompressedFrame};
 use crate::error::{Error, Result};
 use crate::metrics::nrmse;
-use inverse_distance_weight::IDW;
 use splines::{Interpolation, Key, Spline};
 
 /// Polynomial codec (CatmullRom) (codec id 4).
@@ -29,51 +28,17 @@ impl Codec for PolynomialCodec {
     }
 
     fn compress(&self, data: &[f64], config: &CompressConfig) -> Result<CompressedFrame> {
-        compress_impl(Method::CatmullRom, Self::ID, data, config)
+        compress_impl(Self::ID, data, config)
     }
 
     fn decompress(&self, payload: &[u8], sample_count: u32) -> Result<Vec<f64>> {
-        decompress_impl(Method::CatmullRom, payload, sample_count)
+        decompress_impl(payload, sample_count)
     }
-}
-
-/// Inverse-distance weighting codec (codec id 5).
-#[derive(Clone, Copy, Debug, Default)]
-pub struct IdwCodec;
-
-impl IdwCodec {
-    /// Wire format codec id.
-    pub const ID: u8 = 5;
-}
-
-impl Codec for IdwCodec {
-    fn id(&self) -> u8 {
-        Self::ID
-    }
-
-    fn name(&self) -> &'static str {
-        "idw"
-    }
-
-    fn compress(&self, data: &[f64], config: &CompressConfig) -> Result<CompressedFrame> {
-        compress_impl(Method::Idw, Self::ID, data, config)
-    }
-
-    fn decompress(&self, payload: &[u8], sample_count: u32) -> Result<Vec<f64>> {
-        decompress_impl(Method::Idw, payload, sample_count)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Method {
-    CatmullRom,
-    Idw,
 }
 
 const BITDEPTH_F64: u8 = 3;
 
 fn compress_impl(
-    method: Method,
     codec_id: u8,
     data: &[f64],
     config: &CompressConfig,
@@ -88,7 +53,6 @@ fn compress_impl(
 
     let baseline_points = (data.len() / 100).max(3).max(1);
     let ctx = CompressCtx {
-        method,
         min,
         max,
         data,
@@ -109,7 +73,6 @@ fn compress_impl(
 
 #[derive(Clone, Copy, Debug)]
 struct CompressCtx<'a> {
-    method: Method,
     min: f64,
     max: f64,
     data: &'a [f64],
@@ -166,7 +129,6 @@ fn compress_once(ctx: &CompressCtx<'_>, points: usize) -> Result<(Vec<u8>, f64)>
     let (point_step, samples) = select_samples(ctx.data, points);
 
     let reconstructed = reconstruct(
-        ctx.method,
         ctx.min,
         ctx.max,
         point_step,
@@ -191,7 +153,6 @@ fn select_samples(data: &[f64], points: usize) -> (u32, Vec<f64>) {
 }
 
 fn reconstruct(
-    method: Method,
     min: f64,
     max: f64,
     point_step: u32,
@@ -219,10 +180,7 @@ fn reconstruct(
         ));
     }
 
-    let out = match method {
-        Method::CatmullRom => interpolate_catmull_rom(&positions, samples, frame_size)?,
-        Method::Idw => interpolate_idw(&positions, samples, frame_size)?,
-    };
+    let out = interpolate_catmull_rom(&positions, samples, frame_size)?;
 
     Ok(out.into_iter().map(|v| v.clamp(min, max)).collect())
 }
@@ -253,13 +211,6 @@ fn interpolate_catmull_rom(
     Ok(out)
 }
 
-fn interpolate_idw(positions: &[usize], samples: &[f64], frame_size: usize) -> Result<Vec<f64>> {
-    let points: Vec<f64> = positions.iter().map(|&p| p as f64).collect();
-    let values: Vec<f64> = samples.to_vec();
-    let idw = IDW::new(points, values);
-    Ok((0..frame_size).map(|i| idw.evaluate(i as f64)).collect())
-}
-
 fn encode_payload(min: f64, max: f64, point_step: u32, samples: &[f64]) -> Result<Vec<u8>> {
     let point_count: u32 = samples
         .len()
@@ -278,13 +229,19 @@ fn encode_payload(min: f64, max: f64, point_step: u32, samples: &[f64]) -> Resul
     Ok(out)
 }
 
-fn decompress_impl(method: Method, payload: &[u8], sample_count: u32) -> Result<Vec<f64>> {
+fn decompress_impl(payload: &[u8], sample_count: u32) -> Result<Vec<f64>> {
+    let frame_size: usize = sample_count
+        .try_into()
+        .map_err(|_| Error::ResourceLimitExceeded("sample_count does not fit usize".into()))?;
     let mut off = 0usize;
     let min = take_f64_le(payload, &mut off)?;
     let max = take_f64_le(payload, &mut off)?;
     let point_step = take_u32_le(payload, &mut off)?;
     let bitdepth = take_u8(payload, &mut off)?;
-    let point_count = take_u32_le(payload, &mut off)? as usize;
+    let point_count_u32 = take_u32_le(payload, &mut off)?;
+    let point_count: usize = point_count_u32
+        .try_into()
+        .map_err(|_| Error::ResourceLimitExceeded("point_count does not fit usize".into()))?;
 
     if bitdepth != BITDEPTH_F64 {
         return Err(Error::ResourceLimitExceeded(
@@ -302,14 +259,7 @@ fn decompress_impl(method: Method, payload: &[u8], sample_count: u32) -> Result<
         ));
     }
 
-    reconstruct(
-        method,
-        min,
-        max,
-        point_step,
-        &samples,
-        sample_count as usize,
-    )
+    reconstruct(min, max, point_step, &samples, frame_size)
 }
 
 fn finite_min_max(data: &[f64]) -> Result<(f64, f64)> {
@@ -346,21 +296,6 @@ mod tests {
         };
         let frame = PolynomialCodec.compress(&data, &cfg).unwrap();
         let out = PolynomialCodec
-            .decompress(&frame.payload, frame.sample_count)
-            .unwrap();
-        assert_eq!(out.len(), data.len());
-        assert!(out.iter().all(|v| v.is_finite()));
-    }
-
-    #[test]
-    fn idw_roundtrip_sanity() {
-        let data: Vec<f64> = (0..512).map(|i| (i as f64).sin()).collect();
-        let cfg = CompressConfig {
-            max_error: None,
-            ..Default::default()
-        };
-        let frame = IdwCodec.compress(&data, &cfg).unwrap();
-        let out = IdwCodec
             .decompress(&frame.payload, frame.sample_count)
             .unwrap();
         assert_eq!(out.len(), data.len());
