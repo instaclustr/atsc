@@ -317,4 +317,19 @@ mod tests {
         let err = Vsri::from_timestamps(&timestamps).unwrap_err();
         assert!(matches!(err, Error::VsriOutOfOrder { .. }));
     }
+
+    #[test]
+    fn decode_rejects_non_contiguous_x0() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&0i64.to_le_bytes()); // min_ts
+        payload.extend_from_slice(&10i64.to_le_bytes()); // max_ts
+        payload.extend_from_slice(&1u32.to_le_bytes()); // segment_count
+        payload.extend_from_slice(&1i64.to_le_bytes()); // rate
+        payload.extend_from_slice(&5i64.to_le_bytes()); // x0 (invalid; must be 0)
+        payload.extend_from_slice(&0i64.to_le_bytes()); // y0
+        payload.extend_from_slice(&2u32.to_le_bytes()); // count
+
+        let err = Vsri::decode(&payload).unwrap_err();
+        assert!(matches!(err, Error::VsriInvariantViolation(_)));
+    }
 }

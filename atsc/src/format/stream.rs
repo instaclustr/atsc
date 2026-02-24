@@ -267,4 +267,53 @@ mod tests {
         let err = decode_frame(&out, &mut off).unwrap_err();
         assert!(matches!(err, Error::UnexpectedEof { .. }));
     }
+
+    #[test]
+    fn golden_constant_stream_bytes() {
+        let header = Header {
+            version: 1,
+            flags: 0,
+        };
+        let payload = 2.5f64.to_le_bytes().to_vec();
+        let frames = [CompressedFrame {
+            codec_id: 1,
+            sample_count: 3,
+            payload,
+            measured_error: 0.0,
+        }];
+
+        let bytes = encode_stream(&header, &frames).unwrap();
+
+        let expected: [u8; 31] = [
+            b'A', b'T', b'S', b'C', 1, 0, // header
+            1, // codec_id
+            3, 0, 0, 0, // sample_count
+            8, 0, 0, 0, // payload_len
+            0, 0, 0, 0, 0, 0, 4, 64, // f64 2.5
+            b'C', b'S', b'T', b'A', 1, 0, 0, 0, // footer
+        ];
+        assert_eq!(bytes, expected);
+
+        let (h2, decoded) = decode_stream(&bytes).unwrap();
+        assert_eq!(h2, header);
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].codec_id, 1);
+        assert_eq!(decoded[0].sample_count, 3);
+        assert_eq!(decoded[0].payload.len(), 8);
+    }
+
+    #[test]
+    fn decode_rejects_oversize_payload_len_without_alloc() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&MAGIC);
+        bytes.push(1);
+        bytes.push(0);
+
+        bytes.push(0); // codec_id
+        bytes.extend_from_slice(&1u32.to_le_bytes()); // sample_count
+        bytes.extend_from_slice(&(MAX_PAYLOAD_BYTES + 1).to_le_bytes()); // payload_len
+
+        let err = decode_stream(&bytes).unwrap_err();
+        assert!(matches!(err, Error::ResourceLimitExceeded(_)));
+    }
 }
