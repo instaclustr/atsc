@@ -47,7 +47,8 @@ fn prev_power_of_two(n: usize) -> usize {
     if n.is_power_of_two() {
         return n;
     }
-    1usize << (usize::BITS - 1 - (n as u64).leading_zeros()) as usize
+    let shift = usize::BITS - 1 - n.leading_zeros();
+    1usize << shift
 }
 
 #[cfg(test)]

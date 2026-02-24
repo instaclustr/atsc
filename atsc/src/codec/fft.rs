@@ -4,8 +4,8 @@
 //! Frequency positions are encoded as a bitpacked index to avoid storing a
 //! per-frequency `pos` field.
 
-use crate::codec::{Codec, CompressConfig, CompressedFrame};
 use crate::bytes::{take_bytes, take_f32_le, take_u16_le};
+use crate::codec::{Codec, CompressConfig, CompressedFrame};
 use crate::error::{Error, Result};
 use crate::metrics::nrmse;
 use rustfft::num_complex::Complex;
@@ -527,6 +527,9 @@ fn next_smooth(n: usize) -> usize {
             Some(p) => p,
             None => break,
         };
+    }
+    if best == u64::MAX {
+        return n as usize;
     }
     best as usize
 }
