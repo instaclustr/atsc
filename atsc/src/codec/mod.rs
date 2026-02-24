@@ -2,6 +2,9 @@
 
 use crate::error::Result;
 
+pub mod constant;
+pub mod noop;
+
 /// A compression codec implementation.
 pub trait Codec: Send + Sync {
     /// Unique identifier for this codec (wire format codec id).
