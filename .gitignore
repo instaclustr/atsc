@@ -9,3 +9,8 @@
 # Existing tracked PLAN.md is grandfathered on this branch.
 PLAN-*.md
 COMPLAIN*.md
+
+# cargo-fuzz outputs
+fuzz/artifacts/
+fuzz/corpus/
+fuzz/target/

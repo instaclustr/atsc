@@ -1,0 +1,31 @@
+[package]
+name = "atsc-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+atsc = { path = "../atsc" }
+
+[[bin]]
+name = "decode_header"
+path = "fuzz_targets/decode_header.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "decode_stream"
+path = "fuzz_targets/decode_stream.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "decompress"
+path = "fuzz_targets/decompress.rs"
+test = false
+doc = false
+

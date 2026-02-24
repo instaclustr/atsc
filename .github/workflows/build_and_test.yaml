@@ -2,7 +2,7 @@ name: Build and Test
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, atsc-v2 ]
   pull_request:
     branches: [ main ]
 
@@ -58,6 +58,16 @@ jobs:
       run: |
         cargo test --doc ${{ matrix.cargo_flags }} --all-features -- --show-output --nocapture
         cargo test ${{ matrix.cargo_flags }} --all-features --all-targets -- --nocapture
+    - name: Install cargo-fuzz
+      if: matrix.name == 'Ubuntu 20.04 - Debug'
+      run: cargo install cargo-fuzz --version 0.12.0
+    - name: Fuzz smoke test (5s each)
+      if: matrix.name == 'Ubuntu 20.04 - Debug'
+      run: |
+        cd fuzz
+        cargo fuzz run decode_header -- -max_total_time=5
+        cargo fuzz run decode_stream -- -max_total_time=5
+        cargo fuzz run decompress -- -max_total_time=5
     - name: Ensure that tests did not create or modify any files that arent .gitignore'd
       run: |
         if [ -n "$(git status --porcelain)" ]; then
