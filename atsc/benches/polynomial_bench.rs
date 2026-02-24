@@ -48,9 +48,5 @@ fn bench_poly_decompress(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_poly_compress,
-    bench_poly_decompress
-);
+criterion_group!(benches, bench_poly_compress, bench_poly_decompress);
 criterion_main!(benches);

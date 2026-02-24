@@ -71,7 +71,6 @@ name = "atsc"
 version = "0.7.2"
 dependencies = [
  "criterion",
- "inverse_distance_weight",
  "log",
  "proptest",
  "rayon",
@@ -371,15 +370,6 @@ name = "humantime"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
-
-[[package]]
-name = "inverse_distance_weight"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b05a1bdf10ad0027aedd344dc2430ce0a69aa06bdb549981f4be3d82073c9b0"
-dependencies = [
- "num-traits",
-]
 
 [[package]]
 name = "is-terminal"
