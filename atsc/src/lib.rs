@@ -93,20 +93,20 @@ pub fn compress_with_timestamps(
         ));
     }
 
-    let filtered_values = filter_nan_inf(values, config.reject_nan_inf)?;
-    if filtered_values.len() != timestamps.len() {
-        // Filtering would desync timestamps/values; require strict mode or pre-filtering by caller.
-        return Err(Error::InvalidInput);
+    let (filtered_timestamps, filtered_values) =
+        filter_timestamp_value_pairs(timestamps, values, config.reject_nan_inf)?;
+    if filtered_values.is_empty() {
+        return Err(Error::EmptyData);
     }
 
-    let vsri = Vsri::from_timestamps(timestamps)?;
+    let vsri = Vsri::from_timestamps(&filtered_timestamps)?;
     let vsri_payload = vsri.encode()?;
 
-    let sample_count: u32 = values
+    let sample_count: u32 = filtered_values
         .len()
         .try_into()
         .map_err(|_| Error::SampleCountOverflow {
-            count: values.len() as u64,
+            count: filtered_values.len() as u64,
         })?;
 
     let mut frames = Vec::new();
@@ -393,6 +393,33 @@ fn filter_nan_inf(data: &[f64], reject: bool) -> Result<Vec<f64>> {
     Ok(out)
 }
 
+fn filter_timestamp_value_pairs(
+    timestamps: &[i64],
+    values: &[f64],
+    reject: bool,
+) -> Result<(Vec<i64>, Vec<f64>)> {
+    let mut out_ts = Vec::with_capacity(timestamps.len());
+    let mut out_vals = Vec::with_capacity(values.len());
+    let mut removed = 0usize;
+
+    for (&ts, &v) in timestamps.iter().zip(values) {
+        if v.is_finite() {
+            out_ts.push(ts);
+            out_vals.push(v);
+        } else if reject {
+            return Err(Error::InvalidInput);
+        } else {
+            removed += 1;
+        }
+    }
+
+    if removed > 0 {
+        log::warn!("filtered {removed} NaN/Inf samples from timestamped input");
+    }
+
+    Ok((out_ts, out_vals))
+}
+
 #[cfg(test)]
 mod api_tests {
     use super::*;
@@ -414,5 +441,22 @@ mod api_tests {
         let (ts2, v2) = decompress_with_timestamps(&bytes).unwrap();
         assert_eq!(ts2, timestamps);
         assert_eq!(v2.len(), values.len());
+    }
+
+    #[test]
+    fn compress_with_timestamps_filters_pairs_when_not_strict() {
+        let timestamps = vec![0i64, 10, 20, 30];
+        let values = vec![1.0, f64::NAN, 2.0, f64::INFINITY];
+        let cfg = CompressConfig {
+            reject_nan_inf: false,
+            ..Default::default()
+        };
+
+        let bytes = compress_with_timestamps(&timestamps, &values, &cfg).unwrap();
+        let (ts2, v2) = decompress_with_timestamps(&bytes).unwrap();
+
+        assert_eq!(ts2, vec![0i64, 20]);
+        assert_eq!(v2.len(), 2);
+        assert!(v2[0].is_finite() && v2[1].is_finite());
     }
 }
