@@ -124,4 +124,10 @@ mod tests {
             .unwrap();
         assert_eq!(out, data);
     }
+
+    #[test]
+    fn constant_decompress_rejects_truncated_payload() {
+        let err = ConstantCodec.decompress(&[], 10).unwrap_err();
+        assert!(matches!(err, Error::UnexpectedEof { .. }));
+    }
 }

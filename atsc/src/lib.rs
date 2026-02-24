@@ -341,6 +341,26 @@ pub struct StreamInfo {
     pub frames: Vec<FrameInfo>,
 }
 
+impl StreamInfo {
+    /// Total uncompressed payload bytes for the values stream (`total_samples * 8`).
+    #[must_use]
+    pub fn raw_bytes(&self) -> u64 {
+        self.total_samples.saturating_mul(8)
+    }
+
+    /// Compression ratio \(raw_bytes / encoded_bytes\).
+    ///
+    /// Returns `None` if `encoded_bytes == 0`.
+    #[must_use]
+    pub fn compression_ratio(&self, encoded_bytes: usize) -> Option<f64> {
+        let encoded: u64 = encoded_bytes.try_into().ok()?;
+        if encoded == 0 {
+            return None;
+        }
+        Some(self.raw_bytes() as f64 / encoded as f64)
+    }
+}
+
 /// Frame metadata returned by `inspect()`.
 pub struct FrameInfo {
     pub codec_name: &'static str,
@@ -429,6 +449,15 @@ mod api_tests {
         let bytes = compress(&data, &CompressConfig::default()).unwrap();
         let out = decompress(&bytes).unwrap();
         assert_eq!(out.len(), data.len());
+    }
+
+    #[test]
+    fn inspect_reports_raw_bytes_and_ratio() {
+        let data: Vec<f64> = (0..1024).map(|i| (i as f64).sin()).collect();
+        let bytes = compress(&data, &CompressConfig::default()).unwrap();
+        let info = inspect(&bytes).unwrap();
+        assert_eq!(info.raw_bytes(), (data.len() as u64) * 8);
+        assert!(info.compression_ratio(bytes.len()).unwrap().is_finite());
     }
 
     #[test]

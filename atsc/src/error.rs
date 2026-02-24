@@ -3,6 +3,7 @@ use std::io;
 /// Error type for ATSC v2 operations.
 #[must_use]
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Input data is empty.
     #[error("data is empty")]

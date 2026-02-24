@@ -303,4 +303,10 @@ mod tests {
             Err(Error::PayloadCorrupt(_))
         ));
     }
+
+    #[test]
+    fn polynomial_decompress_rejects_truncated_payload() {
+        let err = PolynomialCodec.decompress(&[0u8; 7], 1).unwrap_err();
+        assert!(matches!(err, Error::UnexpectedEof { .. }));
+    }
 }

@@ -97,4 +97,10 @@ mod tests {
             .unwrap();
         assert_eq!(out, data);
     }
+
+    #[test]
+    fn noop_decompress_rejects_truncated_payload() {
+        let err = NoopCodec.decompress(&[0u8; 7], 1).unwrap_err();
+        assert!(matches!(err, Error::UnexpectedEof { .. }));
+    }
 }

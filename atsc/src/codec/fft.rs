@@ -575,4 +575,10 @@ mod tests {
         let err = build_heap(&buf).unwrap_err();
         assert!(matches!(err, Error::ResourceLimitExceeded(_)));
     }
+
+    #[test]
+    fn fft_decompress_rejects_truncated_payload() {
+        let err = FftF32Codec.decompress(&[0u8; 3], 1).unwrap_err();
+        assert!(matches!(err, Error::UnexpectedEof { .. }));
+    }
 }
