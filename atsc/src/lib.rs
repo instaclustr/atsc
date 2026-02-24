@@ -102,12 +102,13 @@ pub fn compress_with_timestamps(
     let vsri = Vsri::from_timestamps(&filtered_timestamps)?;
     let vsri_payload = vsri.encode()?;
 
-    let sample_count: u32 = filtered_values
-        .len()
-        .try_into()
-        .map_err(|_| Error::SampleCountOverflow {
-            count: filtered_values.len() as u64,
-        })?;
+    let sample_count: u32 =
+        filtered_values
+            .len()
+            .try_into()
+            .map_err(|_| Error::SampleCountOverflow {
+                count: filtered_values.len() as u64,
+            })?;
 
     let mut frames = Vec::new();
     frames.push(CompressedFrame {

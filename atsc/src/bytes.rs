@@ -50,4 +50,3 @@ pub(crate) fn take_f64_le(buf: &[u8], offset: &mut usize) -> Result<f64> {
     arr.copy_from_slice(bytes);
     Ok(f64::from_le_bytes(arr))
 }
-

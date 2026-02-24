@@ -3,8 +3,8 @@
 //! These codecs store a subset of samples and reconstruct the remaining points
 //! using interpolation. The payload layout follows `PLAN.md` (v2 wire format).
 
-use crate::codec::{Codec, CompressConfig, CompressedFrame};
 use crate::bytes::{take_f64_le, take_u32_le, take_u8};
+use crate::codec::{Codec, CompressConfig, CompressedFrame};
 use crate::error::{Error, Result};
 use crate::metrics::nrmse;
 use inverse_distance_weight::IDW;

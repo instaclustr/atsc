@@ -2,9 +2,9 @@
 
 pub mod segment;
 
+use crate::bytes::{take_i64_le, take_u32_le};
 use crate::error::{Error, Result};
 use crate::format::limits::MAX_VSRI_SEGMENTS;
-use crate::bytes::{take_i64_le, take_u32_le};
 use segment::Segment;
 
 /// VSRI index describing timestamp segments for a values stream.
