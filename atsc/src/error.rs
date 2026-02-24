@@ -28,6 +28,10 @@ pub enum Error {
     #[error("decode: unknown codec id {0}")]
     UnknownCodec(u8),
 
+    /// Decode failed because a codec payload is invalid/corrupt.
+    #[error("decode: corrupt payload: {0}")]
+    PayloadCorrupt(String),
+
     /// Decode rejected the stream because it exceeds hard resource limits.
     #[error("decode: resource limit exceeded: {0}")]
     ResourceLimitExceeded(String),

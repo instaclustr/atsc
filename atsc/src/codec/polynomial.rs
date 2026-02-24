@@ -38,11 +38,7 @@ impl Codec for PolynomialCodec {
 
 const BITDEPTH_F64: u8 = 3;
 
-fn compress_impl(
-    codec_id: u8,
-    data: &[f64],
-    config: &CompressConfig,
-) -> Result<CompressedFrame> {
+fn compress_impl(codec_id: u8, data: &[f64], config: &CompressConfig) -> Result<CompressedFrame> {
     let (min, max) = finite_min_max(data)?;
     let sample_count: u32 = data
         .len()
@@ -52,11 +48,7 @@ fn compress_impl(
         })?;
 
     let baseline_points = (data.len() / 100).max(3).max(1);
-    let ctx = CompressCtx {
-        min,
-        max,
-        data,
-    };
+    let ctx = CompressCtx { min, max, data };
 
     let (payload, measured_error) = match config.max_error {
         None => compress_once(&ctx, baseline_points)?,
@@ -128,13 +120,7 @@ fn compress_bounded(
 fn compress_once(ctx: &CompressCtx<'_>, points: usize) -> Result<(Vec<u8>, f64)> {
     let (point_step, samples) = select_samples(ctx.data, points);
 
-    let reconstructed = reconstruct(
-        ctx.min,
-        ctx.max,
-        point_step,
-        &samples,
-        ctx.data.len(),
-    )?;
+    let reconstructed = reconstruct(ctx.min, ctx.max, point_step, &samples, ctx.data.len())?;
     let err = nrmse(ctx.data, &reconstructed)?;
     let payload = encode_payload(ctx.min, ctx.max, point_step, &samples)?;
     Ok((payload, err))
@@ -244,7 +230,7 @@ fn decompress_impl(payload: &[u8], sample_count: u32) -> Result<Vec<f64>> {
         .map_err(|_| Error::ResourceLimitExceeded("point_count does not fit usize".into()))?;
 
     if bitdepth != BITDEPTH_F64 {
-        return Err(Error::ResourceLimitExceeded(
+        return Err(Error::PayloadCorrupt(
             "unsupported polynomial bitdepth".into(),
         ));
     }
@@ -254,7 +240,7 @@ fn decompress_impl(payload: &[u8], sample_count: u32) -> Result<Vec<f64>> {
         samples.push(take_f64_le(payload, &mut off)?);
     }
     if off != payload.len() {
-        return Err(Error::ResourceLimitExceeded(
+        return Err(Error::PayloadCorrupt(
             "polynomial payload has trailing bytes".into(),
         ));
     }
@@ -300,5 +286,21 @@ mod tests {
             .unwrap();
         assert_eq!(out.len(), data.len());
         assert!(out.iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn rejects_unsupported_bitdepth() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&0.0f64.to_le_bytes()); // min
+        payload.extend_from_slice(&1.0f64.to_le_bytes()); // max
+        payload.extend_from_slice(&1u32.to_le_bytes()); // point_step
+        payload.push(0); // bitdepth (unsupported)
+        payload.extend_from_slice(&1u32.to_le_bytes()); // point_count
+        payload.extend_from_slice(&0.5f64.to_le_bytes()); // one sample
+
+        assert!(matches!(
+            PolynomialCodec.decompress(&payload, 1),
+            Err(Error::PayloadCorrupt(_))
+        ));
     }
 }

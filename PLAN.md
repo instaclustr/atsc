@@ -234,9 +234,9 @@ This algorithm is frozen for codec ID 2. Any change to the padding strategy requ
 | min | 8 | `f64` LE |
 | max | 8 | `f64` LE |
 | point_step | 4 | `u32` LE |
-| bitdepth | 1 | `u8` (0=u8, 1=i16, 2=i32, 3=f64) |
+| bitdepth | 1 | `u8` (must be 3=f64; others reserved) |
 | point_count | 4 | `u32` LE |
-| data_points | variable | encoded per bitdepth |
+| data_points | `point_count * 8` | `f64` LE |
 
 `point_step` is `u32` — no overflow.
 
