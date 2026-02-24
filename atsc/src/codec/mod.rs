@@ -5,6 +5,7 @@ use crate::error::Result;
 pub mod constant;
 pub mod fft;
 pub mod noop;
+pub mod polynomial;
 
 /// A compression codec implementation.
 pub trait Codec: Send + Sync {
