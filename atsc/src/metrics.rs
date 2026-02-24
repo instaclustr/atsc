@@ -12,8 +12,8 @@ use crate::error::{Error, Result};
 pub fn nrmse(original: &[f64], reconstructed: &[f64]) -> Result<f64> {
     if original.len() != reconstructed.len() {
         return Err(Error::LengthMismatch {
-            a: original.len(),
-            b: reconstructed.len(),
+            a: original.len() as u64,
+            b: reconstructed.len() as u64,
         });
     }
     if original.is_empty() {

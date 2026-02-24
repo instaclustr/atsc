@@ -261,8 +261,8 @@ fn validate_segments(segments: &[Segment]) -> Result<()> {
 fn take_bytes<'a>(buf: &'a [u8], offset: &mut usize, len: usize) -> Result<&'a [u8]> {
     if *offset > buf.len() || buf.len() - *offset < len {
         return Err(Error::UnexpectedEof {
-            offset: *offset,
-            expected: len,
+            offset: *offset as u64,
+            expected: len as u64,
         });
     }
     let out = &buf[*offset..*offset + len];

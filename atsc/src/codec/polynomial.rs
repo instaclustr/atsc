@@ -81,7 +81,9 @@ fn compress_impl(
     let sample_count: u32 = data
         .len()
         .try_into()
-        .map_err(|_| Error::SampleCountOverflow { count: data.len() })?;
+        .map_err(|_| Error::SampleCountOverflow {
+            count: data.len() as u64,
+        })?;
 
     let baseline_points = (data.len() / 100).max(3).max(1);
     let ctx = CompressCtx {
@@ -333,8 +335,8 @@ fn finite_min_max(data: &[f64]) -> Result<(f64, f64)> {
 fn take_bytes<'a>(buf: &'a [u8], offset: &mut usize, len: usize) -> Result<&'a [u8]> {
     if *offset > buf.len() || buf.len() - *offset < len {
         return Err(Error::UnexpectedEof {
-            offset: *offset,
-            expected: len,
+            offset: *offset as u64,
+            expected: len as u64,
         });
     }
     let out = &buf[*offset..*offset + len];

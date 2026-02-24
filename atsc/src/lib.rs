@@ -105,7 +105,7 @@ pub fn compress_with_timestamps(
         .len()
         .try_into()
         .map_err(|_| Error::SampleCountOverflow {
-            count: values.len(),
+            count: values.len() as u64,
         })?;
 
     let mut frames = Vec::new();
@@ -212,7 +212,7 @@ impl StreamWriter {
                 .len()
                 .try_into()
                 .map_err(|_| Error::SampleCountOverflow {
-                    count: timestamps.len(),
+                    count: timestamps.len() as u64,
                 })?;
         self.frames.push(CompressedFrame {
             codec_id: VSRI_CODEC_ID,

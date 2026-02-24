@@ -34,7 +34,9 @@ impl Codec for NoopCodec {
         let sample_count: u32 = data
             .len()
             .try_into()
-            .map_err(|_| Error::SampleCountOverflow { count: data.len() })?;
+            .map_err(|_| Error::SampleCountOverflow {
+                count: data.len() as u64,
+            })?;
 
         let mut payload = Vec::with_capacity(data.len() * 8);
         for &v in data {
@@ -61,7 +63,7 @@ impl Codec for NoopCodec {
         if payload.len() != expected {
             return Err(Error::UnexpectedEof {
                 offset: 0,
-                expected,
+                expected: expected as u64,
             });
         }
 

@@ -47,7 +47,9 @@ impl Codec for ConstantCodec {
         let sample_count: u32 = data
             .len()
             .try_into()
-            .map_err(|_| Error::SampleCountOverflow { count: data.len() })?;
+            .map_err(|_| Error::SampleCountOverflow {
+                count: data.len() as u64,
+            })?;
 
         let mse = sum_sq / data.len() as f64;
         let rmse = mse.sqrt();

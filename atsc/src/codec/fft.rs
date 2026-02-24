@@ -35,7 +35,9 @@ impl Codec for FftF32Codec {
         let sample_count: u32 = data
             .len()
             .try_into()
-            .map_err(|_| Error::SampleCountOverflow { count: data.len() })?;
+            .map_err(|_| Error::SampleCountOverflow {
+                count: data.len() as u64,
+            })?;
 
         let (fft_len, prefix_len) = frozen_fft_len_and_prefix(data.len());
         let padded = pad_edges(data, fft_len, prefix_len)?;
@@ -469,7 +471,7 @@ fn unpack_positions(buf: &[u8], count: usize, bits_per_pos: u32) -> Result<Vec<u
     if buf.len() != expected {
         return Err(Error::UnexpectedEof {
             offset: 0,
-            expected,
+            expected: expected as u64,
         });
     }
 
@@ -521,8 +523,8 @@ fn next_smooth(n: usize) -> usize {
 fn take_bytes<'a>(buf: &'a [u8], offset: &mut usize, len: usize) -> Result<&'a [u8]> {
     if *offset > buf.len() || buf.len() - *offset < len {
         return Err(Error::UnexpectedEof {
-            offset: *offset,
-            expected: len,
+            offset: *offset as u64,
+            expected: len as u64,
         });
     }
     let out = &buf[*offset..*offset + len];

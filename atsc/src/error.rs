@@ -14,7 +14,7 @@ pub enum Error {
 
     /// Decode failed due to truncated input.
     #[error("decode: unexpected end of input at offset {offset}, expected {expected} bytes")]
-    UnexpectedEof { offset: usize, expected: usize },
+    UnexpectedEof { offset: u64, expected: u64 },
 
     /// Decode failed because the stream header magic was invalid.
     #[error("decode: invalid magic bytes")]
@@ -34,7 +34,7 @@ pub enum Error {
 
     /// Encode rejected the input because the sample count doesn't fit in `u32`.
     #[error("encode: sample count {count} exceeds u32::MAX")]
-    SampleCountOverflow { count: usize },
+    SampleCountOverflow { count: u64 },
 
     /// Codec was unable to satisfy the error bound with the provided budget.
     #[error("error bound not satisfiable: best={best:.6}, target={target:.6}")]
@@ -54,7 +54,7 @@ pub enum Error {
 
     /// Metric computation failed due to mismatched slice lengths.
     #[error("metrics: original and reconstructed lengths differ ({a} vs {b})")]
-    LengthMismatch { a: usize, b: usize },
+    LengthMismatch { a: u64, b: u64 },
 
     /// I/O error.
     #[error(transparent)]

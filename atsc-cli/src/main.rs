@@ -231,7 +231,7 @@ fn read_f64_file(path: &PathBuf) -> Result<Vec<f64>, atsc::Error> {
     let bytes = std::fs::read(path)?;
     if bytes.len() % 8 != 0 {
         return Err(atsc::Error::UnexpectedEof {
-            offset: bytes.len(),
+            offset: bytes.len() as u64,
             expected: 8,
         });
     }

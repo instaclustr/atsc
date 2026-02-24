@@ -47,7 +47,7 @@ pub fn decode_header(buf: &[u8]) -> Result<Header> {
     if buf.len() < HEADER_LEN {
         return Err(Error::UnexpectedEof {
             offset: 0,
-            expected: HEADER_LEN,
+            expected: HEADER_LEN as u64,
         });
     }
     if buf[0..4] != MAGIC {
@@ -147,8 +147,8 @@ pub fn decode_stream(buf: &[u8]) -> Result<(Header, Vec<CompressedFrame>)> {
 fn decode_frame_end_limited(buf: &[u8], offset: &mut usize, end: usize) -> Result<CompressedFrame> {
     if end < *offset + FRAME_HEADER_LEN {
         return Err(Error::UnexpectedEof {
-            offset: *offset,
-            expected: FRAME_HEADER_LEN,
+            offset: *offset as u64,
+            expected: FRAME_HEADER_LEN as u64,
         });
     }
 
@@ -166,8 +166,8 @@ fn decode_frame_end_limited(buf: &[u8], offset: &mut usize, end: usize) -> Resul
     let payload_len_usize = payload_len as usize;
     if end < tmp_off + payload_len_usize {
         return Err(Error::UnexpectedEof {
-            offset: tmp_off,
-            expected: payload_len_usize,
+            offset: tmp_off as u64,
+            expected: payload_len_usize as u64,
         });
     }
 
@@ -186,8 +186,8 @@ fn decode_frame_end_limited(buf: &[u8], offset: &mut usize, end: usize) -> Resul
 fn take_bytes<'a>(buf: &'a [u8], offset: &mut usize, len: usize) -> Result<&'a [u8]> {
     if *offset > buf.len() || buf.len() - *offset < len {
         return Err(Error::UnexpectedEof {
-            offset: *offset,
-            expected: len,
+            offset: *offset as u64,
+            expected: len as u64,
         });
     }
     let out = &buf[*offset..*offset + len];
