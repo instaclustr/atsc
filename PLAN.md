@@ -78,7 +78,7 @@ Rebuild ATSC as a **first-class, embeddable time-series compression library** wi
 │  │ types    │  │ NRMSE    │  │ i64, named segments  │ │
 │  └──────────┘  └──────────┘  └───────────────────────┘ │
 │                                                         │
-│  feature: rayon  │  feature: fft-f64                    │
+│  feature: rayon                                       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -89,7 +89,7 @@ Rebuild ATSC as a **first-class, embeddable time-series compression library** wi
 3. **Trait-based codecs.** `Codec` trait makes adding algorithms a matter of implementing one trait.
 4. **Manual wire format.** Every byte is explicit. Frames are self-describing (codec_id + payload_len) for streaming reads.
 5. **Correct numerics.** Fix every overflow, precision loss, and metric bug.
-6. **Feature-gated extras.** `rayon` for parallelism, `fft-f64` for double-precision frequencies. Core has minimal deps.
+6. **Feature-gated extras.** `rayon` for parallelism. Core has minimal deps.
 7. **Hardened decode.** Compile-time resource limits prevent OOM/DoS from malicious input.
 8. **Strict VSRI.** Four validated invariants ensure timestamp/value consistency.
 
@@ -154,7 +154,7 @@ If the footer is missing (truncated stream), readers scan frames from after the 
 | 0 | Noop (lossless raw f64) |
 | 1 | Constant |
 | 2 | FFT (f32 frequencies, bitpacked positions) |
-| 3 | FFT (f64 frequencies, bitpacked positions) |
+| 3 | Reserved (deprecated: FFT f64 was removed from v2) |
 | 4 | Polynomial (CatmullRom) |
 | 5 | IDW |
 | 128 | VSRI (timestamps) |
@@ -217,7 +217,7 @@ The `fft_len` needed for decoding is deterministic from `sample_count` via the f
 
 `payload_len = 4 + 4 + 2 + position_index_len + freq_count * 8`.
 
-**FFT f64 (ID 3):** same layout but `f64` for real/imag/min/max. `freq_values` = `freq_count * 16` bytes. `min_value`/`max_value` = 8 bytes each.
+**FFT f64 (ID 3):** deprecated / reserved. v2 does not implement this codec id.
 
 **Frozen Gibbs heuristic (spec):** given `sample_count`:
 - If `sample_count < 128`: `fft_len = sample_count` (no padding).
@@ -225,7 +225,7 @@ The `fft_len` needed for decoding is deterministic from `sample_count` via the f
 - Padding: `prefix_len = (fft_len - sample_count) / 2`, `suffix_len = fft_len - sample_count - prefix_len`.
 - Prefix filled with `data[0]`; suffix filled with `data[last]`.
 
-This algorithm is frozen for codec IDs 2 and 3. Any change to the padding strategy requires allocating new codec IDs.
+This algorithm is frozen for codec ID 2. Any change to the padding strategy requires allocating new codec IDs.
 
 **Polynomial (ID 4) / IDW (ID 5):**
 
@@ -425,7 +425,6 @@ Decode enforces resource limits from `format::limits` before every allocation.
 [features]
 default = []
 rayon = ["dep:rayon"]
-fft-f64 = []
 ```
 
 ---
@@ -442,7 +441,7 @@ Fixes:
 - **Bounded loop**: use `(best_error - target).abs() < epsilon` instead of truncated integer comparison. Codec returns `Err(ErrorBoundNotMet { best, target })` if budget exhausted.
 - **Dedup stats**: single `DataStats::new(data)` call, remove manual min/max loops.
 - **Gibbs sizing**: frozen heuristic (documented in wire format spec above). No extra bytes in payload.
-- **f64 mode**: when feature `fft-f64` is enabled (or config flag set), store with f64 real/imag and use codec ID 3.
+- **f64 mode**: removed (codec ID 3 is reserved / deprecated).
 - **Manual payload encode/decode**: hand-written LE byte serialization with bitpacking for positions.
 
 ### 2.2 Polynomial / IDW
@@ -670,7 +669,6 @@ log = "0.4"
 - `cargo clippy --workspace --all-targets -D warnings` (no allows)
 - `cargo test --workspace`
 - `cargo test --workspace --features rayon`
-- `cargo test --workspace --features fft-f64`
 - `cargo bench` (Criterion regression check)
 - `cargo deny check` or `cargo audit`
 

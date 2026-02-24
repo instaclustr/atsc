@@ -22,7 +22,6 @@ proptest = "1.8"
 [features]
 default = []
 rayon = ["dep:rayon"]
-fft-f64 = []
 
 [[bench]]
 name = "fft_bench"

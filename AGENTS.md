@@ -25,7 +25,7 @@ Before every commit, run this sequence in order. Do not skip steps.
 1. `cargo fmt --check` — if it fails, run `cargo fmt` and re-check.
 2. `cargo clippy --workspace --all-targets -- -D warnings` — fix all warnings.
 3. `cargo test --workspace` — all tests must pass.
-4. If the change involves a feature flag: also run `cargo test --workspace --features rayon` and `cargo test --workspace --features fft-f64`.
+4. If the change involves a feature flag: also run `cargo test --workspace --features rayon`.
 5. Only after all checks pass: stage and commit.
 
 ## Code Standards
