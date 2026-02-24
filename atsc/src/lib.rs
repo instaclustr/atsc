@@ -5,6 +5,7 @@
 //! specification.
 
 pub mod codec;
+mod bytes;
 pub mod error;
 pub mod format;
 pub mod metrics;

@@ -4,6 +4,7 @@
 //! using interpolation. The payload layout follows `PLAN.md` (v2 wire format).
 
 use crate::codec::{Codec, CompressConfig, CompressedFrame};
+use crate::bytes::{take_f64_le, take_u32_le, take_u8};
 use crate::error::{Error, Result};
 use crate::metrics::nrmse;
 use inverse_distance_weight::IDW;
@@ -330,36 +331,6 @@ fn finite_min_max(data: &[f64]) -> Result<(f64, f64)> {
         }
     }
     Ok((min, max))
-}
-
-fn take_bytes<'a>(buf: &'a [u8], offset: &mut usize, len: usize) -> Result<&'a [u8]> {
-    if *offset > buf.len() || buf.len() - *offset < len {
-        return Err(Error::UnexpectedEof {
-            offset: *offset as u64,
-            expected: len as u64,
-        });
-    }
-    let out = &buf[*offset..*offset + len];
-    *offset += len;
-    Ok(out)
-}
-
-fn take_u8(buf: &[u8], offset: &mut usize) -> Result<u8> {
-    Ok(take_bytes(buf, offset, 1)?[0])
-}
-
-fn take_u32_le(buf: &[u8], offset: &mut usize) -> Result<u32> {
-    let bytes = take_bytes(buf, offset, 4)?;
-    let mut arr = [0u8; 4];
-    arr.copy_from_slice(bytes);
-    Ok(u32::from_le_bytes(arr))
-}
-
-fn take_f64_le(buf: &[u8], offset: &mut usize) -> Result<f64> {
-    let bytes = take_bytes(buf, offset, 8)?;
-    let mut arr = [0u8; 8];
-    arr.copy_from_slice(bytes);
-    Ok(f64::from_le_bytes(arr))
 }
 
 #[cfg(test)]

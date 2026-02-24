@@ -4,6 +4,7 @@ pub mod segment;
 
 use crate::error::{Error, Result};
 use crate::format::limits::MAX_VSRI_SEGMENTS;
+use crate::bytes::{take_i64_le, take_u32_le};
 use segment::Segment;
 
 /// VSRI index describing timestamp segments for a values stream.
@@ -256,32 +257,6 @@ fn validate_segments(segments: &[Segment]) -> Result<()> {
             .ok_or_else(|| Error::ResourceLimitExceeded("sample index overflow".into()))?;
     }
     Ok(())
-}
-
-fn take_bytes<'a>(buf: &'a [u8], offset: &mut usize, len: usize) -> Result<&'a [u8]> {
-    if *offset > buf.len() || buf.len() - *offset < len {
-        return Err(Error::UnexpectedEof {
-            offset: *offset as u64,
-            expected: len as u64,
-        });
-    }
-    let out = &buf[*offset..*offset + len];
-    *offset += len;
-    Ok(out)
-}
-
-fn take_u32_le(buf: &[u8], offset: &mut usize) -> Result<u32> {
-    let bytes = take_bytes(buf, offset, 4)?;
-    let mut arr = [0u8; 4];
-    arr.copy_from_slice(bytes);
-    Ok(u32::from_le_bytes(arr))
-}
-
-fn take_i64_le(buf: &[u8], offset: &mut usize) -> Result<i64> {
-    let bytes = take_bytes(buf, offset, 8)?;
-    let mut arr = [0u8; 8];
-    arr.copy_from_slice(bytes);
-    Ok(i64::from_le_bytes(arr))
 }
 
 #[cfg(test)]

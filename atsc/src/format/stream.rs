@@ -1,6 +1,7 @@
 //! Stream encode/decode entry points.
 
 use crate::codec::CompressedFrame;
+use crate::bytes::{take_bytes, take_u32_le, take_u8};
 use crate::error::{Error, Result};
 use crate::format::footer::{Footer, FOOTER_LEN, FOOTER_MAGIC};
 use crate::format::frame::FRAME_HEADER_LEN;
@@ -181,30 +182,6 @@ fn decode_frame_end_limited(buf: &[u8], offset: &mut usize, end: usize) -> Resul
         payload,
         measured_error: 0.0,
     })
-}
-
-fn take_bytes<'a>(buf: &'a [u8], offset: &mut usize, len: usize) -> Result<&'a [u8]> {
-    if *offset > buf.len() || buf.len() - *offset < len {
-        return Err(Error::UnexpectedEof {
-            offset: *offset as u64,
-            expected: len as u64,
-        });
-    }
-    let out = &buf[*offset..*offset + len];
-    *offset += len;
-    Ok(out)
-}
-
-fn take_u8(buf: &[u8], offset: &mut usize) -> Result<u8> {
-    let b = take_bytes(buf, offset, 1)?[0];
-    Ok(b)
-}
-
-fn take_u32_le(buf: &[u8], offset: &mut usize) -> Result<u32> {
-    let bytes = take_bytes(buf, offset, 4)?;
-    let mut arr = [0u8; 4];
-    arr.copy_from_slice(bytes);
-    Ok(u32::from_le_bytes(arr))
 }
 
 #[cfg(test)]

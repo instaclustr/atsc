@@ -5,6 +5,7 @@
 //! per-frequency `pos` field.
 
 use crate::codec::{Codec, CompressConfig, CompressedFrame};
+use crate::bytes::{take_bytes, take_f32_le, take_u16_le};
 use crate::error::{Error, Result};
 use crate::metrics::nrmse;
 use rustfft::num_complex::Complex;
@@ -528,32 +529,6 @@ fn next_smooth(n: usize) -> usize {
         };
     }
     best as usize
-}
-
-fn take_bytes<'a>(buf: &'a [u8], offset: &mut usize, len: usize) -> Result<&'a [u8]> {
-    if *offset > buf.len() || buf.len() - *offset < len {
-        return Err(Error::UnexpectedEof {
-            offset: *offset as u64,
-            expected: len as u64,
-        });
-    }
-    let out = &buf[*offset..*offset + len];
-    *offset += len;
-    Ok(out)
-}
-
-fn take_u16_le(buf: &[u8], offset: &mut usize) -> Result<u16> {
-    let bytes = take_bytes(buf, offset, 2)?;
-    let mut arr = [0u8; 2];
-    arr.copy_from_slice(bytes);
-    Ok(u16::from_le_bytes(arr))
-}
-
-fn take_f32_le(buf: &[u8], offset: &mut usize) -> Result<f32> {
-    let bytes = take_bytes(buf, offset, 4)?;
-    let mut arr = [0u8; 4];
-    arr.copy_from_slice(bytes);
-    Ok(f32::from_le_bytes(arr))
 }
 
 #[cfg(test)]
