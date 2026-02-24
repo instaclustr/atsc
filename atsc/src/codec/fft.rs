@@ -259,10 +259,7 @@ fn top_frequencies_f32(
     let unique = (fft_len / 2) + 1;
     buffer.truncate(unique);
 
-    let mut heap = BinaryHeap::with_capacity(unique);
-    for (pos, &c) in buffer.iter().enumerate() {
-        heap.push(HeapItem { pos: pos as u32, c });
-    }
+    let mut heap = build_heap(&buffer)?;
 
     let mut positions = Vec::with_capacity(keep.min(unique));
     let mut freqs = Vec::with_capacity(keep.min(unique));
@@ -276,6 +273,19 @@ fn top_frequencies_f32(
     }
 
     Ok((positions, freqs))
+}
+
+fn build_heap(buffer: &[Complex<f32>]) -> Result<BinaryHeap<HeapItem>> {
+    let mut heap = BinaryHeap::with_capacity(buffer.len());
+    for (pos, &c) in buffer.iter().enumerate() {
+        if !(c.re.is_finite() && c.im.is_finite()) {
+            return Err(Error::ResourceLimitExceeded(
+                "non-finite value in FFT spectrum".into(),
+            ));
+        }
+        heap.push(HeapItem { pos: pos as u32, c });
+    }
+    Ok(heap)
 }
 
 fn reconstruct_f32(
@@ -576,5 +586,15 @@ mod tests {
         assert_eq!(out.len(), data.len());
         // Not asserting strict value equality (lossy) — just sanity that it produced finite output.
         assert!(out.iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn heap_builder_rejects_non_finite_complex() {
+        let buf = [Complex::<f32> {
+            re: f32::NAN,
+            im: 0.0,
+        }];
+        let err = build_heap(&buf).unwrap_err();
+        assert!(matches!(err, Error::ResourceLimitExceeded(_)));
     }
 }
