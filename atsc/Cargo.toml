@@ -23,3 +23,11 @@ proptest = "1.8"
 default = []
 rayon = ["dep:rayon"]
 fft-f64 = []
+
+[[bench]]
+name = "fft_bench"
+harness = false
+
+[[bench]]
+name = "polynomial_bench"
+harness = false
