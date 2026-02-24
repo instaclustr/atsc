@@ -70,3 +70,5 @@ Follow the step order in `PLAN.md`. Do not jump ahead. Each step should be one o
 - Do not introduce `unsafe` code.
 - Do not add CLI features before the library API is complete (Phase 4.1 before 4.2).
 - Do not optimise before the correct implementation exists. Correctness first, then benchmarks, then optimisation.
+- Do not commit planning/complaint documents (for example `PLAN-*.md`, `COMPLAIN*.md`).
+- Existing tracked `PLAN.md` is grandfathered for historical context, but agents must not add new plan/complaint files to the repository.

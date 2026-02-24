@@ -4,3 +4,8 @@
 
 .idea
 .vscode/launch.json
+
+# Never commit planning/complaint scratch docs.
+# Existing tracked PLAN.md is grandfathered on this branch.
+PLAN-*.md
+COMPLAIN*.md

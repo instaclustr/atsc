@@ -36,3 +36,12 @@ Why this change is needed. Reference PLAN.md step if applicable.
 - Code with clippy warnings
 - Unformatted code
 - Changes to PLAN.md without explicit approval
+- New planning/complaint files (for example `PLAN-*.md`, `COMPLAIN*.md`)
+
+## Staged File Guard
+
+Before committing, verify no staged planning/complaint files:
+
+`git diff --cached --name-only | rg '(^|/)(PLAN-.*\\.md|COMPLAIN.*\\.md)$'`
+
+If this command prints anything, unstage/remove those files before commit.
