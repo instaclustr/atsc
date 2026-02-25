@@ -66,9 +66,11 @@ impl Codec for ConstantCodec {
 
         if let Some(target) = config.max_error {
             if measured_error > target {
+                let payload = first.to_le_bytes().to_vec();
                 return Err(Error::ErrorBoundNotMet {
                     best: measured_error,
                     target,
+                    best_payload: Some(payload),
                 });
             }
         }

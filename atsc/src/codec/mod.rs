@@ -20,8 +20,8 @@ pub trait Codec: Send + Sync {
     /// # Errors
     /// - Returns `Err` if compression fails.
     /// - Returns `Err(Error::ErrorBoundNotMet { .. })` when `max_error` cannot be met
-    ///   within `max_iterations`. The optimizer is expected to catch this and select
-    ///   the best available result across codecs.
+    ///   within `max_iterations`. The error may include a best-effort payload for
+    ///   deterministic fallback without re-running codec work.
     fn compress(&self, data: &[f64], config: &CompressConfig) -> Result<CompressedFrame>;
 
     /// Decompress a frame payload back into values.

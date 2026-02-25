@@ -80,16 +80,21 @@ fn compress_bounded(
         return Err(Error::ErrorBoundNotMet {
             best: f64::INFINITY,
             target,
+            best_payload: None,
         });
     }
 
-    let mut best_payload = None;
+    let mut best_payload: Option<Vec<u8>> = None;
     let mut best_error = f64::INFINITY;
     let eps = 1e-12;
+    let improvement_eps = 1e-8;
+    let low_improvement_limit = 3usize;
+    let mut low_improvement_streak = 0usize;
 
     let data_len = ctx.data.len();
     let mut jump = 0usize;
     for i in 0..(max_iterations as usize) {
+        let prev_best = best_error;
         let mut points = baseline_points + jump;
         if points >= data_len {
             points = data_len;
@@ -101,7 +106,28 @@ fn compress_bounded(
             best_payload = Some(payload);
         }
         if best_error <= target || (best_error - target).abs() < eps {
-            return Ok((best_payload.expect("best_payload set"), best_error));
+            if let Some(payload) = best_payload {
+                return Ok((payload, best_error));
+            }
+            return Err(Error::ErrorBoundNotMet {
+                best: f64::INFINITY,
+                target,
+                best_payload: None,
+            });
+        }
+
+        let improvement = prev_best - best_error;
+        if improvement <= improvement_eps {
+            low_improvement_streak = low_improvement_streak.saturating_add(1);
+        } else {
+            low_improvement_streak = 0;
+        }
+        if low_improvement_streak >= low_improvement_limit {
+            break;
+        }
+        if points >= data_len {
+            // Sampling all points reaches the ceiling; extra iterations are redundant.
+            break;
         }
 
         if i < 17 {
@@ -114,6 +140,7 @@ fn compress_bounded(
     Err(Error::ErrorBoundNotMet {
         best: best_error,
         target,
+        best_payload,
     })
 }
 
@@ -308,5 +335,19 @@ mod tests {
     fn polynomial_decompress_rejects_truncated_payload() {
         let err = PolynomialCodec.decompress(&[0u8; 7], 1).unwrap_err();
         assert!(matches!(err, Error::UnexpectedEof { .. }));
+    }
+
+    #[test]
+    fn polynomial_bounded_zero_iterations_returns_bound_error() {
+        let data: Vec<f64> = (0..256)
+            .map(|i| ((i as f64) * 0.01).sin() + ((i as f64) * 0.03).cos())
+            .collect();
+        let cfg = CompressConfig {
+            max_error: Some(0.0001),
+            max_iterations: 0,
+            ..Default::default()
+        };
+        let err = PolynomialCodec.compress(&data, &cfg).unwrap_err();
+        assert!(matches!(err, Error::ErrorBoundNotMet { .. }));
     }
 }

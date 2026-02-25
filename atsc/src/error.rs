@@ -42,8 +42,14 @@ pub enum Error {
     SampleCountOverflow { count: u64 },
 
     /// Codec was unable to satisfy the error bound with the provided budget.
+    ///
+    /// `best_payload` carries the best-effort encoded payload when available.
     #[error("error bound not satisfiable: best={best:.6}, target={target:.6}")]
-    ErrorBoundNotMet { best: f64, target: f64 },
+    ErrorBoundNotMet {
+        best: f64,
+        target: f64,
+        best_payload: Option<Vec<u8>>,
+    },
 
     /// Precision loss converting `f64` to `f32` would overflow or produce non-finite.
     #[error("precision overflow converting f64 to f32: {0}")]

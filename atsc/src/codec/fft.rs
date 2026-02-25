@@ -9,7 +9,7 @@ use crate::codec::{Codec, CompressConfig, CompressedFrame};
 use crate::error::{Error, Result};
 use crate::metrics::nrmse;
 use rustfft::num_complex::Complex;
-use rustfft::FftPlanner;
+use rustfft::{Fft, FftPlanner};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
@@ -189,24 +189,53 @@ fn compress_bounded_f32(
         return Err(Error::ErrorBoundNotMet {
             best: f64::INFINITY,
             target,
+            best_payload: None,
         });
     }
 
-    let mut best_payload = None;
+    let mut planner = FftPlanner::<f32>::new();
+    let ranked = ranked_frequencies_f32(ctx.padded, ctx.fft_len, &mut planner)?;
+    let ifft = planner.plan_fft_inverse(ctx.fft_len);
+
+    let mut best_payload: Option<Vec<u8>> = None;
     let mut best_error = f64::INFINITY;
     let mut jump = 0usize;
+    let mut low_improvement_streak = 0usize;
 
     let eps = 1e-12;
+    let improvement_eps = 1e-8;
+    let low_improvement_limit = 3usize;
     let max_iter = max_iterations as usize;
     for i in 0..max_iter {
+        let prev_best = best_error;
         let keep = base_freq + jump;
-        let (payload, err) = compress_once_f32(ctx, keep)?;
+        let (payload, err) = compress_once_ranked_f32(ctx, keep, &ranked, ifft.as_ref())?;
         if err < best_error {
             best_error = err;
             best_payload = Some(payload);
         }
         if best_error <= target || (best_error - target).abs() < eps {
-            return Ok((best_payload.expect("best_payload set"), best_error));
+            if let Some(payload) = best_payload {
+                return Ok((payload, best_error));
+            }
+            return Err(Error::ErrorBoundNotMet {
+                best: f64::INFINITY,
+                target,
+                best_payload: None,
+            });
+        }
+
+        let improvement = prev_best - best_error;
+        if improvement <= improvement_eps {
+            low_improvement_streak = low_improvement_streak.saturating_add(1);
+        } else {
+            low_improvement_streak = 0;
+        }
+        if low_improvement_streak >= low_improvement_limit {
+            break;
+        }
+        if keep.min(ranked.len()) >= ranked.len() {
+            break;
         }
 
         // Convergence schedule (ported from v1 with iteration budget controlled by config).
@@ -220,6 +249,7 @@ fn compress_bounded_f32(
     Err(Error::ErrorBoundNotMet {
         best: best_error,
         target,
+        best_payload,
     })
 }
 
@@ -233,6 +263,27 @@ fn compress_once_f32(ctx: &CompressCtx<'_>, keep: usize) -> Result<(Vec<u8>, f64
         ctx.max,
         &positions,
         &freqs,
+    )?;
+    let err = nrmse(ctx.original, &reconstructed)?;
+    let payload = encode_payload_f32(ctx.min, ctx.max, &positions, &freqs, ctx.fft_len)?;
+    Ok((payload, err))
+}
+
+fn compress_once_ranked_f32(
+    ctx: &CompressCtx<'_>,
+    keep: usize,
+    ranked: &[HeapItem],
+    ifft: &dyn Fft<f32>,
+) -> Result<(Vec<u8>, f64)> {
+    let (positions, freqs) = select_ranked_frequencies(ranked, keep);
+    let reconstructed = reconstruct_f32_with_ifft(
+        ctx.fft_len,
+        ctx.prefix_len,
+        ctx.original.len(),
+        (ctx.min, ctx.max),
+        &positions,
+        &freqs,
+        ifft,
     )?;
     let err = nrmse(ctx.original, &reconstructed)?;
     let payload = encode_payload_f32(ctx.min, ctx.max, &positions, &freqs, ctx.fft_len)?;
@@ -276,6 +327,55 @@ fn top_frequencies_f32(
     Ok((positions, freqs))
 }
 
+fn ranked_frequencies_f32(
+    padded: &[f64],
+    fft_len: usize,
+    planner: &mut FftPlanner<f32>,
+) -> Result<Vec<HeapItem>> {
+    let mut buffer = Vec::with_capacity(fft_len);
+    for &v in padded {
+        buffer.push(Complex {
+            re: f64_to_f32(v)?,
+            im: 0.0,
+        });
+    }
+
+    let fft = planner.plan_fft_forward(fft_len);
+    fft.process(&mut buffer);
+
+    let unique = (fft_len / 2) + 1;
+    buffer.truncate(unique);
+
+    let mut ranked = Vec::with_capacity(buffer.len());
+    for (pos, c) in buffer.into_iter().enumerate() {
+        if !(c.re.is_finite() && c.im.is_finite()) {
+            return Err(Error::ResourceLimitExceeded(
+                "non-finite value in FFT spectrum".into(),
+            ));
+        }
+        ranked.push(HeapItem { pos: pos as u32, c });
+    }
+    ranked.sort_unstable_by(|a, b| {
+        b.c.norm_sqr()
+            .partial_cmp(&a.c.norm_sqr())
+            .unwrap_or(Ordering::Equal)
+    });
+    Ok(ranked)
+}
+
+fn select_ranked_frequencies(ranked: &[HeapItem], keep: usize) -> (Vec<u32>, Vec<Complex<f32>>) {
+    let mut positions = Vec::with_capacity(keep.min(ranked.len()));
+    let mut freqs = Vec::with_capacity(keep.min(ranked.len()));
+    for item in ranked.iter().take(keep) {
+        if item.c.re == 0.0 && item.c.im == 0.0 {
+            break;
+        }
+        positions.push(item.pos);
+        freqs.push(item.c);
+    }
+    (positions, freqs)
+}
+
 fn build_heap(buffer: &[Complex<f32>]) -> Result<BinaryHeap<HeapItem>> {
     let mut heap = BinaryHeap::with_capacity(buffer.len());
     for (pos, &c) in buffer.iter().enumerate() {
@@ -297,6 +397,28 @@ fn reconstruct_f32(
     max: f64,
     positions: &[u32],
     freqs: &[Complex<f32>],
+) -> Result<Vec<f64>> {
+    let mut planner = FftPlanner::<f32>::new();
+    let ifft = planner.plan_fft_inverse(fft_len);
+    reconstruct_f32_with_ifft(
+        fft_len,
+        prefix_len,
+        out_len,
+        (min, max),
+        positions,
+        freqs,
+        ifft.as_ref(),
+    )
+}
+
+fn reconstruct_f32_with_ifft(
+    fft_len: usize,
+    prefix_len: usize,
+    out_len: usize,
+    bounds: (f64, f64),
+    positions: &[u32],
+    freqs: &[Complex<f32>],
+    ifft: &dyn Fft<f32>,
 ) -> Result<Vec<f64>> {
     if positions.len() != freqs.len() {
         return Err(Error::ResourceLimitExceeded(
@@ -321,11 +443,10 @@ fn reconstruct_f32(
         }
     }
 
-    let mut planner = FftPlanner::<f32>::new();
-    let ifft = planner.plan_fft_inverse(fft_len);
     ifft.process(&mut spectrum);
 
     let norm = fft_len as f64;
+    let (min, max) = bounds;
     let start = prefix_len;
     let end = start + out_len;
     if end > spectrum.len() {
@@ -580,5 +701,40 @@ mod tests {
     fn fft_decompress_rejects_truncated_payload() {
         let err = FftF32Codec.decompress(&[0u8; 3], 1).unwrap_err();
         assert!(matches!(err, Error::UnexpectedEof { .. }));
+    }
+
+    #[test]
+    fn fft_bounded_compress_zero_iterations_returns_bound_error() {
+        let data: Vec<f64> = (0..256)
+            .map(|i| ((i as f64) * 0.02).sin() + ((i as f64) * 0.03).cos())
+            .collect();
+        let cfg = CompressConfig {
+            max_error: Some(0.001),
+            max_iterations: 0,
+            ..Default::default()
+        };
+        let err = FftF32Codec.compress(&data, &cfg).unwrap_err();
+        assert!(matches!(err, Error::ErrorBoundNotMet { .. }));
+    }
+
+    #[test]
+    fn ranked_selection_stops_at_zero_magnitude() {
+        let ranked = vec![
+            HeapItem {
+                pos: 2,
+                c: Complex { re: 3.0, im: 4.0 },
+            },
+            HeapItem {
+                pos: 7,
+                c: Complex { re: 0.0, im: 0.0 },
+            },
+            HeapItem {
+                pos: 8,
+                c: Complex { re: 1.0, im: 0.0 },
+            },
+        ];
+        let (positions, freqs) = select_ranked_frequencies(&ranked, ranked.len());
+        assert_eq!(positions, vec![2]);
+        assert_eq!(freqs.len(), 1);
     }
 }

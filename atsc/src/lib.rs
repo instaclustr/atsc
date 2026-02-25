@@ -22,6 +22,10 @@ use crate::format::header::Header;
 use crate::format::stream::{decode_stream, encode_stream};
 use crate::optimizer::chunker::Plan;
 use crate::optimizer::select_codec;
+#[cfg(feature = "perf-telemetry")]
+use crate::optimizer::select_codec_with_telemetry;
+#[cfg(feature = "perf-telemetry")]
+use crate::optimizer::telemetry::{store_last_run_summary, RunTelemetryCollector};
 use crate::vsri::Vsri;
 
 const VSRI_CODEC_ID: u8 = 128;
@@ -42,10 +46,33 @@ pub fn compress(data: &[f64], config: &CompressConfig) -> Result<Vec<u8>> {
     let codecs = default_codecs();
     let plan = Plan::new(filtered.len());
     let mut frames = Vec::with_capacity(plan.chunks.len());
-
+    #[cfg(not(feature = "perf-telemetry"))]
     for range in plan.chunks {
         let frame = select_codec(&filtered[range], &codecs, config)?;
         frames.push(frame);
+    }
+    #[cfg(feature = "perf-telemetry")]
+    {
+        let mut telemetry = RunTelemetryCollector::new();
+        for (chunk_index, range) in plan.chunks.into_iter().enumerate() {
+            let frame = select_codec_with_telemetry(
+                &filtered[range],
+                &codecs,
+                config,
+                chunk_index.try_into().unwrap_or(u32::MAX),
+                &mut telemetry,
+            )?;
+            frames.push(frame);
+        }
+        let summary = telemetry.summarize();
+        log::info!(
+            "perf-telemetry: chunks={} attempts_avg={:.2} attempts_p95={} retries={}",
+            summary.chunk_count,
+            summary.attempts_per_chunk_avg,
+            summary.attempts_per_chunk_p95,
+            summary.retries_count
+        );
+        store_last_run_summary(summary);
     }
 
     let header = Header {
@@ -120,9 +147,33 @@ pub fn compress_with_timestamps(
 
     let codecs = default_codecs();
     let plan = Plan::new(filtered_values.len());
+    #[cfg(not(feature = "perf-telemetry"))]
     for range in plan.chunks {
         let frame = select_codec(&filtered_values[range], &codecs, config)?;
         frames.push(frame);
+    }
+    #[cfg(feature = "perf-telemetry")]
+    {
+        let mut telemetry = RunTelemetryCollector::new();
+        for (chunk_index, range) in plan.chunks.into_iter().enumerate() {
+            let frame = select_codec_with_telemetry(
+                &filtered_values[range],
+                &codecs,
+                config,
+                chunk_index.try_into().unwrap_or(u32::MAX),
+                &mut telemetry,
+            )?;
+            frames.push(frame);
+        }
+        let summary = telemetry.summarize();
+        log::info!(
+            "perf-telemetry: chunks={} attempts_avg={:.2} attempts_p95={} retries={}",
+            summary.chunk_count,
+            summary.attempts_per_chunk_avg,
+            summary.attempts_per_chunk_p95,
+            summary.retries_count
+        );
+        store_last_run_summary(summary);
     }
 
     let header = Header {
@@ -486,5 +537,17 @@ mod api_tests {
         assert_eq!(ts2, vec![0i64, 20]);
         assert_eq!(v2.len(), 2);
         assert!(v2[0].is_finite() && v2[1].is_finite());
+    }
+
+    #[cfg(feature = "perf-telemetry")]
+    #[test]
+    fn perf_telemetry_stores_run_summary_after_compress() {
+        let data: Vec<f64> = (0..1024).map(|i| (i as f64).sin()).collect();
+        let _ = compress(&data, &CompressConfig::default()).unwrap();
+        let summary = crate::optimizer::telemetry::last_run_summary();
+        assert!(summary.is_some());
+        let summary = summary.unwrap();
+        assert!(summary.chunk_count >= 1);
+        assert!(summary.attempts_per_chunk_avg >= 1.0);
     }
 }

@@ -21,6 +21,7 @@ proptest = "1.8"
 [features]
 default = []
 rayon = ["dep:rayon"]
+perf-telemetry = []
 
 [[bench]]
 name = "fft_bench"
