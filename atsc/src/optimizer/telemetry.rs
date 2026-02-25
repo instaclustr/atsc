@@ -39,6 +39,8 @@ pub struct ChunkTelemetry {
     pub selected_codec_id: u8,
     /// Human-readable reason for choosing the selected codec.
     pub selection_reason: &'static str,
+    /// Fallback classification: `none`, `lossy_best_effort`, or `noop_safety`.
+    pub fallback_reason: &'static str,
     /// Whether fallback/retry path was used.
     pub retried: bool,
 }
@@ -58,6 +60,12 @@ pub struct RunSummary {
     pub per_codec: Vec<PerCodecSummary>,
     /// Bound miss histogram buckets.
     pub bound_miss_histogram: Vec<BoundMissBucket>,
+    /// Number of chunks where Noop was selected.
+    pub noop_selected_chunks: u32,
+    /// Fraction of chunks where Noop was selected.
+    pub noop_selected_rate: f64,
+    /// Number of chunks where full-budget lossy met the bound.
+    pub lossy_full_budget_bound_met_chunks: u32,
 }
 
 /// Aggregated stats for one codec over the run.
@@ -113,9 +121,18 @@ impl RunTelemetryCollector {
         let mut total_elapsed_ns = 0u64;
         let mut per_codec: BTreeMap<u8, (&'static str, u64, u32, u32)> = BTreeMap::new();
         let mut miss_buckets: BTreeMap<&'static str, u32> = BTreeMap::new();
+        let mut noop_selected_chunks = 0u32;
+        let mut lossy_full_budget_bound_met_chunks = 0u32;
 
         for chunk in &self.chunks {
             attempts_per_chunk.push(chunk.attempts.len() as u32);
+            if chunk.selected_codec_id == 0 {
+                noop_selected_chunks = noop_selected_chunks.saturating_add(1);
+            }
+            if chunk.selection_reason == "full_budget_lossy_bound_met" {
+                lossy_full_budget_bound_met_chunks =
+                    lossy_full_budget_bound_met_chunks.saturating_add(1);
+            }
             if chunk.retried {
                 retries_count = retries_count.saturating_add(1);
             }
@@ -185,6 +202,13 @@ impl RunTelemetryCollector {
             retries_count,
             per_codec: per_codec_vec,
             bound_miss_histogram,
+            noop_selected_chunks,
+            noop_selected_rate: if chunk_count == 0 {
+                0.0
+            } else {
+                (noop_selected_chunks as f64) / (chunk_count as f64)
+            },
+            lossy_full_budget_bound_met_chunks,
         }
     }
 }
@@ -268,6 +292,7 @@ mod tests {
             ],
             selected_codec_id: 0,
             selection_reason: "smallest_payload_within_bound",
+            fallback_reason: "none",
             retried: false,
         });
         let summary = collector.summarize();

@@ -40,6 +40,11 @@ pub struct CompressConfig {
     pub max_iterations: u32,
     /// If true, reject NaN/Inf inputs instead of filtering them.
     pub reject_nan_inf: bool,
+    /// If true, bounded auto mode guarantees bound by falling back to Noop.
+    ///
+    /// When false, bounded auto mode returns the best lossy best-effort payload
+    /// when no lossy codec can meet the target bound.
+    pub strict_bound: bool,
 }
 
 impl Default for CompressConfig {
@@ -48,6 +53,7 @@ impl Default for CompressConfig {
             max_error: Some(0.05),
             max_iterations: 22,
             reject_nan_inf: false,
+            strict_bound: false,
         }
     }
 }

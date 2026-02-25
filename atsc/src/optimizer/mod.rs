@@ -16,6 +16,8 @@ use std::time::Instant;
 use telemetry::{ChunkTelemetry, CodecAttemptTelemetry, RunTelemetryCollector};
 
 const PROBE_ITER_BUDGET: u32 = 3;
+const FFT_CODEC_ID: u8 = 2;
+const POLYNOMIAL_CODEC_ID: u8 = 4;
 
 /// Select the best codec for a chunk.
 ///
@@ -87,30 +89,23 @@ pub fn select_codec(
     let mut best_probe_candidate: Option<(usize, CompressedFrame)> = None;
     let mut first_hard_err: Option<Error> = None;
 
-    for (idx, codec) in codecs.iter().enumerate() {
+    // Bounded auto primary path: probe only lossy primary codecs.
+    let primary: Vec<usize> = codecs
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, codec)| is_primary_lossy(codec.id()).then_some(idx))
+        .collect();
+
+    for idx in &primary {
+        let codec = codecs[*idx];
         match codec.compress(data, &probe_cfg) {
             Ok(frame) => {
-                match &best_probe_met {
-                    None => best_probe_met = Some((idx, frame.clone())),
-                    Some((_, current)) => {
-                        if frame.payload.len() < current.payload.len()
-                            || (frame.payload.len() == current.payload.len()
-                                && frame.measured_error < current.measured_error)
-                        {
-                            best_probe_met = Some((idx, frame.clone()));
-                        }
-                    }
+                if is_better_payload_then_error(&frame, best_probe_met.as_ref().map(|v| &v.1)) {
+                    best_probe_met = Some((*idx, frame.clone()));
                 }
-                match &best_probe_candidate {
-                    None => best_probe_candidate = Some((idx, frame)),
-                    Some((_, current)) => {
-                        if frame.measured_error < current.measured_error
-                            || (frame.measured_error == current.measured_error
-                                && frame.payload.len() < current.payload.len())
-                        {
-                            best_probe_candidate = Some((idx, frame));
-                        }
-                    }
+                if is_better_error_then_payload(&frame, best_probe_candidate.as_ref().map(|v| &v.1))
+                {
+                    best_probe_candidate = Some((*idx, frame));
                 }
             }
             Err(Error::ErrorBoundNotMet {
@@ -123,15 +118,11 @@ pub fn select_codec(
                         payload,
                         measured_error: best,
                     };
-                    match &best_probe_candidate {
-                        None => best_probe_candidate = Some((idx, frame)),
-                        Some((best_idx, current)) => {
-                            let ord = compare_best_error(best, current.measured_error)
-                                .then_with(|| idx.cmp(best_idx));
-                            if ord == std::cmp::Ordering::Less {
-                                best_probe_candidate = Some((idx, frame));
-                            }
-                        }
+                    if is_better_error_then_payload(
+                        &frame,
+                        best_probe_candidate.as_ref().map(|v| &v.1),
+                    ) {
+                        best_probe_candidate = Some((*idx, frame));
                     }
                 }
             }
@@ -147,32 +138,95 @@ pub fn select_codec(
         return Ok(frame);
     }
 
-    let Some((selected_idx, selected_probe_frame)) = best_probe_candidate else {
-        return Err(first_hard_err
-            .unwrap_or_else(|| Error::ResourceLimitExceeded("no codecs available".into())));
-    };
+    // Require full-budget lossy attempts before considering Noop fallback.
+    let mut full_budget_order = primary.clone();
+    full_budget_order.sort_by(|a, b| {
+        let err_a = if let Some((idx, frame)) = &best_probe_candidate {
+            if idx == a {
+                frame.measured_error
+            } else {
+                f64::INFINITY
+            }
+        } else {
+            f64::INFINITY
+        };
+        let err_b = if let Some((idx, frame)) = &best_probe_candidate {
+            if idx == b {
+                frame.measured_error
+            } else {
+                f64::INFINITY
+            }
+        } else {
+            f64::INFINITY
+        };
+        compare_best_error(err_a, err_b).then_with(|| a.cmp(b))
+    });
 
-    if let Some(codec) = codecs.get(selected_idx) {
+    let mut best_lossy_best_effort = best_probe_candidate.map(|(_, frame)| frame);
+    for idx in full_budget_order.into_iter().take(2) {
+        let codec = codecs[idx];
         match codec.compress(data, config) {
             Ok(frame) => return Ok(frame),
             Err(Error::ErrorBoundNotMet {
                 best, best_payload, ..
             }) => {
                 if let Some(payload) = best_payload {
-                    return Ok(CompressedFrame {
+                    let frame = CompressedFrame {
                         codec_id: codec.id(),
                         sample_count,
                         payload,
                         measured_error: best,
-                    });
+                    };
+                    if is_better_error_then_payload(&frame, best_lossy_best_effort.as_ref()) {
+                        best_lossy_best_effort = Some(frame);
+                    }
                 }
-                return Ok(selected_probe_frame);
             }
-            Err(_) => return Ok(selected_probe_frame),
+            Err(e) => {
+                if first_hard_err.is_none() {
+                    first_hard_err = Some(e);
+                }
+            }
         }
     }
 
-    Ok(selected_probe_frame)
+    if !config.strict_bound {
+        if let Some(frame) = best_lossy_best_effort {
+            return Ok(frame);
+        }
+        return Err(first_hard_err
+            .unwrap_or_else(|| Error::ResourceLimitExceeded("no lossy codecs available".into())));
+    }
+
+    // Strict bounded mode: safety fallback to Noop if lossy misses.
+    if let Some(noop) = codecs.iter().find(|codec| codec.id() == NoopCodec::ID) {
+        return match noop.compress(data, config) {
+            Ok(frame) => Ok(frame),
+            Err(Error::ErrorBoundNotMet {
+                best, best_payload, ..
+            }) => {
+                if let Some(payload) = best_payload {
+                    Ok(CompressedFrame {
+                        codec_id: noop.id(),
+                        sample_count,
+                        payload,
+                        measured_error: best,
+                    })
+                } else {
+                    Err(Error::ResourceLimitExceeded(
+                        "noop fallback did not produce payload".into(),
+                    ))
+                }
+            }
+            Err(e) => Err(e),
+        };
+    }
+
+    if let Some(frame) = best_lossy_best_effort {
+        return Ok(frame);
+    }
+    Err(first_hard_err
+        .unwrap_or_else(|| Error::ResourceLimitExceeded("no codecs available".into())))
 }
 
 /// Select the best codec for a chunk.
@@ -234,6 +288,7 @@ fn select_codec_impl(
                 }],
                 selected_codec_id: frame.codec_id,
                 selection_reason: "constant_data_fast_path",
+                fallback_reason: "none",
                 retried: false,
             });
         }
@@ -297,6 +352,7 @@ fn select_codec_impl(
                     attempts,
                     selected_codec_id: frame.codec_id,
                     selection_reason: "smallest_payload_no_bound",
+                    fallback_reason: "none",
                     retried: false,
                 });
             }
@@ -309,6 +365,7 @@ fn select_codec_impl(
                 attempts,
                 selected_codec_id: 255,
                 selection_reason: "selection_failed",
+                fallback_reason: "none",
                 retried: false,
             });
         }
@@ -319,46 +376,38 @@ fn select_codec_impl(
     let mut probe_cfg = config.clone();
     probe_cfg.max_iterations = probe_cfg.max_iterations.min(PROBE_ITER_BUDGET);
     let sample_count: u32 = data.len().try_into().unwrap_or(u32::MAX);
-    let mut attempts = Vec::with_capacity(codecs.len());
+    let mut attempts = Vec::with_capacity(codecs.len() + 2);
     let mut best_probe_met: Option<(usize, CompressedFrame)> = None;
     let mut best_probe_candidate: Option<(usize, CompressedFrame)> = None;
     let mut first_hard_err: Option<Error> = None;
 
-    for (idx, codec) in codecs.iter().enumerate() {
+    let primary: Vec<usize> = codecs
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, codec)| is_primary_lossy(codec.id()).then_some(idx))
+        .collect();
+
+    for idx in &primary {
+        let codec = codecs[*idx];
         let start = Instant::now();
         match codec.compress(data, &probe_cfg) {
             Ok(frame) => {
                 attempts.push(CodecAttemptTelemetry {
                     codec_id: codec.id(),
                     codec_name: codec.name(),
-                    attempt_order: idx as u16,
+                    attempt_order: attempts.len().try_into().unwrap_or(u16::MAX),
                     elapsed_ns: start.elapsed().as_nanos().try_into().unwrap_or(u64::MAX),
                     iteration_count: 0,
                     bound_met: true,
                     measured_error: frame.measured_error,
                     payload_bytes: frame.payload.len().try_into().unwrap_or(u32::MAX),
                 });
-                match &best_probe_met {
-                    None => best_probe_met = Some((idx, frame.clone())),
-                    Some(current) => {
-                        if frame.payload.len() < current.1.payload.len()
-                            || (frame.payload.len() == current.1.payload.len()
-                                && frame.measured_error < current.1.measured_error)
-                        {
-                            best_probe_met = Some((idx, frame.clone()));
-                        }
-                    }
+                if is_better_payload_then_error(&frame, best_probe_met.as_ref().map(|v| &v.1)) {
+                    best_probe_met = Some((*idx, frame.clone()));
                 }
-                match &best_probe_candidate {
-                    None => best_probe_candidate = Some((idx, frame)),
-                    Some(current) => {
-                        if frame.measured_error < current.1.measured_error
-                            || (frame.measured_error == current.1.measured_error
-                                && frame.payload.len() < current.1.payload.len())
-                        {
-                            best_probe_candidate = Some((idx, frame));
-                        }
-                    }
+                if is_better_error_then_payload(&frame, best_probe_candidate.as_ref().map(|v| &v.1))
+                {
+                    best_probe_candidate = Some((*idx, frame));
                 }
             }
             Err(Error::ErrorBoundNotMet {
@@ -371,7 +420,7 @@ fn select_codec_impl(
                 attempts.push(CodecAttemptTelemetry {
                     codec_id: codec.id(),
                     codec_name: codec.name(),
-                    attempt_order: idx as u16,
+                    attempt_order: attempts.len().try_into().unwrap_or(u16::MAX),
                     elapsed_ns: start.elapsed().as_nanos().try_into().unwrap_or(u64::MAX),
                     iteration_count: 0,
                     bound_met: false,
@@ -385,15 +434,11 @@ fn select_codec_impl(
                         payload,
                         measured_error: best,
                     };
-                    match &best_probe_candidate {
-                        None => best_probe_candidate = Some((idx, frame)),
-                        Some((best_idx, current)) => {
-                            let ord = compare_best_error(best, current.measured_error)
-                                .then_with(|| idx.cmp(best_idx));
-                            if ord == std::cmp::Ordering::Less {
-                                best_probe_candidate = Some((idx, frame));
-                            }
-                        }
+                    if is_better_error_then_payload(
+                        &frame,
+                        best_probe_candidate.as_ref().map(|v| &v.1),
+                    ) {
+                        best_probe_candidate = Some((*idx, frame));
                     }
                 }
             }
@@ -401,7 +446,7 @@ fn select_codec_impl(
                 attempts.push(CodecAttemptTelemetry {
                     codec_id: codec.id(),
                     codec_name: codec.name(),
-                    attempt_order: idx as u16,
+                    attempt_order: attempts.len().try_into().unwrap_or(u16::MAX),
                     elapsed_ns: start.elapsed().as_nanos().try_into().unwrap_or(u64::MAX),
                     iteration_count: 0,
                     bound_met: false,
@@ -422,29 +467,40 @@ fn select_codec_impl(
                 sample_count,
                 attempts,
                 selected_codec_id: frame.codec_id,
-                selection_reason: "smallest_payload_probe_bound_met",
+                selection_reason: "probe_lossy_bound_met",
+                fallback_reason: "none",
                 retried: false,
             });
         }
         return Ok(frame);
     }
 
-    let Some((selected_idx, selected_probe_frame)) = best_probe_candidate else {
-        if let Some(c) = collector.as_mut() {
-            c.push_chunk(ChunkTelemetry {
-                chunk_index,
-                sample_count,
-                attempts,
-                selected_codec_id: 255,
-                selection_reason: "selection_failed",
-                retried: false,
-            });
-        }
-        return Err(first_hard_err
-            .unwrap_or_else(|| Error::ResourceLimitExceeded("no codecs available".into())));
-    };
+    let mut full_budget_order = primary.clone();
+    full_budget_order.sort_by(|a, b| {
+        let err_a = if let Some((idx, frame)) = &best_probe_candidate {
+            if idx == a {
+                frame.measured_error
+            } else {
+                f64::INFINITY
+            }
+        } else {
+            f64::INFINITY
+        };
+        let err_b = if let Some((idx, frame)) = &best_probe_candidate {
+            if idx == b {
+                frame.measured_error
+            } else {
+                f64::INFINITY
+            }
+        } else {
+            f64::INFINITY
+        };
+        compare_best_error(err_a, err_b).then_with(|| a.cmp(b))
+    });
 
-    if let Some(codec) = codecs.get(selected_idx) {
+    let mut best_lossy_best_effort = best_probe_candidate.map(|(_, frame)| frame);
+    for idx in full_budget_order.into_iter().take(2) {
+        let codec = codecs[idx];
         let start = Instant::now();
         match codec.compress(data, config) {
             Ok(frame) => {
@@ -464,7 +520,8 @@ fn select_codec_impl(
                         sample_count,
                         attempts,
                         selected_codec_id: frame.codec_id,
-                        selection_reason: "full_budget_probe_winner",
+                        selection_reason: "full_budget_lossy_bound_met",
+                        fallback_reason: "none",
                         retried: true,
                     });
                 }
@@ -487,42 +544,152 @@ fn select_codec_impl(
                     measured_error: best,
                     payload_bytes: payload_len,
                 });
-                let frame = if let Some(payload) = best_payload {
-                    CompressedFrame {
+                if let Some(payload) = best_payload {
+                    let frame = CompressedFrame {
                         codec_id: codec.id(),
                         sample_count,
                         payload,
                         measured_error: best,
+                    };
+                    if is_better_error_then_payload(&frame, best_lossy_best_effort.as_ref()) {
+                        best_lossy_best_effort = Some(frame);
                     }
-                } else {
-                    selected_probe_frame
-                };
+                }
+            }
+            Err(e) => {
+                attempts.push(CodecAttemptTelemetry {
+                    codec_id: codec.id(),
+                    codec_name: codec.name(),
+                    attempt_order: attempts.len().try_into().unwrap_or(u16::MAX),
+                    elapsed_ns: start.elapsed().as_nanos().try_into().unwrap_or(u64::MAX),
+                    iteration_count: 0,
+                    bound_met: false,
+                    measured_error: f64::INFINITY,
+                    payload_bytes: 0,
+                });
+                if first_hard_err.is_none() {
+                    first_hard_err = Some(e);
+                }
+            }
+        }
+    }
+
+    if !config.strict_bound {
+        if let Some(frame) = best_lossy_best_effort {
+            if let Some(c) = collector.as_mut() {
+                c.push_chunk(ChunkTelemetry {
+                    chunk_index,
+                    sample_count,
+                    attempts,
+                    selected_codec_id: frame.codec_id,
+                    selection_reason: "lossy_best_effort_after_full_budget",
+                    fallback_reason: "lossy_best_effort",
+                    retried: true,
+                });
+            }
+            return Ok(frame);
+        }
+        if let Some(c) = collector.as_mut() {
+            c.push_chunk(ChunkTelemetry {
+                chunk_index,
+                sample_count,
+                attempts,
+                selected_codec_id: 255,
+                selection_reason: "selection_failed",
+                fallback_reason: "none",
+                retried: true,
+            });
+        }
+        return Err(first_hard_err
+            .unwrap_or_else(|| Error::ResourceLimitExceeded("no lossy codecs available".into())));
+    }
+
+    if let Some(noop) = codecs.iter().find(|codec| codec.id() == NoopCodec::ID) {
+        let start = Instant::now();
+        match noop.compress(data, config) {
+            Ok(frame) => {
+                attempts.push(CodecAttemptTelemetry {
+                    codec_id: noop.id(),
+                    codec_name: noop.name(),
+                    attempt_order: attempts.len().try_into().unwrap_or(u16::MAX),
+                    elapsed_ns: start.elapsed().as_nanos().try_into().unwrap_or(u64::MAX),
+                    iteration_count: 0,
+                    bound_met: true,
+                    measured_error: frame.measured_error,
+                    payload_bytes: frame.payload.len().try_into().unwrap_or(u32::MAX),
+                });
                 if let Some(c) = collector.as_mut() {
                     c.push_chunk(ChunkTelemetry {
                         chunk_index,
                         sample_count,
                         attempts,
                         selected_codec_id: frame.codec_id,
-                        selection_reason: "best_effort_probe_winner",
+                        selection_reason: "strict_noop_safety_fallback",
+                        fallback_reason: "noop_safety",
                         retried: true,
                     });
                 }
                 return Ok(frame);
             }
-            Err(_) => {
-                if let Some(c) = collector.as_mut() {
-                    c.push_chunk(ChunkTelemetry {
-                        chunk_index,
+            Err(Error::ErrorBoundNotMet {
+                best, best_payload, ..
+            }) => {
+                let payload_len = best_payload
+                    .as_ref()
+                    .and_then(|p| u32::try_from(p.len()).ok())
+                    .unwrap_or(0);
+                attempts.push(CodecAttemptTelemetry {
+                    codec_id: noop.id(),
+                    codec_name: noop.name(),
+                    attempt_order: attempts.len().try_into().unwrap_or(u16::MAX),
+                    elapsed_ns: start.elapsed().as_nanos().try_into().unwrap_or(u64::MAX),
+                    iteration_count: 0,
+                    bound_met: false,
+                    measured_error: best,
+                    payload_bytes: payload_len,
+                });
+                if let Some(payload) = best_payload {
+                    let frame = CompressedFrame {
+                        codec_id: noop.id(),
                         sample_count,
-                        attempts,
-                        selected_codec_id: selected_probe_frame.codec_id,
-                        selection_reason: "best_effort_probe_winner",
-                        retried: true,
-                    });
+                        payload,
+                        measured_error: best,
+                    };
+                    if let Some(c) = collector.as_mut() {
+                        c.push_chunk(ChunkTelemetry {
+                            chunk_index,
+                            sample_count,
+                            attempts,
+                            selected_codec_id: frame.codec_id,
+                            selection_reason: "strict_noop_safety_fallback",
+                            fallback_reason: "noop_safety",
+                            retried: true,
+                        });
+                    }
+                    return Ok(frame);
                 }
-                return Ok(selected_probe_frame);
+            }
+            Err(e) => {
+                if first_hard_err.is_none() {
+                    first_hard_err = Some(e);
+                }
             }
         }
+    }
+
+    if let Some(frame) = best_lossy_best_effort {
+        if let Some(c) = collector.as_mut() {
+            c.push_chunk(ChunkTelemetry {
+                chunk_index,
+                sample_count,
+                attempts,
+                selected_codec_id: frame.codec_id,
+                selection_reason: "lossy_best_effort_after_full_budget",
+                fallback_reason: "lossy_best_effort",
+                retried: true,
+            });
+        }
+        return Ok(frame);
     }
 
     if let Some(c) = collector.as_mut() {
@@ -532,10 +699,12 @@ fn select_codec_impl(
             attempts,
             selected_codec_id: 255,
             selection_reason: "selection_failed",
-            retried: false,
+            fallback_reason: "none",
+            retried: true,
         });
     }
-    Ok(selected_probe_frame)
+    Err(first_hard_err
+        .unwrap_or_else(|| Error::ResourceLimitExceeded("no codecs available".into())))
 }
 
 #[cfg(not(feature = "perf-telemetry"))]
@@ -570,6 +739,38 @@ fn ensure_noop<'a>(codecs: &'a [&'a dyn Codec]) -> Vec<&'a dyn Codec> {
     out.extend_from_slice(codecs);
     out.push(&NoopCodec);
     out
+}
+
+fn is_primary_lossy(codec_id: u8) -> bool {
+    matches!(codec_id, FFT_CODEC_ID | POLYNOMIAL_CODEC_ID)
+}
+
+fn is_better_payload_then_error(
+    frame: &CompressedFrame,
+    current: Option<&CompressedFrame>,
+) -> bool {
+    match current {
+        None => true,
+        Some(existing) => {
+            frame.payload.len() < existing.payload.len()
+                || (frame.payload.len() == existing.payload.len()
+                    && frame.measured_error < existing.measured_error)
+        }
+    }
+}
+
+fn is_better_error_then_payload(
+    frame: &CompressedFrame,
+    current: Option<&CompressedFrame>,
+) -> bool {
+    match current {
+        None => true,
+        Some(existing) => {
+            frame.measured_error < existing.measured_error
+                || (frame.measured_error == existing.measured_error
+                    && frame.payload.len() < existing.payload.len())
+        }
+    }
 }
 
 fn compare_best_error(a: f64, b: f64) -> std::cmp::Ordering {
@@ -627,14 +828,18 @@ mod tests {
     }
 
     #[test]
-    fn guarantees_noop_fallback_for_finite_data() {
+    fn strict_mode_uses_noop_when_all_lossy_miss_bound() {
         let data: Vec<f64> = (0..2048).map(|i| (i as f64).sin()).collect();
         let cfg = CompressConfig {
             max_error: Some(0.0),
+            strict_bound: true,
             ..Default::default()
         };
-        let bad = AlwaysBoundFailCodec { id: 250 };
-        let codecs: [&dyn Codec; 1] = [&bad];
+        let bad_fft = AlwaysBoundFailCodec { id: FFT_CODEC_ID };
+        let bad_poly = AlwaysBoundFailCodec {
+            id: POLYNOMIAL_CODEC_ID,
+        };
+        let codecs: [&dyn Codec; 2] = [&bad_fft, &bad_poly];
         let frame = select_codec(&data, &codecs, &cfg).unwrap();
         assert_eq!(frame.codec_id, NoopCodec::ID);
     }
@@ -685,6 +890,34 @@ mod tests {
         }
     }
 
+    struct AlwaysMissWithPayloadCodec {
+        id: u8,
+        best_error: f64,
+        payload_len: usize,
+    }
+
+    impl Codec for AlwaysMissWithPayloadCodec {
+        fn id(&self) -> u8 {
+            self.id
+        }
+
+        fn name(&self) -> &'static str {
+            "always-miss-with-payload"
+        }
+
+        fn compress(&self, _data: &[f64], config: &CompressConfig) -> Result<CompressedFrame> {
+            Err(Error::ErrorBoundNotMet {
+                best: self.best_error,
+                target: config.max_error.unwrap_or(0.0),
+                best_payload: Some(vec![self.id; self.payload_len]),
+            })
+        }
+
+        fn decompress(&self, _payload: &[u8], _sample_count: u32) -> Result<Vec<f64>> {
+            Err(Error::UnknownCodec(self.id))
+        }
+    }
+
     #[test]
     fn reduced_probe_runs_full_budget_only_on_selected_codec() {
         let a_probe_calls = AtomicUsize::new(0);
@@ -692,14 +925,14 @@ mod tests {
         let b_probe_calls = AtomicUsize::new(0);
         let b_full_calls = AtomicUsize::new(0);
         let codec_a = ProbeAwareCodec {
-            id: 0,
+            id: FFT_CODEC_ID,
             probe_best: 0.2,
             full_error: 0.05,
             probe_calls: &a_probe_calls,
             full_calls: &a_full_calls,
         };
         let codec_b = ProbeAwareCodec {
-            id: 241,
+            id: POLYNOMIAL_CODEC_ID,
             probe_best: 0.4,
             full_error: 0.02,
             probe_calls: &b_probe_calls,
@@ -714,10 +947,34 @@ mod tests {
         let data: Vec<f64> = (0..512).map(|i| (i as f64).sin()).collect();
 
         let frame = select_codec(&data, &codecs, &cfg).unwrap();
-        assert_eq!(frame.codec_id, 0);
+        assert_eq!(frame.codec_id, FFT_CODEC_ID);
         assert_eq!(a_probe_calls.load(Ordering::Relaxed), 1);
         assert_eq!(b_probe_calls.load(Ordering::Relaxed), 1);
         assert_eq!(a_full_calls.load(Ordering::Relaxed), 1);
         assert_eq!(b_full_calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn default_mode_returns_lossy_best_effort_not_noop() {
+        let data: Vec<f64> = (0..2048).map(|i| (i as f64).sin()).collect();
+        let cfg = CompressConfig {
+            max_error: Some(0.0000001),
+            strict_bound: false,
+            ..Default::default()
+        };
+        let miss_fft = AlwaysMissWithPayloadCodec {
+            id: FFT_CODEC_ID,
+            best_error: 0.2,
+            payload_len: 32,
+        };
+        let miss_poly = AlwaysMissWithPayloadCodec {
+            id: POLYNOMIAL_CODEC_ID,
+            best_error: 0.1,
+            payload_len: 24,
+        };
+        let codecs: [&dyn Codec; 2] = [&miss_fft, &miss_poly];
+        let frame = select_codec(&data, &codecs, &cfg).unwrap();
+        assert_eq!(frame.codec_id, POLYNOMIAL_CODEC_ID);
+        assert_ne!(frame.codec_id, NoopCodec::ID);
     }
 }

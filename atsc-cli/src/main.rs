@@ -28,6 +28,9 @@ enum Command {
         /// Enable strict NaN/Inf rejection (no filtering).
         #[arg(long)]
         strict: bool,
+        /// Guarantee bounded auto target by allowing Noop safety fallback.
+        #[arg(long)]
+        strict_bound: bool,
     },
 
     /// Decompress an `.atsc` stream into raw little-endian f64 output.
@@ -53,6 +56,9 @@ enum Command {
         /// Enable strict NaN/Inf rejection (no filtering).
         #[arg(long)]
         strict: bool,
+        /// Guarantee bounded auto target by allowing Noop safety fallback.
+        #[arg(long)]
+        strict_bound: bool,
     },
     /// Generate a baseline performance report matrix.
     Baseline {
@@ -67,6 +73,9 @@ enum Command {
         /// Enable strict NaN/Inf rejection (no filtering).
         #[arg(long)]
         strict: bool,
+        /// Guarantee bounded auto target by allowing Noop safety fallback.
+        #[arg(long)]
+        strict_bound: bool,
     },
 }
 
@@ -97,7 +106,16 @@ fn run(args: Args) -> Result<(), atsc::Error> {
             error,
             iters,
             strict,
-        } => cmd_compress(&input, output.as_ref(), codec, error, iters, strict),
+            strict_bound,
+        } => cmd_compress(
+            &input,
+            output.as_ref(),
+            codec,
+            error,
+            iters,
+            strict,
+            strict_bound,
+        ),
         Command::Decompress { input, output } => cmd_decompress(&input, output.as_ref()),
         Command::Inspect { input } => cmd_inspect(&input),
         Command::Bench {
@@ -105,13 +123,15 @@ fn run(args: Args) -> Result<(), atsc::Error> {
             error,
             iters,
             strict,
-        } => cmd_bench(&input, error, iters, strict),
+            strict_bound,
+        } => cmd_bench(&input, error, iters, strict, strict_bound),
         Command::Baseline {
             input,
             output,
             runs,
             strict,
-        } => cmd_baseline(&input, output.as_ref(), runs, strict),
+            strict_bound,
+        } => cmd_baseline(&input, output.as_ref(), runs, strict, strict_bound),
     }
 }
 
@@ -122,12 +142,14 @@ fn cmd_compress(
     error_percent: f64,
     iters: u32,
     strict: bool,
+    strict_bound: bool,
 ) -> Result<(), atsc::Error> {
     let data = read_f64_file(input)?;
     let cfg = atsc::codec::CompressConfig {
         max_error: Some(error_percent / 100.0),
         max_iterations: iters,
         reject_nan_inf: strict,
+        strict_bound,
     };
 
     let bytes = match codec {
@@ -254,12 +276,14 @@ fn cmd_bench(
     error_percent: f64,
     iters: u32,
     strict: bool,
+    strict_bound: bool,
 ) -> Result<(), atsc::Error> {
     let data = read_f64_file(input)?;
     let cfg = atsc::codec::CompressConfig {
         max_error: Some(error_percent / 100.0),
         max_iterations: iters,
         reject_nan_inf: strict,
+        strict_bound,
     };
 
     let codecs: [(&str, &dyn atsc::codec::Codec); 4] = [
@@ -320,6 +344,7 @@ struct BenchCell {
     attempts_p95: Option<u32>,
     retries_count: Option<u32>,
     bound_miss_rate: Option<f64>,
+    noop_select_rate: Option<f64>,
     codec_time_share: Option<String>,
 }
 
@@ -328,6 +353,7 @@ fn cmd_baseline(
     output: Option<&PathBuf>,
     runs: u32,
     strict: bool,
+    strict_bound: bool,
 ) -> Result<(), atsc::Error> {
     if runs == 0 {
         return Err(atsc::Error::ResourceLimitExceeded(
@@ -336,7 +362,7 @@ fn cmd_baseline(
     }
     #[cfg(not(feature = "perf-telemetry"))]
     {
-        let _ = (input, output, strict);
+        let _ = (input, output, strict, strict_bound);
         Err(atsc::Error::ResourceLimitExceeded(
             "baseline requires building atsc-cli with --features perf-telemetry".into(),
         ))
@@ -366,6 +392,7 @@ fn cmd_baseline(
                         max_error: Some(error_percent / 100.0),
                         max_iterations: 22,
                         reject_nan_inf: strict,
+                        strict_bound,
                     };
                     for &mode in &modes {
                         let mut timings = Vec::with_capacity(runs as usize);
@@ -394,6 +421,7 @@ fn cmd_baseline(
                                 attempts_p95: outcome.attempts_p95,
                                 retries_count: outcome.retries_count,
                                 bound_miss_rate: outcome.bound_miss_rate,
+                                noop_select_rate: outcome.noop_select_rate,
                                 codec_time_share: outcome.codec_time_share,
                             });
                         }
@@ -409,8 +437,8 @@ fn cmd_baseline(
         report.push_str("Max error (%): 0.5, 1, 2, 5\n");
         report.push_str("Modes: auto, forced-fft, forced-poly, forced-noop\n");
         report.push_str(&format!("Runs per cell: {runs}\n\n"));
-        report.push_str("|dataset|chunk|error_%|mode|median_time_ms|ratio|nrmse|decision_ms|attempts_avg|attempts_p95|retries|bound_miss_rate|codec_time_share|\n");
-        report.push_str("|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|\n");
+        report.push_str("|dataset|chunk|error_%|mode|median_time_ms|ratio|nrmse|decision_ms|attempts_avg|attempts_p95|retries|bound_miss_rate|noop_select_rate|codec_time_share|\n");
+        report.push_str("|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n");
         for row in &rows {
             let decision = row
                 .per_chunk_decision_ms
@@ -436,8 +464,12 @@ fn cmd_baseline(
                 .codec_time_share
                 .clone()
                 .unwrap_or_else(|| "n/a".to_string());
+            let noop_select_rate = row
+                .noop_select_rate
+                .map(|v| format!("{v:.3}"))
+                .unwrap_or_else(|| "n/a".to_string());
             report.push_str(&format!(
-                "|{}|{}|{:.1}|{}|{:.3}|{:.4}|{:.6}|{}|{}|{}|{}|{}|{}|\n",
+                "|{}|{}|{:.1}|{}|{:.3}|{:.4}|{:.6}|{}|{}|{}|{}|{}|{}|{}|\n",
                 row.dataset,
                 row.chunk_size,
                 row.error_percent,
@@ -450,6 +482,7 @@ fn cmd_baseline(
                 attempts_p95,
                 retries,
                 miss_rate,
+                noop_select_rate,
                 share
             ));
         }
@@ -477,6 +510,7 @@ struct CaseOutcome {
     attempts_p95: Option<u32>,
     retries_count: Option<u32>,
     bound_miss_rate: Option<f64>,
+    noop_select_rate: Option<f64>,
     codec_time_share: Option<String>,
 }
 
@@ -547,6 +581,7 @@ fn run_matrix_case(
                 attempts_p95: Some(summary.attempts_per_chunk_p95),
                 retries_count: Some(summary.retries_count),
                 bound_miss_rate: Some(miss_rate),
+                noop_select_rate: Some(summary.noop_selected_rate),
                 codec_time_share: Some(shares),
             });
         }
@@ -582,6 +617,7 @@ fn run_matrix_case(
         attempts_p95: None,
         retries_count: None,
         bound_miss_rate: None,
+        noop_select_rate: None,
         codec_time_share: None,
     })
 }
