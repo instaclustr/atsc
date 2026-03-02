@@ -66,13 +66,15 @@ pub fn compress(data: &[f64], config: &CompressConfig) -> Result<Vec<u8>> {
         }
         let summary = telemetry.summarize();
         log::info!(
-            "perf-telemetry: chunks={} attempts_avg={:.2} attempts_p95={} retries={} noop_rate={:.3} full_budget_lossy_met={}",
+            "perf-telemetry: chunks={} attempts_avg={:.2} attempts_p95={} retries={} noop_rate={:.3} full_budget_lossy_met={} winner_payload_chunks={} fft_payload_win_chunks={}",
             summary.chunk_count,
             summary.attempts_per_chunk_avg,
             summary.attempts_per_chunk_p95,
             summary.retries_count,
             summary.noop_selected_rate,
-            summary.lossy_full_budget_bound_met_chunks
+            summary.lossy_full_budget_bound_met_chunks,
+            summary.winner_by_payload_chunks,
+            summary.fft_beats_poly_payload_chunks
         );
         store_last_run_summary(summary);
     }
@@ -169,13 +171,15 @@ pub fn compress_with_timestamps(
         }
         let summary = telemetry.summarize();
         log::info!(
-            "perf-telemetry: chunks={} attempts_avg={:.2} attempts_p95={} retries={} noop_rate={:.3} full_budget_lossy_met={}",
+            "perf-telemetry: chunks={} attempts_avg={:.2} attempts_p95={} retries={} noop_rate={:.3} full_budget_lossy_met={} winner_payload_chunks={} fft_payload_win_chunks={}",
             summary.chunk_count,
             summary.attempts_per_chunk_avg,
             summary.attempts_per_chunk_p95,
             summary.retries_count,
             summary.noop_selected_rate,
-            summary.lossy_full_budget_bound_met_chunks
+            summary.lossy_full_budget_bound_met_chunks,
+            summary.winner_by_payload_chunks,
+            summary.fft_beats_poly_payload_chunks
         );
         store_last_run_summary(summary);
     }

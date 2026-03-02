@@ -345,6 +345,8 @@ struct BenchCell {
     retries_count: Option<u32>,
     bound_miss_rate: Option<f64>,
     noop_select_rate: Option<f64>,
+    winner_payload_rate: Option<f64>,
+    fft_payload_win_rate: Option<f64>,
     codec_time_share: Option<String>,
 }
 
@@ -422,6 +424,8 @@ fn cmd_baseline(
                                 retries_count: outcome.retries_count,
                                 bound_miss_rate: outcome.bound_miss_rate,
                                 noop_select_rate: outcome.noop_select_rate,
+                                winner_payload_rate: outcome.winner_payload_rate,
+                                fft_payload_win_rate: outcome.fft_payload_win_rate,
                                 codec_time_share: outcome.codec_time_share,
                             });
                         }
@@ -437,8 +441,10 @@ fn cmd_baseline(
         report.push_str("Max error (%): 0.5, 1, 2, 5\n");
         report.push_str("Modes: auto, forced-fft, forced-poly, forced-noop\n");
         report.push_str(&format!("Runs per cell: {runs}\n\n"));
-        report.push_str("|dataset|chunk|error_%|mode|median_time_ms|ratio|nrmse|decision_ms|attempts_avg|attempts_p95|retries|bound_miss_rate|noop_select_rate|codec_time_share|\n");
-        report.push_str("|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n");
+        report.push_str("|dataset|chunk|error_%|mode|median_time_ms|ratio|nrmse|decision_ms|attempts_avg|attempts_p95|retries|bound_miss_rate|noop_select_rate|winner_payload_rate|fft_payload_win_rate|codec_time_share|\n");
+        report.push_str(
+            "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n",
+        );
         for row in &rows {
             let decision = row
                 .per_chunk_decision_ms
@@ -468,8 +474,16 @@ fn cmd_baseline(
                 .noop_select_rate
                 .map(|v| format!("{v:.3}"))
                 .unwrap_or_else(|| "n/a".to_string());
+            let winner_payload_rate = row
+                .winner_payload_rate
+                .map(|v| format!("{v:.3}"))
+                .unwrap_or_else(|| "n/a".to_string());
+            let fft_payload_win_rate = row
+                .fft_payload_win_rate
+                .map(|v| format!("{v:.3}"))
+                .unwrap_or_else(|| "n/a".to_string());
             report.push_str(&format!(
-                "|{}|{}|{:.1}|{}|{:.3}|{:.4}|{:.6}|{}|{}|{}|{}|{}|{}|{}|\n",
+                "|{}|{}|{:.1}|{}|{:.3}|{:.4}|{:.6}|{}|{}|{}|{}|{}|{}|{}|{}|{}|\n",
                 row.dataset,
                 row.chunk_size,
                 row.error_percent,
@@ -483,6 +497,8 @@ fn cmd_baseline(
                 retries,
                 miss_rate,
                 noop_select_rate,
+                winner_payload_rate,
+                fft_payload_win_rate,
                 share
             ));
         }
@@ -511,6 +527,8 @@ struct CaseOutcome {
     retries_count: Option<u32>,
     bound_miss_rate: Option<f64>,
     noop_select_rate: Option<f64>,
+    winner_payload_rate: Option<f64>,
+    fft_payload_win_rate: Option<f64>,
     codec_time_share: Option<String>,
 }
 
@@ -573,6 +591,16 @@ fn run_matrix_case(
                     codec.codec_name, codec.time_share_pct
                 ));
             }
+            let winner_payload_rate = if summary.chunk_count == 0 {
+                0.0
+            } else {
+                (summary.winner_by_payload_chunks as f64) / (summary.chunk_count as f64)
+            };
+            let fft_payload_win_rate = if summary.chunk_count == 0 {
+                0.0
+            } else {
+                (summary.fft_beats_poly_payload_chunks as f64) / (summary.chunk_count as f64)
+            };
             return Ok(CaseOutcome {
                 ratio,
                 nrmse,
@@ -582,6 +610,8 @@ fn run_matrix_case(
                 retries_count: Some(summary.retries_count),
                 bound_miss_rate: Some(miss_rate),
                 noop_select_rate: Some(summary.noop_selected_rate),
+                winner_payload_rate: Some(winner_payload_rate),
+                fft_payload_win_rate: Some(fft_payload_win_rate),
                 codec_time_share: Some(shares),
             });
         }
@@ -618,6 +648,8 @@ fn run_matrix_case(
         retries_count: None,
         bound_miss_rate: None,
         noop_select_rate: None,
+        winner_payload_rate: None,
+        fft_payload_win_rate: None,
         codec_time_share: None,
     })
 }

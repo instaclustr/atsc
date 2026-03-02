@@ -66,14 +66,54 @@ Dataset-level auto averages:
 |memory_used.wbro|9.961|3.515|0.9960|18482|2|32|0.1731%|
 |uptime.wbro|2.459|1.648|8.8119|2089|2|32|1.5318%|
 
+## v1 vs v2 comparison (current code base)
+
+Method:
+- v1 reference: tag `v0.7.1` (`/home/crolo/code/fft-compression-v1`)
+- v2 reference: current `atsc-v2`
+- mode: auto, error=1%
+- timing: median of 5 runs per file
+- ratio columns below are `v2 / v1` (lower is better)
+
+|file|v1_size_bytes|v2_size_bytes|size_ratio_v2_over_v1|v1_compress_ms|v2_compress_ms|compress_ratio_v2_over_v1|v1_decompress_ms|v2_decompress_ms|decompress_ratio_v2_over_v1|
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+|go_gc_heap_goal_bytes.wbro|5021|23740|4.7281|3.680|3.139|0.8530|1.472|1.557|1.0579|
+|memory_used.wbro|11566|18482|1.5980|4.691|2.738|0.5837|1.536|1.347|0.8769|
+|uptime.wbro|73|2089|28.6164|1.351|1.287|0.9523|1.162|1.022|0.8790|
+
 ## Acceptance gate status (current run)
 
 - Frame-format overhead requirement (`<= 5%`) on gold files: **PASS**
 - Noop fallback behavior is now measurable via `noop_select_rate`: **PASS (instrumented)**
-- Compression and decompression comparisons against v1 thresholds:
-  - **NOT EVALUATED in this report** (v1 baseline values were not recomputed in this run)
+- Compression size ratio gate (`<= 1.05x v1` on gold files): **FAIL** (`4.7281x`, `1.5980x`, `28.6164x`)
+- Compression time gate (`<= 1.50x v1` on gold files): **PASS** (`0.8530x`, `0.5837x`, `0.9523x`)
+- Decompression time gate (`<= 1.00x v1` on gold files): **FAIL** (`1.0579x` on `go_gc_heap_goal_bytes.wbro`)
+
+## Root cause and post-change sweep (1/3/5%)
+
+Why auto previously picked `poly` too often:
+- bounded probe miss path prioritized lower error over payload and returned on first full-budget bound-met winner.
+- this favored polynomial on these datasets even when FFT payload was materially smaller.
+
+Post-change sweep (median of 3 runs, v1 auto as denominator):
+
+|error|file|v2 auto / v1 auto|v2 fft / v1 auto|v2 poly / v1 auto|
+|---:|---|---:|---:|---:|
+|1%|go_gc_heap_goal_bytes.wbro|5.5248x|0.5911x|5.5248x|
+|1%|memory_used.wbro|1.5980x|0.1837x|1.5980x|
+|1%|uptime.wbro|46.4222x|1.9778x|50.7111x|
+|3%|go_gc_heap_goal_bytes.wbro|4.1268x|0.6176x|4.1268x|
+|3%|memory_used.wbro|3.4852x|0.4007x|3.4852x|
+|3%|uptime.wbro|46.4222x|1.9778x|50.7111x|
+|5%|go_gc_heap_goal_bytes.wbro|1.2260x|0.7677x|3.2081x|
+|5%|memory_used.wbro|2.6667x|1.1579x|8.5603x|
+|5%|uptime.wbro|16.5556x|1.9778x|20.8444x|
+
+Takeaway:
+- auto now tracks a size-first objective better when both lossy codecs meet bound (notably `go_gc_heap_goal_bytes` at 5%).
+- FFT remains consistently smaller than Polynomial on all three files at 1/3/5%, so additional policy bias toward FFT for these dataset shapes is still warranted.
 
 ## Notes
 
 - These matrix runs used `--runs 1` for fast iteration during policy validation.
-- For release/merge gating, rerun with a higher run count and include explicit v1 comparison tables.
+- For release/merge gating, rerun with a higher run count (for example 15+) and include variance/p95.

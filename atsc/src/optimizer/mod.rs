@@ -163,10 +163,11 @@ pub fn select_codec(
     });
 
     let mut best_lossy_best_effort = best_probe_candidate.map(|(_, frame)| frame);
+    let mut full_budget_bound_met: Vec<CompressedFrame> = Vec::with_capacity(2);
     for idx in full_budget_order.into_iter().take(2) {
         let codec = codecs[idx];
         match codec.compress(data, config) {
-            Ok(frame) => return Ok(frame),
+            Ok(frame) => full_budget_bound_met.push(frame),
             Err(Error::ErrorBoundNotMet {
                 best, best_payload, ..
             }) => {
@@ -188,6 +189,19 @@ pub fn select_codec(
                 }
             }
         }
+    }
+
+    if !full_budget_bound_met.is_empty() {
+        let winner = full_budget_bound_met
+            .into_iter()
+            .min_by(|a, b| {
+                a.payload
+                    .len()
+                    .cmp(&b.payload.len())
+                    .then_with(|| compare_best_error(a.measured_error, b.measured_error))
+            })
+            .ok_or_else(|| Error::ResourceLimitExceeded("no bounded winner available".into()))?;
+        return Ok(winner);
     }
 
     if !config.strict_bound {
@@ -289,6 +303,8 @@ fn select_codec_impl(
                 selected_codec_id: frame.codec_id,
                 selection_reason: "constant_data_fast_path",
                 fallback_reason: "none",
+                winner_decision_basis: "none",
+                fft_vs_poly_payload_winner: "na",
                 retried: false,
             });
         }
@@ -353,6 +369,8 @@ fn select_codec_impl(
                     selected_codec_id: frame.codec_id,
                     selection_reason: "smallest_payload_no_bound",
                     fallback_reason: "none",
+                    winner_decision_basis: "none",
+                    fft_vs_poly_payload_winner: "na",
                     retried: false,
                 });
             }
@@ -366,6 +384,8 @@ fn select_codec_impl(
                 selected_codec_id: 255,
                 selection_reason: "selection_failed",
                 fallback_reason: "none",
+                winner_decision_basis: "none",
+                fft_vs_poly_payload_winner: "na",
                 retried: false,
             });
         }
@@ -469,6 +489,8 @@ fn select_codec_impl(
                 selected_codec_id: frame.codec_id,
                 selection_reason: "probe_lossy_bound_met",
                 fallback_reason: "none",
+                winner_decision_basis: "payload",
+                fft_vs_poly_payload_winner: "na",
                 retried: false,
             });
         }
@@ -499,6 +521,7 @@ fn select_codec_impl(
     });
 
     let mut best_lossy_best_effort = best_probe_candidate.map(|(_, frame)| frame);
+    let mut full_budget_bound_met: Vec<(usize, CompressedFrame)> = Vec::with_capacity(2);
     for idx in full_budget_order.into_iter().take(2) {
         let codec = codecs[idx];
         let start = Instant::now();
@@ -514,18 +537,7 @@ fn select_codec_impl(
                     measured_error: frame.measured_error,
                     payload_bytes: frame.payload.len().try_into().unwrap_or(u32::MAX),
                 });
-                if let Some(c) = collector.as_mut() {
-                    c.push_chunk(ChunkTelemetry {
-                        chunk_index,
-                        sample_count,
-                        attempts,
-                        selected_codec_id: frame.codec_id,
-                        selection_reason: "full_budget_lossy_bound_met",
-                        fallback_reason: "none",
-                        retried: true,
-                    });
-                }
-                return Ok(frame);
+                full_budget_bound_met.push((idx, frame));
             }
             Err(Error::ErrorBoundNotMet {
                 best, best_payload, ..
@@ -574,6 +586,53 @@ fn select_codec_impl(
         }
     }
 
+    if !full_budget_bound_met.is_empty() {
+        let mut ranked = full_budget_bound_met;
+        ranked.sort_by(|a, b| {
+            a.1.payload
+                .len()
+                .cmp(&b.1.payload.len())
+                .then_with(|| compare_best_error(a.1.measured_error, b.1.measured_error))
+        });
+        let winner_decision_basis =
+            if ranked.len() >= 2 && ranked[0].1.payload.len() == ranked[1].1.payload.len() {
+                "error"
+            } else if ranked.len() >= 2 {
+                "payload"
+            } else {
+                "none"
+            };
+        let fft_payload = ranked
+            .iter()
+            .find(|(_, f)| f.codec_id == FFT_CODEC_ID)
+            .map(|(_, f)| f.payload.len());
+        let poly_payload = ranked
+            .iter()
+            .find(|(_, f)| f.codec_id == POLYNOMIAL_CODEC_ID)
+            .map(|(_, f)| f.payload.len());
+        let fft_vs_poly_payload_winner = match (fft_payload, poly_payload) {
+            (Some(a), Some(b)) if a < b => "fft",
+            (Some(a), Some(b)) if a > b => "polynomial",
+            (Some(_), Some(_)) => "tie",
+            _ => "na",
+        };
+        let winner = ranked.swap_remove(0).1;
+        if let Some(c) = collector.as_mut() {
+            c.push_chunk(ChunkTelemetry {
+                chunk_index,
+                sample_count,
+                attempts,
+                selected_codec_id: winner.codec_id,
+                selection_reason: "full_budget_smallest_payload_bound_met",
+                fallback_reason: "none",
+                winner_decision_basis,
+                fft_vs_poly_payload_winner,
+                retried: true,
+            });
+        }
+        return Ok(winner);
+    }
+
     if !config.strict_bound {
         if let Some(frame) = best_lossy_best_effort {
             if let Some(c) = collector.as_mut() {
@@ -584,6 +643,8 @@ fn select_codec_impl(
                     selected_codec_id: frame.codec_id,
                     selection_reason: "lossy_best_effort_after_full_budget",
                     fallback_reason: "lossy_best_effort",
+                    winner_decision_basis: "none",
+                    fft_vs_poly_payload_winner: "na",
                     retried: true,
                 });
             }
@@ -597,6 +658,8 @@ fn select_codec_impl(
                 selected_codec_id: 255,
                 selection_reason: "selection_failed",
                 fallback_reason: "none",
+                winner_decision_basis: "none",
+                fft_vs_poly_payload_winner: "na",
                 retried: true,
             });
         }
@@ -626,6 +689,8 @@ fn select_codec_impl(
                         selected_codec_id: frame.codec_id,
                         selection_reason: "strict_noop_safety_fallback",
                         fallback_reason: "noop_safety",
+                        winner_decision_basis: "none",
+                        fft_vs_poly_payload_winner: "na",
                         retried: true,
                     });
                 }
@@ -663,6 +728,8 @@ fn select_codec_impl(
                             selected_codec_id: frame.codec_id,
                             selection_reason: "strict_noop_safety_fallback",
                             fallback_reason: "noop_safety",
+                            winner_decision_basis: "none",
+                            fft_vs_poly_payload_winner: "na",
                             retried: true,
                         });
                     }
@@ -686,6 +753,8 @@ fn select_codec_impl(
                 selected_codec_id: frame.codec_id,
                 selection_reason: "lossy_best_effort_after_full_budget",
                 fallback_reason: "lossy_best_effort",
+                winner_decision_basis: "none",
+                fft_vs_poly_payload_winner: "na",
                 retried: true,
             });
         }
@@ -700,6 +769,8 @@ fn select_codec_impl(
             selected_codec_id: 255,
             selection_reason: "selection_failed",
             fallback_reason: "none",
+            winner_decision_basis: "none",
+            fft_vs_poly_payload_winner: "na",
             retried: true,
         });
     }
@@ -919,7 +990,7 @@ mod tests {
     }
 
     #[test]
-    fn reduced_probe_runs_full_budget_only_on_selected_codec() {
+    fn reduced_probe_runs_full_budget_on_both_lossy_codecs_when_probe_misses() {
         let a_probe_calls = AtomicUsize::new(0);
         let a_full_calls = AtomicUsize::new(0);
         let b_probe_calls = AtomicUsize::new(0);
@@ -947,11 +1018,146 @@ mod tests {
         let data: Vec<f64> = (0..512).map(|i| (i as f64).sin()).collect();
 
         let frame = select_codec(&data, &codecs, &cfg).unwrap();
-        assert_eq!(frame.codec_id, FFT_CODEC_ID);
+        assert_eq!(frame.codec_id, POLYNOMIAL_CODEC_ID);
         assert_eq!(a_probe_calls.load(Ordering::Relaxed), 1);
         assert_eq!(b_probe_calls.load(Ordering::Relaxed), 1);
         assert_eq!(a_full_calls.load(Ordering::Relaxed), 1);
-        assert_eq!(b_full_calls.load(Ordering::Relaxed), 0);
+        assert_eq!(b_full_calls.load(Ordering::Relaxed), 1);
+    }
+
+    struct FullBudgetPayloadCodec<'a> {
+        id: u8,
+        probe_best: f64,
+        full_meets: bool,
+        full_payload_len: usize,
+        full_error: f64,
+        probe_calls: &'a AtomicUsize,
+        full_calls: &'a AtomicUsize,
+    }
+
+    impl Codec for FullBudgetPayloadCodec<'_> {
+        fn id(&self) -> u8 {
+            self.id
+        }
+
+        fn name(&self) -> &'static str {
+            "full-budget-payload"
+        }
+
+        fn compress(&self, data: &[f64], config: &CompressConfig) -> Result<CompressedFrame> {
+            let sample_count: u32 =
+                data.len()
+                    .try_into()
+                    .map_err(|_| Error::SampleCountOverflow {
+                        count: data.len() as u64,
+                    })?;
+            if config.max_iterations <= PROBE_ITER_BUDGET {
+                self.probe_calls.fetch_add(1, Ordering::Relaxed);
+                return Err(Error::ErrorBoundNotMet {
+                    best: self.probe_best,
+                    target: config.max_error.unwrap_or(0.0),
+                    best_payload: Some(vec![self.id; 8]),
+                });
+            }
+
+            self.full_calls.fetch_add(1, Ordering::Relaxed);
+            if self.full_meets {
+                Ok(CompressedFrame {
+                    codec_id: self.id,
+                    sample_count,
+                    payload: vec![self.id; self.full_payload_len],
+                    measured_error: self.full_error,
+                })
+            } else {
+                Err(Error::ErrorBoundNotMet {
+                    best: self.full_error,
+                    target: config.max_error.unwrap_or(0.0),
+                    best_payload: Some(vec![self.id; self.full_payload_len]),
+                })
+            }
+        }
+
+        fn decompress(&self, _payload: &[u8], _sample_count: u32) -> Result<Vec<f64>> {
+            Err(Error::UnknownCodec(self.id))
+        }
+    }
+
+    #[test]
+    fn full_budget_bound_met_chooses_smallest_payload() {
+        let fft_probe_calls = AtomicUsize::new(0);
+        let fft_full_calls = AtomicUsize::new(0);
+        let poly_probe_calls = AtomicUsize::new(0);
+        let poly_full_calls = AtomicUsize::new(0);
+
+        let fft = FullBudgetPayloadCodec {
+            id: FFT_CODEC_ID,
+            probe_best: 0.4,
+            full_meets: true,
+            full_payload_len: 40,
+            full_error: 0.02,
+            probe_calls: &fft_probe_calls,
+            full_calls: &fft_full_calls,
+        };
+        let poly = FullBudgetPayloadCodec {
+            id: POLYNOMIAL_CODEC_ID,
+            probe_best: 0.2,
+            full_meets: true,
+            full_payload_len: 20,
+            full_error: 0.03,
+            probe_calls: &poly_probe_calls,
+            full_calls: &poly_full_calls,
+        };
+
+        let data: Vec<f64> = (0..512).map(|i| (i as f64).sin()).collect();
+        let cfg = CompressConfig {
+            max_error: Some(-1.0),
+            max_iterations: 20,
+            ..Default::default()
+        };
+        let codecs: [&dyn Codec; 2] = [&fft, &poly];
+        let frame = select_codec(&data, &codecs, &cfg).unwrap();
+
+        assert_eq!(frame.codec_id, POLYNOMIAL_CODEC_ID);
+        assert_eq!(fft_probe_calls.load(Ordering::Relaxed), 1);
+        assert_eq!(poly_probe_calls.load(Ordering::Relaxed), 1);
+        assert_eq!(fft_full_calls.load(Ordering::Relaxed), 1);
+        assert_eq!(poly_full_calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn full_budget_prefers_bound_met_over_best_effort() {
+        let fft_probe_calls = AtomicUsize::new(0);
+        let fft_full_calls = AtomicUsize::new(0);
+        let poly_probe_calls = AtomicUsize::new(0);
+        let poly_full_calls = AtomicUsize::new(0);
+
+        let fft = FullBudgetPayloadCodec {
+            id: FFT_CODEC_ID,
+            probe_best: 0.2,
+            full_meets: true,
+            full_payload_len: 48,
+            full_error: 0.04,
+            probe_calls: &fft_probe_calls,
+            full_calls: &fft_full_calls,
+        };
+        let poly = FullBudgetPayloadCodec {
+            id: POLYNOMIAL_CODEC_ID,
+            probe_best: 0.1,
+            full_meets: false,
+            full_payload_len: 12,
+            full_error: 0.08,
+            probe_calls: &poly_probe_calls,
+            full_calls: &poly_full_calls,
+        };
+        let data: Vec<f64> = (0..512).map(|i| (i as f64).cos()).collect();
+        let cfg = CompressConfig {
+            max_error: Some(-1.0),
+            max_iterations: 20,
+            ..Default::default()
+        };
+        let codecs: [&dyn Codec; 2] = [&fft, &poly];
+        let frame = select_codec(&data, &codecs, &cfg).unwrap();
+        assert_eq!(frame.codec_id, FFT_CODEC_ID);
     }
 
     #[test]

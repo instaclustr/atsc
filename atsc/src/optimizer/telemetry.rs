@@ -41,6 +41,10 @@ pub struct ChunkTelemetry {
     pub selection_reason: &'static str,
     /// Fallback classification: `none`, `lossy_best_effort`, or `noop_safety`.
     pub fallback_reason: &'static str,
+    /// Winner decision basis for bounded lossy comparison: `payload`, `error`, or `none`.
+    pub winner_decision_basis: &'static str,
+    /// Payload winner between FFT and Polynomial: `fft`, `polynomial`, `tie`, or `na`.
+    pub fft_vs_poly_payload_winner: &'static str,
     /// Whether fallback/retry path was used.
     pub retried: bool,
 }
@@ -66,6 +70,14 @@ pub struct RunSummary {
     pub noop_selected_rate: f64,
     /// Number of chunks where full-budget lossy met the bound.
     pub lossy_full_budget_bound_met_chunks: u32,
+    /// Number of chunks where winner was selected by payload size.
+    pub winner_by_payload_chunks: u32,
+    /// Number of chunks where winner was selected by error tie-break.
+    pub winner_by_error_chunks: u32,
+    /// Number of chunks where FFT payload beat Polynomial payload.
+    pub fft_beats_poly_payload_chunks: u32,
+    /// Number of chunks where Polynomial payload beat FFT payload.
+    pub poly_beats_fft_payload_chunks: u32,
 }
 
 /// Aggregated stats for one codec over the run.
@@ -123,6 +135,10 @@ impl RunTelemetryCollector {
         let mut miss_buckets: BTreeMap<&'static str, u32> = BTreeMap::new();
         let mut noop_selected_chunks = 0u32;
         let mut lossy_full_budget_bound_met_chunks = 0u32;
+        let mut winner_by_payload_chunks = 0u32;
+        let mut winner_by_error_chunks = 0u32;
+        let mut fft_beats_poly_payload_chunks = 0u32;
+        let mut poly_beats_fft_payload_chunks = 0u32;
 
         for chunk in &self.chunks {
             attempts_per_chunk.push(chunk.attempts.len() as u32);
@@ -132,6 +148,16 @@ impl RunTelemetryCollector {
             if chunk.selection_reason == "full_budget_lossy_bound_met" {
                 lossy_full_budget_bound_met_chunks =
                     lossy_full_budget_bound_met_chunks.saturating_add(1);
+            }
+            if chunk.winner_decision_basis == "payload" {
+                winner_by_payload_chunks = winner_by_payload_chunks.saturating_add(1);
+            } else if chunk.winner_decision_basis == "error" {
+                winner_by_error_chunks = winner_by_error_chunks.saturating_add(1);
+            }
+            if chunk.fft_vs_poly_payload_winner == "fft" {
+                fft_beats_poly_payload_chunks = fft_beats_poly_payload_chunks.saturating_add(1);
+            } else if chunk.fft_vs_poly_payload_winner == "polynomial" {
+                poly_beats_fft_payload_chunks = poly_beats_fft_payload_chunks.saturating_add(1);
             }
             if chunk.retried {
                 retries_count = retries_count.saturating_add(1);
@@ -209,6 +235,10 @@ impl RunTelemetryCollector {
                 (noop_selected_chunks as f64) / (chunk_count as f64)
             },
             lossy_full_budget_bound_met_chunks,
+            winner_by_payload_chunks,
+            winner_by_error_chunks,
+            fft_beats_poly_payload_chunks,
+            poly_beats_fft_payload_chunks,
         }
     }
 }
@@ -293,6 +323,8 @@ mod tests {
             selected_codec_id: 0,
             selection_reason: "smallest_payload_within_bound",
             fallback_reason: "none",
+            winner_decision_basis: "none",
+            fft_vs_poly_payload_winner: "na",
             retried: false,
         });
         let summary = collector.summarize();
