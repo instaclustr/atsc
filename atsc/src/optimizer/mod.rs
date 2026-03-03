@@ -18,6 +18,7 @@ use telemetry::{ChunkTelemetry, CodecAttemptTelemetry, RunTelemetryCollector};
 const PROBE_ITER_BUDGET: u32 = 3;
 const FFT_CODEC_ID: u8 = 2;
 const POLYNOMIAL_CODEC_ID: u8 = 4;
+const HYBRID_RESIDUAL_CODEC_ID: u8 = 5;
 
 /// Select the best codec for a chunk.
 ///
@@ -813,7 +814,10 @@ fn ensure_noop<'a>(codecs: &'a [&'a dyn Codec]) -> Vec<&'a dyn Codec> {
 }
 
 fn is_primary_lossy(codec_id: u8) -> bool {
-    matches!(codec_id, FFT_CODEC_ID | POLYNOMIAL_CODEC_ID)
+    matches!(
+        codec_id,
+        FFT_CODEC_ID | POLYNOMIAL_CODEC_ID | HYBRID_RESIDUAL_CODEC_ID
+    )
 }
 
 fn is_better_payload_then_error(

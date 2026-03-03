@@ -84,6 +84,7 @@ enum CodecChoice {
     Auto,
     Fft,
     Poly,
+    Hybrid,
     Const,
     Noop,
 }
@@ -158,6 +159,11 @@ fn cmd_compress(
         CodecChoice::Const => encode_forced(&data, &cfg, &atsc::codec::constant::ConstantCodec)?,
         CodecChoice::Fft => encode_forced(&data, &cfg, &atsc::codec::fft::FftF32Codec)?,
         CodecChoice::Poly => encode_forced(&data, &cfg, &atsc::codec::polynomial::PolynomialCodec)?,
+        CodecChoice::Hybrid => encode_forced(
+            &data,
+            &cfg,
+            &atsc::codec::hybrid_residual::HybridResidualCodec,
+        )?,
     };
 
     let out_path = output
@@ -286,11 +292,12 @@ fn cmd_bench(
         strict_bound,
     };
 
-    let codecs: [(&str, &dyn atsc::codec::Codec); 4] = [
+    let codecs: [(&str, &dyn atsc::codec::Codec); 5] = [
         ("noop", &atsc::codec::noop::NoopCodec),
         ("const", &atsc::codec::constant::ConstantCodec),
         ("fft", &atsc::codec::fft::FftF32Codec),
         ("poly", &atsc::codec::polynomial::PolynomialCodec),
+        ("hybrid", &atsc::codec::hybrid_residual::HybridResidualCodec),
     ];
 
     println!("name\tbytes\terror\ttime_ms");
@@ -314,6 +321,7 @@ enum BaselineMode {
     Auto,
     Fft,
     Poly,
+    Hybrid,
     Noop,
 }
 
@@ -324,6 +332,7 @@ impl BaselineMode {
             Self::Auto => "auto",
             Self::Fft => "forced-fft",
             Self::Poly => "forced-poly",
+            Self::Hybrid => "forced-hybrid",
             Self::Noop => "forced-noop",
         }
     }
@@ -383,6 +392,7 @@ fn cmd_baseline(
             BaselineMode::Auto,
             BaselineMode::Fft,
             BaselineMode::Poly,
+            BaselineMode::Hybrid,
             BaselineMode::Noop,
         ];
         let datasets = build_baseline_datasets(&real, 262_144);
@@ -439,7 +449,7 @@ fn cmd_baseline(
         report.push_str("Datasets: periodic, smooth-trend, noisy-entropy, mixed-realworld\n");
         report.push_str("Chunk sizes: 512, 2048, 8192, 65536\n");
         report.push_str("Max error (%): 0.5, 1, 2, 5\n");
-        report.push_str("Modes: auto, forced-fft, forced-poly, forced-noop\n");
+        report.push_str("Modes: auto, forced-fft, forced-poly, forced-hybrid, forced-noop\n");
         report.push_str(&format!("Runs per cell: {runs}\n\n"));
         report.push_str("|dataset|chunk|error_%|mode|median_time_ms|ratio|nrmse|decision_ms|attempts_avg|attempts_p95|retries|bound_miss_rate|noop_select_rate|winner_payload_rate|fft_payload_win_rate|codec_time_share|\n");
         report.push_str(
@@ -546,10 +556,11 @@ fn run_matrix_case(
     let mut frames = Vec::new();
     match mode {
         BaselineMode::Auto => {
-            let codecs: [&dyn atsc::codec::Codec; 3] = [
+            let codecs: [&dyn atsc::codec::Codec; 4] = [
                 &atsc::codec::noop::NoopCodec,
                 &atsc::codec::fft::FftF32Codec,
                 &atsc::codec::polynomial::PolynomialCodec,
+                &atsc::codec::hybrid_residual::HybridResidualCodec,
             ];
             let mut collector = atsc::optimizer::telemetry::RunTelemetryCollector::new();
             for (idx, chunk) in split_chunks(&filtered, chunk_size).into_iter().enumerate() {
@@ -623,6 +634,12 @@ fn run_matrix_case(
         }
         BaselineMode::Poly => {
             let codec = atsc::codec::polynomial::PolynomialCodec;
+            for chunk in split_chunks(&filtered, chunk_size) {
+                frames.push(compress_chunk_best_effort(chunk, cfg, &codec)?);
+            }
+        }
+        BaselineMode::Hybrid => {
+            let codec = atsc::codec::hybrid_residual::HybridResidualCodec;
             for chunk in split_chunks(&filtered, chunk_size) {
                 frames.push(compress_chunk_best_effort(chunk, cfg, &codec)?);
             }

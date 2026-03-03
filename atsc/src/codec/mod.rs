@@ -4,6 +4,7 @@ use crate::error::Result;
 
 pub mod constant;
 pub mod fft;
+pub mod hybrid_residual;
 pub mod noop;
 pub mod polynomial;
 

@@ -15,6 +15,7 @@ pub mod vsri;
 pub use error::{Error, Result};
 
 use crate::codec::fft::FftF32Codec;
+use crate::codec::hybrid_residual::HybridResidualCodec;
 use crate::codec::noop::NoopCodec;
 use crate::codec::polynomial::PolynomialCodec;
 use crate::codec::{Codec, CompressConfig, CompressedFrame};
@@ -428,8 +429,13 @@ pub struct FrameInfo {
     pub payload_bytes: u32,
 }
 
-fn default_codecs() -> [&'static dyn Codec; 3] {
-    [&NoopCodec, &FftF32Codec, &PolynomialCodec]
+fn default_codecs() -> [&'static dyn Codec; 4] {
+    [
+        &NoopCodec,
+        &FftF32Codec,
+        &PolynomialCodec,
+        &HybridResidualCodec,
+    ]
 }
 
 fn codec_name(codec_id: u8) -> &'static str {
@@ -438,6 +444,7 @@ fn codec_name(codec_id: u8) -> &'static str {
         1 => "constant",
         2 => "fft-f32",
         4 => "polynomial",
+        5 => "hybrid-residual",
         128 => "vsri",
         _ => "unknown",
     }
@@ -449,6 +456,7 @@ fn decompress_frame(frame: &CompressedFrame) -> Result<Vec<f64>> {
         1 => crate::codec::constant::ConstantCodec.decompress(&frame.payload, frame.sample_count),
         2 => FftF32Codec.decompress(&frame.payload, frame.sample_count),
         4 => PolynomialCodec.decompress(&frame.payload, frame.sample_count),
+        5 => HybridResidualCodec.decompress(&frame.payload, frame.sample_count),
         _ => Err(Error::UnknownCodec(frame.codec_id)),
     }
 }

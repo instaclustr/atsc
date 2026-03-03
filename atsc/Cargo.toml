@@ -30,3 +30,7 @@ harness = false
 [[bench]]
 name = "polynomial_bench"
 harness = false
+
+[[bench]]
+name = "hybrid_residual_bench"
+harness = false
