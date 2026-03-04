@@ -17,6 +17,7 @@ limitations under the License.
 use crate::{compressor::Compressor, optimizer::utils::DataStats};
 use bincode::{Decode, Encode};
 use log::debug;
+use std::cmp::Ordering;
 use std::mem::size_of_val;
 
 const COMPRESSION_SPEED: [i32; 7] = [i32::MAX, 4096, 2048, 1024, 512, 256, 128];
@@ -33,6 +34,15 @@ pub struct CompressorFrame {
 }
 
 impl CompressorFrame {
+    fn compressor_tiebreak_rank(compressor: Compressor) -> u8 {
+        match compressor {
+            // Favor FFT when payload and error tie.
+            Compressor::FFT => 0,
+            Compressor::Polynomial => 1,
+            _ => 2,
+        }
+    }
+
     ///  Creates a compressor frame, if a compressor is provided, it forces that compressor, otherwise is selected
     /// by the optimizer
     /// compressor: None to allow BRRO to chose, or force one
@@ -86,32 +96,31 @@ impl CompressorFrame {
                 .compressor
                 .get_compress_bounded_results(data, max_error as f64)
                 .compressed_data;
-        } else if self.sample_count >= data_sample {
-            // Any technique determine the best compressor seems to be slower than this one
-            // Sample the dataset for a fast compressor run
-            // Pick the best compression
-            // Compress the full dataset that way
-            let (_smallest_result, chosen_compressor) = compressor_list
-                .iter()
-                .map(|compressor| {
-                    (
-                        compressor
-                            .get_compress_bounded_results(&data[0..data_sample], max_error as f64),
-                        compressor,
-                    )
-                })
-                .filter(|(result, _)| result.error <= max_error as f64)
-                .min_by_key(|x| x.0.compressed_data.len())
-                .unwrap();
-            self.compressor = *chosen_compressor;
-            // Now do the full data compression
-            self.data = self
-                .compressor
-                .get_compress_bounded_results(data, max_error as f64)
-                .compressed_data;
         } else {
-            // Run all the eligible compressors and choose smallest
-            let compressor_results: Vec<_> = compressor_list
+            // For non-constant data, use sampled bound checks only as a shortlist and
+            // always make final decisions on full payload size.
+            let mut shortlist: Vec<Compressor> = compressor_list.to_vec();
+            if self.sample_count >= data_sample {
+                let sample_bound_hits: Vec<Compressor> = compressor_list
+                    .iter()
+                    .filter_map(|compressor| {
+                        let sample_result = compressor
+                            .get_compress_bounded_results(&data[0..data_sample], max_error as f64);
+                        if sample_result.error <= max_error as f64 {
+                            Some(*compressor)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                if !sample_bound_hits.is_empty() {
+                    shortlist = sample_bound_hits;
+                }
+            }
+
+            // Run shortlisted compressors on full data and pick payload-first winner.
+            let compressor_results: Vec<_> = shortlist
                 .iter()
                 .map(|compressor| {
                     (
@@ -121,27 +130,36 @@ impl CompressorFrame {
                 })
                 .collect();
 
-            #[allow(
-                clippy::neg_cmp_op_on_partial_ord,
-                reason = "we need to exactly negate `result.error < max_error`, we can't apply de morgans to the expression due to NaN values"
-            )]
-            let best_compressor = if compressor_results
+            let mut eligible_results: Vec<_> = if compressor_results
                 .iter()
-                .all(|(result, _)| !(result.error <= max_error as f64))
+                .any(|(result, _)| result.error <= max_error as f64)
             {
-                // To ensure we always have at least one result,
-                // if all results are above the max error just pick the smallest.
-                compressor_results
-                    .into_iter()
-                    .min_by_key(|x| x.0.compressed_data.len())
-            } else {
                 compressor_results
                     .into_iter()
                     .filter(|(result, _)| result.error <= max_error as f64)
-                    .min_by_key(|x| x.0.compressed_data.len())
+                    .collect()
+            } else {
+                // Ensure we always have at least one candidate.
+                compressor_results
             };
 
-            let (result, compressor) = best_compressor.unwrap();
+            let (result, compressor) = eligible_results
+                .drain(..)
+                .min_by(|a, b| {
+                    let by_payload = a.0.compressed_data.len().cmp(&b.0.compressed_data.len());
+                    if by_payload != Ordering::Equal {
+                        return by_payload;
+                    }
+
+                    let by_error = a.0.error.partial_cmp(&b.0.error).unwrap_or(Ordering::Equal);
+                    if by_error != Ordering::Equal {
+                        return by_error;
+                    }
+
+                    Self::compressor_tiebreak_rank(a.1).cmp(&Self::compressor_tiebreak_rank(b.1))
+                })
+                .unwrap();
+
             self.data = result.compressed_data;
             self.compressor = compressor;
         }
