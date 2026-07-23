@@ -19,6 +19,7 @@ use crate::{
     decoder::Decoder,
     error::DecodeError,
     optimizer::utils::{Bitdepth, DataStats},
+    utils::error::calculate_error,
 };
 
 use super::{decode_payload, BinConfig, Compressor};
@@ -165,7 +166,14 @@ impl Constant {
 pub fn constant_compressor(data: &[f64], stats: DataStats) -> CompressorResult {
     debug!("Initializing Constant Compressor. Error and Stats provided");
     let c = Constant::new(data.len(), stats.min, stats.bitdepth);
-    CompressorResult::new(c.to_bytes(), 0.0)
+    let compressed_data = c.to_bytes();
+    let error = if stats.min == stats.max {
+        0.0
+    } else {
+        let reconstructed = Constant::decompress(&compressed_data).to_data(data.len());
+        calculate_error(data, &reconstructed)
+    };
+    CompressorResult::new(compressed_data, error)
 }
 
 pub fn constant_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
@@ -205,5 +213,27 @@ mod tests {
         let c2 = constant_to_data(vector1.len(), &c);
 
         assert_eq!(vector1, c2);
+    }
+
+    #[test]
+    fn bounded_result_reports_actual_nonconstant_error_without_changing_bytes() {
+        let data = [1.0, 2.0];
+        let stats = DataStats::new(&data);
+
+        let result = constant_compressor(&data, stats);
+
+        assert_eq!(result.compressed_data, [30, 3, 1]);
+        assert_eq!(result.error, 0.25);
+    }
+
+    #[test]
+    fn bounded_result_reports_exact_zero_for_constant_input() {
+        let data = [7.0; 16];
+        let stats = DataStats::new(&data);
+
+        let result = constant_compressor(&data, stats);
+
+        assert_eq!(result.compressed_data, [30, 3, 7]);
+        assert_eq!(result.error, 0.0);
     }
 }

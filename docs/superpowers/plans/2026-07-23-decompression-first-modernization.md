@@ -609,6 +609,7 @@ git commit -m "perf: reuse decoder plans and output buffers"
 **Files:**
 - Modify: `atsc/src/error.rs`
 - Modify: `atsc/src/compressor/mod.rs`
+- Modify: `atsc/src/compressor/constant.rs`
 - Modify: `atsc/src/compressor/fft.rs`
 - Modify: `atsc/src/frame/mod.rs`
 - Modify: `atsc/src/data.rs`
@@ -627,6 +628,9 @@ git commit -m "perf: reuse decoder plans and output buffers"
   `CompressedStream::try_compress_chunk_bounded_with`.
 - Existing infallible bounded methods delegate to the fallible methods and
   panic clearly without committing a failed frame.
+- Forced Constant reports actual reconstruction error for nonconstant input
+  while preserving identical payload bytes; constant input reports exactly
+  zero error.
 - Does not change `DecodeError` semantics.
 
 - [ ] **Step 1: Write failing encode-contract and FFT boundary tests**
@@ -641,6 +645,12 @@ Add transactional invalid-speed and infallible-wrapper tests. Before the
 implementation these tests fail because the typed error and fallible APIs do
 not exist.
 
+Add forced Constant regressions: `[1.0, 2.0]` at `0.03` returns typed
+`ErrorBoundNotMet` without changing body or header frame counts, while a truly
+constant vector succeeds with exact zero error and unchanged bytes/output.
+Every transaction-failure assertion checks `header.get_frame_count()` as well
+as body-derived frame and sample counts.
+
 For `fft_trim`, explicitly prove position 65,535 is retained, position 65,536
 is excluded without aliasing, and `max_freq == usize::MAX` neither overallocates
 nor over-pops. Characterize repeatable equal-magnitude selection on Rust 1.81
@@ -652,6 +662,10 @@ Add public `EncodeError` without changing `DecodeError`. Forced bounded
 compression must call `get_compress_bounded_results` and reject a non-finite
 reported error or one above the requested bound before assigning frame data.
 
+Make `constant_compressor` calculate error from the actual encoded/decoded
+constant reconstruction for nonconstant input. Preserve its existing payload
+bytes and return exactly `0.0` when every source sample is constant.
+
 Implement fallible frame and stream methods. Close/push the frame and increment
 the header count only after compression succeeds. Make every existing
 infallible bounded method an `expect`-based compatibility wrapper around its
@@ -661,6 +675,12 @@ Update the legacy CLI integration characterization: a forced FFT input whose
 reported error is `0.04025997998108369` against the default `0.03` bound must
 exit unsuccessfully with the clear compatibility-wrapper panic and must not
 create a `.bro` output.
+
+Retain Polynomial and IDW multi-file directory integration coverage. Their old
+directory setup included `uptime.wbro`, whose zero samples make source-relative
+MAPE undefined; use two bounded-valid `memory_used.wbro` copies so the test
+continues to cover directory traversal and both output files without bypassing
+the encode contract.
 
 - [ ] **Step 3: Validate Auto on full-frame results**
 
@@ -709,6 +729,8 @@ percentage in the assertion message.
 cargo test -p atsc --test encode_api
 cargo test -p atsc --test compressed_size -- --nocapture
 cargo test -p atsc --test decode_api
+cargo test -p atsc --test integration_test
+cargo test -p atsc --test e2e
 cargo test -p atsc --test v1_wire_compat
 cargo test --workspace --all-targets
 cargo bench -p atsc --bench decompression_bench -- --baseline before-modernization

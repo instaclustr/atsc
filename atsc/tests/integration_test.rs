@@ -33,12 +33,12 @@ fn test_fft() {
 
 #[test]
 fn test_idw() {
-    compress_file("idw");
+    test_bounded_suite("idw");
 }
 
 #[test]
 fn test_polynomial() {
-    compress_file("polynomial");
+    test_bounded_suite("polynomial");
 }
 
 #[test]
@@ -58,6 +58,11 @@ fn test_compression_speed() {
 
 fn test_suite(compressor: &str) {
     compress_dir(compressor);
+    compress_file(compressor);
+}
+
+fn test_bounded_suite(compressor: &str) {
+    compress_bounded_dir(compressor);
     compress_file(compressor);
 }
 
@@ -90,6 +95,20 @@ fn compress_dir(compressor: &str) {
     std::fs::create_dir(&input).unwrap();
     std::fs::copy("tests/wbros/memory_used.wbro", input.join("1.wbro")).unwrap();
     std::fs::copy("tests/wbros/uptime.wbro", input.join("2.wbro")).unwrap();
+
+    run_compressor(&[input.to_str().unwrap(), "--compressor", compressor]);
+    assert!(input.join("1.bro").is_file());
+    assert!(input.join("2.bro").is_file());
+}
+
+fn compress_bounded_dir(compressor: &str) {
+    let tmp_dir = tempdir().unwrap();
+    let input = tmp_dir.path().join("input");
+    std::fs::create_dir(&input).unwrap();
+    // uptime.wbro contains zeros, so its source-relative MAPE is undefined.
+    // Use two bounded-valid fixtures to retain multi-file directory coverage.
+    std::fs::copy("tests/wbros/memory_used.wbro", input.join("1.wbro")).unwrap();
+    std::fs::copy("tests/wbros/memory_used.wbro", input.join("2.wbro")).unwrap();
 
     run_compressor(&[input.to_str().unwrap(), "--compressor", compressor]);
     assert!(input.join("1.bro").is_file());
