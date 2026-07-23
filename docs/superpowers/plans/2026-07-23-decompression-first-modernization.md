@@ -603,67 +603,67 @@ git commit -m "perf: reuse decoder plans and output buffers"
 
 ---
 
-### Task 5: Enforce FFT-Safe v1 Frame Sizing
+### Task 5: Keep FFT Candidates Within v1 Position Limits
 
 **Files:**
-- Modify: `atsc/src/optimizer/mod.rs`
 - Modify: `atsc/src/compressor/fft.rs`
 - Modify: `atsc/tests/decode_api.rs`
 - Create: `atsc/tests/compressed_size.rs`
-- Modify: `atsc/benches/decompression_bench.rs`
 
 **Interfaces:**
-- Keeps the BRO v1 wire layout.
-- Changes optimizer maximum frame size from 131,072 to 65,536 samples.
+- Keeps the BRO v1 wire layout and `FrequencyPoint.pos: u16`.
+- Retains the optimizer maximum frame size of 131,072 samples.
+- Excludes spectral candidates whose positions cannot be represented by BRO v1.
 
-- [ ] **Step 1: Write the failing safety test**
+- [ ] **Step 1: Write the failing safety tests**
 
-Add:
+Add an `fft_trim` behavior test with a buffer longer than `u16::MAX`. Give an
+unrepresentable bin the largest magnitude and a representable bin the
+next-largest magnitude. Assert that trimming selects the representable bin and
+does not alias the unrepresentable bin to a low position.
 
-```rust
-#[test]
-fn optimizer_never_creates_fft_frames_with_unrepresentable_positions() {
-    let samples = vec![1.0; 131_072];
-    let plan = OptimizerPlan::plan(&samples);
-    assert_eq!(plan.chunk_sizes, vec![65_536, 65_536]);
-    for size in plan.chunk_sizes {
-        let fft_len = if size >= 128 { next_size(size) } else { size };
-        assert!(fft_len / 2 <= u16::MAX as usize);
-    }
-}
-```
+Add a bounded 131,072-sample FFT regression using an offset sine wave so the
+MAPE denominator never reaches zero. Assert that compression meets the existing
+error bound and decoding returns the requested number of finite values within
+that bound.
 
-Add an FFT unit test that passes an out-of-range frequency position via malformed fixture bytes and expects `DecodeError::InvalidFrame`, not indexing panic.
+Keep the malformed FFT fixture test that expects `DecodeError::InvalidFrame`
+for an out-of-range stored position rather than an indexing panic.
 
 - [ ] **Step 2: Run tests and observe failure**
 
 Run:
 
 ```bash
-cargo test -p atsc optimizer_never_creates_fft_frames_with_unrepresentable_positions
+cargo test -p atsc fft_trim_skips_unrepresentable_frequency_candidates
+cargo test -p atsc bounded_large_fft_meets_error_bound_and_decodes_valid_values
 ```
 
-Expected: failure showing one 131,072-sample chunk.
+Expected: the old unchecked conversion aliases an unrepresentable position to
+a low `u16` position, so the candidate-selection regression fails. The
+large-frame regression protects the bounded path that uses Gibbs padding.
 
-- [ ] **Step 3: Apply the minimal frame-size correction**
+- [ ] **Step 3: Filter unrepresentable candidates**
 
-Change:
+In `fft_trim`, exclude every candidate whose index is greater than
+`u16::MAX` before constructing a `FrequencyPoint`. Convert every retained
+position with `u16::try_from`; never use unchecked `pos as u16`.
 
-```rust
-pub const MAX_FRAME_SIZE: usize = 65_536;
-```
-
-Document that Gibbs padding makes the previous 131,072 frame exceed `u16` spectral positions. Add a checked conversion in `fft_trim`; never use unchecked `pos as u16`.
+Because basic, hinted, and bounded FFT compression all call `fft_trim`, this
+single filter prevents wrapping and aliasing in all three paths without
+changing frames or the wire representation.
 
 - [ ] **Step 4: Add a deterministic compressed-size gate**
 
 In `atsc/tests/compressed_size.rs`, generate:
 
-- 131,072-point sine wave, forced FFT.
-- 131,072-point stepped series, Auto.
-- 262,144-point slowly changing series, Auto.
+- 131,072-point sine wave, forced FFT; Task 4 baseline: 13,996 bytes.
+- 131,072-point stepped series, Auto; Task 4 baseline: 2,101 bytes.
+- 262,144-point slowly changing series, Auto; Task 4 baseline: 1,568 bytes.
 
-Record pre-change compressed sizes by running this test on the Task 4 parent commit, then assert the new output is no more than `ceil(old_size * 1.01)` for each case. The test must print old/new bytes and percentage in its assertion message.
+Assert that each new output is no more than `ceil(old_size * 1.01)`. The test
+must print old/new bytes and percentage in its assertion message. Do not alter
+the corpus, measured constants, or threshold after running the gate.
 
 - [ ] **Step 5: Run correctness and size gates**
 
@@ -673,11 +673,12 @@ Run:
 cargo test -p atsc --test compressed_size -- --nocapture
 cargo test -p atsc --test decode_api
 cargo test -p atsc --test v1_wire_compat
+cargo test --workspace --all-targets
 ```
 
 Expected: all pass. Stop if any compressed-size case exceeds 1%.
 
-- [ ] **Step 6: Benchmark the new multi-frame FFT path**
+- [ ] **Step 6: Preserve decompression performance**
 
 Run:
 
@@ -685,13 +686,14 @@ Run:
 cargo bench -p atsc --bench decompression_bench -- --baseline before-modernization
 ```
 
-Expected: `stream/fft/2x65536` and mixed-stream decompression improve or remain statistically neutral.
+Expected: Task 4 gains remain, while the unchanged decompression paths affected
+by Task 5 are statistically neutral or better.
 
-- [ ] **Step 7: Commit frame safety**
+- [ ] **Step 7: Commit FFT position safety**
 
 ```bash
-git add atsc/src/optimizer/mod.rs atsc/src/compressor/fft.rs atsc/tests atsc/benches/decompression_bench.rs
-git commit -m "fix: keep FFT frames within v1 position limits"
+git add atsc/src/compressor/fft.rs atsc/tests/decode_api.rs atsc/tests/compressed_size.rs docs/superpowers/plans/2026-07-23-decompression-first-modernization.md
+git commit -m "fix: keep FFT bins within v1 position limits"
 ```
 
 ---

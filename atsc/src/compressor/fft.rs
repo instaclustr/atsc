@@ -233,7 +233,8 @@ impl FFT {
             .collect()
     }
 
-    /// Removes the smallest frequencies from `buffer` until `max_freq` remain
+    /// Removes the smallest frequencies from `buffer` until `max_freq` remain.
+    /// Bins outside the BRO v1 `u16` position range are not candidates.
     fn fft_trim(buffer: &mut [Complex<f32>], max_freq: usize) -> Vec<FrequencyPoint> {
         let mut freq_vec = Vec::with_capacity(max_freq);
         if max_freq == 1 {
@@ -245,7 +246,12 @@ impl FFT {
         let tmp_vec: Vec<FrequencyPoint> = buffer
             .iter()
             .enumerate()
-            .map(|(pos, &f)| FrequencyPoint::from_complex_with_position(f, pos as u16))
+            .filter(|(pos, _)| *pos <= usize::from(u16::MAX))
+            .map(|(pos, &f)| {
+                let pos = u16::try_from(pos)
+                    .expect("filtered FFT frequency position must fit BRO v1 u16 storage");
+                FrequencyPoint::from_complex_with_position(f, pos)
+            })
             .collect();
         // This part, is because Binary heap is very good at "give me the top N elements"
         let mut heap = BinaryHeap::from(tmp_vec);
@@ -591,6 +597,59 @@ mod tests {
                 15, 2, 0, 0, 0, 152, 65, 0, 0, 0, 0, 4, 0, 0, 96, 192, 102, 144, 138, 64, 0, 0,
                 160, 64, 0, 0, 128, 63
             ]
+        );
+    }
+
+    #[test]
+    fn fft_trim_skips_unrepresentable_frequency_candidates() {
+        const REPRESENTABLE_POSITION: u16 = 17;
+        let unrepresentable_position = usize::from(u16::MAX) + 1;
+        let representable_frequency = Complex {
+            re: 100.0,
+            im: 25.0,
+        };
+        let mut buffer = vec![Complex { re: 0.0, im: 0.0 }; unrepresentable_position + 1];
+        buffer[usize::from(REPRESENTABLE_POSITION)] = representable_frequency;
+        buffer[unrepresentable_position] = Complex {
+            re: 1_000.0,
+            im: 250.0,
+        };
+
+        let frequencies = FFT::fft_trim(&mut buffer, 2);
+
+        assert_eq!(frequencies.len(), 1);
+        assert_eq!(
+            frequencies[0].position(),
+            usize::from(REPRESENTABLE_POSITION)
+        );
+        assert_eq!(frequencies[0].to_complex(), representable_frequency);
+    }
+
+    #[test]
+    fn bounded_large_fft_meets_error_bound_and_decodes_valid_values() {
+        const FRAME_SIZE: usize = 131_072;
+        const MAX_ERROR: f64 = 0.03;
+        let samples: Vec<f64> = (0..FRAME_SIZE)
+            .map(|index| 2.0 + ((index as f64) / 8.0).sin())
+            .collect();
+
+        let compressed_result = fft_allowed_error(&samples, MAX_ERROR);
+        assert!(
+            compressed_result.error <= MAX_ERROR,
+            "encoder reported error {} above bound {MAX_ERROR}",
+            compressed_result.error
+        );
+
+        let decoded = Compressor::FFT
+            .try_decompress(FRAME_SIZE, &compressed_result.compressed_data)
+            .expect("large bounded FFT payload must decode");
+        assert_eq!(decoded.len(), FRAME_SIZE);
+        assert!(decoded.iter().all(|value| value.is_finite()));
+
+        let decoded_error = calculate_error(&samples, &decoded);
+        assert!(
+            decoded_error <= MAX_ERROR,
+            "decoded error {decoded_error} above bound {MAX_ERROR}"
         );
     }
 

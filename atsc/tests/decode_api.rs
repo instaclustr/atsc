@@ -806,16 +806,17 @@ fn rle_run_starts_must_include_zero_and_fit_frame() {
 }
 
 #[test]
-fn fft_frequency_positions_must_fit_reconstructed_length() {
+fn malformed_fft_fixture_with_out_of_range_position_is_rejected() {
     let mut fft = FFT::new(1, 0.0, 1.0);
     fft.frequencies
         .push(FrequencyPoint::from_complex_with_position(
             Complex { re: 1.0, im: 0.0 },
-            1,
+            u16::MAX,
         ));
+    let malformed_fixture = fft.to_bytes();
 
     assert!(matches!(
-        Compressor::FFT.try_decompress(1, &fft.to_bytes()),
+        Compressor::FFT.try_decompress(1, &malformed_fixture),
         Err(DecodeError::InvalidFrame {
             codec: Compressor::FFT,
             ..
