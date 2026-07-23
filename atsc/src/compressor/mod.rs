@@ -25,6 +25,10 @@ use self::noop::{noop, Noop};
 use self::polynomial::{polynomial, polynomial_allowed_error, Polynomial, PolynomialType};
 use self::rle::{rle_compressor, IndexRLE};
 
+const BINCODE_DECODE_LIMIT: usize = 256 * 1024 * 1024;
+type BincodeDecodeConfig =
+    Configuration<config::LittleEndian, config::Varint, config::Limit<BINCODE_DECODE_LIMIT>>;
+
 pub mod constant;
 pub mod fft;
 pub mod noop;
@@ -236,6 +240,9 @@ fn validate_polynomial_point_count(
     samples: usize,
     polynomial: &Polynomial,
 ) -> Result<(), DecodeError> {
+    if polynomial.min == polynomial.max {
+        return Ok(());
+    }
     if samples == 0 {
         return Err(DecodeError::InvalidFrame {
             codec,
@@ -277,7 +284,7 @@ pub(crate) fn decode_payload<T: Decode>(
     data: &[u8],
     context: &'static str,
 ) -> Result<T, DecodeError> {
-    let (decoded, consumed) = bincode::decode_from_slice(data, BinConfig::get())
+    let (decoded, consumed) = bincode::decode_from_slice(data, BinConfig::get_decode())
         .map_err(|source| DecodeError::Bincode { context, source })?;
     if consumed != data.len() {
         return Err(DecodeError::TrailingBytes {
@@ -295,5 +302,9 @@ impl BinConfig {
     pub fn get() -> Configuration {
         // Little endian and Variable int encoding
         config::standard()
+    }
+
+    pub(crate) fn get_decode() -> BincodeDecodeConfig {
+        config::standard().with_limit::<BINCODE_DECODE_LIMIT>()
     }
 }

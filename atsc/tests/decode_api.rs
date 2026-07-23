@@ -22,6 +22,34 @@ const FIXTURES: [(&str, &[u8]); 6] = [
     ("idw", include_bytes!("fixtures/v1/idw.bro")),
 ];
 
+fn truncated(mut data: Vec<u8>) -> Vec<u8> {
+    data.pop().expect("test payload must not be empty");
+    data
+}
+
+fn with_trailing_byte(mut data: Vec<u8>) -> Vec<u8> {
+    data.push(0);
+    data
+}
+
+fn noop_payload() -> Vec<u8> {
+    let mut noop = Noop::new(1);
+    noop.compress(&[1.0]);
+    noop.to_bytes()
+}
+
+fn polynomial_payload(polynomial_type: PolynomialType) -> Vec<u8> {
+    let mut polynomial = Polynomial::new(2, 0.0, 1.0, polynomial_type, Bitdepth::U8);
+    polynomial.data_points.extend([0.0, 1.0]);
+    polynomial.to_bytes()
+}
+
+fn maximum_vector_length_prefix() -> Vec<u8> {
+    let mut prefix = vec![253];
+    prefix.extend_from_slice(&u64::MAX.to_le_bytes());
+    prefix
+}
+
 #[test]
 fn empty_input_reports_truncated_header() {
     assert!(matches!(
@@ -137,6 +165,30 @@ fn sample_limit_is_enforced() {
 }
 
 #[test]
+fn outer_frame_vector_length_prefix_is_bounded() {
+    let mut data = b"BRRO".to_vec();
+    data.extend_from_slice(&1_u32.to_le_bytes());
+    data.push(1);
+    data.extend(maximum_vector_length_prefix());
+
+    assert!(matches!(
+        CompressedStream::try_from_bytes(&data),
+        Err(DecodeError::Bincode { .. })
+    ));
+}
+
+#[test]
+fn nested_noop_vector_length_prefix_is_bounded() {
+    let mut data = vec![250];
+    data.extend(maximum_vector_length_prefix());
+
+    assert!(matches!(
+        Noop::try_decompress(&data),
+        Err(DecodeError::Bincode { .. })
+    ));
+}
+
+#[test]
 fn codec_payloads_reject_wrong_ids() {
     let mut constant = Constant::new(1, 1.0, Bitdepth::U8);
     constant.id = 0;
@@ -181,13 +233,103 @@ fn codec_payloads_reject_wrong_ids() {
 }
 
 #[test]
-fn codec_payloads_reject_trailing_bytes() {
-    let constant = Constant::new(1, 1.0, Bitdepth::U8);
-    let mut bytes = constant.to_bytes();
-    bytes.push(0);
-
+fn truncated_constant_payload_returns_bincode_error() {
     assert!(matches!(
-        Constant::try_decompress(&bytes),
+        Constant::try_decompress(&truncated(Constant::new(1, 1.0, Bitdepth::U8).to_bytes())),
+        Err(DecodeError::Bincode { .. })
+    ));
+}
+
+#[test]
+fn trailing_constant_payload_returns_trailing_bytes() {
+    assert!(matches!(
+        Constant::try_decompress(&with_trailing_byte(
+            Constant::new(1, 1.0, Bitdepth::U8).to_bytes()
+        )),
+        Err(DecodeError::TrailingBytes { remaining: 1 })
+    ));
+}
+
+#[test]
+fn truncated_noop_payload_returns_bincode_error() {
+    assert!(matches!(
+        Noop::try_decompress(&truncated(noop_payload())),
+        Err(DecodeError::Bincode { .. })
+    ));
+}
+
+#[test]
+fn trailing_noop_payload_returns_trailing_bytes() {
+    assert!(matches!(
+        Noop::try_decompress(&with_trailing_byte(noop_payload())),
+        Err(DecodeError::TrailingBytes { remaining: 1 })
+    ));
+}
+
+#[test]
+fn truncated_rle_payload_returns_bincode_error() {
+    assert!(matches!(
+        IndexRLE::try_decompress(&truncated(IndexRLE::new(&[1.0], Bitdepth::U8).to_bytes())),
+        Err(DecodeError::Bincode { .. })
+    ));
+}
+
+#[test]
+fn trailing_rle_payload_returns_trailing_bytes() {
+    assert!(matches!(
+        IndexRLE::try_decompress(&with_trailing_byte(
+            IndexRLE::new(&[1.0], Bitdepth::U8).to_bytes()
+        )),
+        Err(DecodeError::TrailingBytes { remaining: 1 })
+    ));
+}
+
+#[test]
+fn truncated_fft_payload_returns_bincode_error() {
+    assert!(matches!(
+        FFT::try_decompress(&truncated(FFT::new(1, 0.0, 1.0).to_bytes())),
+        Err(DecodeError::Bincode { .. })
+    ));
+}
+
+#[test]
+fn trailing_fft_payload_returns_trailing_bytes() {
+    assert!(matches!(
+        FFT::try_decompress(&with_trailing_byte(FFT::new(1, 0.0, 1.0).to_bytes())),
+        Err(DecodeError::TrailingBytes { remaining: 1 })
+    ));
+}
+
+#[test]
+fn truncated_polynomial_payload_returns_bincode_error() {
+    assert!(matches!(
+        Polynomial::try_decompress(&truncated(polynomial_payload(PolynomialType::Polynomial))),
+        Err(DecodeError::Bincode { .. })
+    ));
+}
+
+#[test]
+fn trailing_polynomial_payload_returns_trailing_bytes() {
+    assert!(matches!(
+        Polynomial::try_decompress(&with_trailing_byte(polynomial_payload(
+            PolynomialType::Polynomial
+        ))),
+        Err(DecodeError::TrailingBytes { remaining: 1 })
+    ));
+}
+
+#[test]
+fn truncated_idw_payload_returns_bincode_error() {
+    assert!(matches!(
+        Polynomial::try_decompress(&truncated(polynomial_payload(PolynomialType::Idw))),
+        Err(DecodeError::Bincode { .. })
+    ));
+}
+
+#[test]
+fn trailing_idw_payload_returns_trailing_bytes() {
+    assert!(matches!(
+        Polynomial::try_decompress(&with_trailing_byte(polynomial_payload(PolynomialType::Idw))),
         Err(DecodeError::TrailingBytes { remaining: 1 })
     ));
 }
@@ -289,6 +431,38 @@ fn polynomial_payload_type_must_match_frame_codec() {
             ..
         })
     ));
+}
+
+#[test]
+fn forced_constant_polynomial_roundtrips() {
+    let samples = [7.0; 16];
+    let mut stream = CompressedStream::new();
+    stream.compress_chunk_with(&samples, Compressor::Polynomial);
+
+    let parsed = CompressedStream::try_from_bytes(&stream.to_bytes())
+        .expect("constant Polynomial stream must parse");
+    assert_eq!(
+        parsed
+            .try_decompress()
+            .expect("constant Polynomial stream must decompress"),
+        samples
+    );
+}
+
+#[test]
+fn forced_constant_idw_roundtrips() {
+    let samples = [7.0; 16];
+    let mut stream = CompressedStream::new();
+    stream.compress_chunk_with(&samples, Compressor::Idw);
+
+    let parsed = CompressedStream::try_from_bytes(&stream.to_bytes())
+        .expect("constant IDW stream must parse");
+    assert_eq!(
+        parsed
+            .try_decompress()
+            .expect("constant IDW stream must decompress"),
+        samples
+    );
 }
 
 #[test]

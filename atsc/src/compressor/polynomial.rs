@@ -330,7 +330,7 @@ impl Polynomial {
                 reason: "point_step must not be zero".to_string(),
             });
         }
-        if polynomial.data_points.is_empty() {
+        if polynomial.data_points.is_empty() && polynomial.min != polynomial.max {
             return Err(DecodeError::InvalidFrame {
                 codec,
                 reason: "data points must not be empty".to_string(),

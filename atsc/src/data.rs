@@ -110,7 +110,7 @@ impl CompressedStream {
         let header = CompressorHeader::try_from_slice(&data[..header_len])?;
         let binary_data = &data[9..];
         let (data_frames, consumed): (Vec<CompressorFrame>, usize) =
-            bincode::decode_from_slice(binary_data, BinConfig::get()).map_err(|source| {
+            bincode::decode_from_slice(binary_data, BinConfig::get_decode()).map_err(|source| {
                 DecodeError::Bincode {
                     context: "BRO frame vector",
                     source,
