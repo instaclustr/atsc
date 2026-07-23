@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{iter::FusedIterator, ops::Range, slice};
+use std::{fmt, iter::FusedIterator, mem, ops::Range, slice};
 
 use crate::{
     compressor::Compressor, data::CompressedStream, error::DecodeError, frame::CompressorFrame,
 };
+use rustfft::{num_complex::Complex, FftPlanner};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameInfo {
@@ -104,9 +105,34 @@ fn append_transactionally(
     }
 }
 
-#[derive(Debug, Default)]
 pub struct Decoder {
+    fft_planner: Option<FftPlanner<f32>>,
+    fft_buffer: Vec<Complex<f32>>,
     frame_output: Vec<f64>,
+    rle_runs: Vec<(usize, f64)>,
+}
+
+impl fmt::Debug for Decoder {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Decoder")
+            .field("fft_planner_initialized", &self.fft_planner.is_some())
+            .field("fft_buffer", &self.fft_buffer)
+            .field("frame_output", &self.frame_output)
+            .field("rle_runs", &self.rle_runs)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Default for Decoder {
+    fn default() -> Self {
+        Self {
+            fft_planner: None,
+            fft_buffer: Vec::new(),
+            frame_output: Vec::new(),
+            rle_runs: Vec::new(),
+        }
+    }
 }
 
 impl Decoder {
@@ -132,7 +158,7 @@ impl Decoder {
         append_transactionally(output, |output| {
             output.reserve(stream.sample_count());
             for frame in stream.frames() {
-                output.extend(frame.try_decompress()?);
+                frame.try_decompress_into(self, output)?;
             }
             Ok(())
         })
@@ -151,10 +177,11 @@ impl Decoder {
                 index: frame_index,
                 frames: stream.frame_count(),
             })?;
-        let frame_output = frame.try_decompress()?;
-        let appended = frame_output.len();
-        output.extend(frame_output);
-        Ok(appended)
+        append_transactionally(output, |output| {
+            output.reserve(frame.sample_count());
+            frame.try_decompress_into(self, output)?;
+            Ok(())
+        })
     }
 
     pub fn decode_range(
@@ -207,13 +234,81 @@ impl Decoder {
                     break;
                 }
 
-                self.frame_output = frame.try_decompress()?;
                 let local_start = range.start.saturating_sub(frame_start);
                 let local_end = range.end.min(frame_end) - frame_start;
-                output.extend_from_slice(&self.frame_output[local_start..local_end]);
+                if local_start == 0 && local_end == frame.sample_count() {
+                    frame.try_decompress_into(self, output)?;
+                } else {
+                    let mut frame_output = mem::take(&mut self.frame_output);
+                    frame_output.clear();
+                    let decode_result = frame.try_decompress_into(self, &mut frame_output);
+                    self.frame_output = frame_output;
+                    decode_result?;
+                    output.extend_from_slice(&self.frame_output[local_start..local_end]);
+                }
                 frame_start = frame_end;
             }
             Ok(())
         })
+    }
+
+    pub(crate) fn fft_scratch(&mut self) -> (&mut FftPlanner<f32>, &mut Vec<Complex<f32>>) {
+        (
+            self.fft_planner.get_or_insert_with(FftPlanner::new),
+            &mut self.fft_buffer,
+        )
+    }
+
+    pub(crate) fn rle_scratch(&mut self) -> &mut Vec<(usize, f64)> {
+        &mut self.rle_runs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture(bytes: &[u8]) -> CompressedStream {
+        CompressedStream::try_from_bytes(bytes).expect("fixture must parse")
+    }
+
+    #[test]
+    fn fft_scratch_capacity_is_reused() {
+        let stream = fixture(include_bytes!("../tests/fixtures/v1/fft.bro"));
+        let mut decoder = Decoder::new();
+        let mut output = Vec::new();
+        assert!(decoder.fft_planner.is_none());
+
+        decoder
+            .decode_into(&stream, &mut output)
+            .expect("first FFT decode must succeed");
+        assert!(decoder.fft_planner.is_some());
+        let first_capacity = decoder.fft_buffer.capacity();
+        assert!(first_capacity > 0);
+
+        output.clear();
+        decoder
+            .decode_into(&stream, &mut output)
+            .expect("second FFT decode must succeed");
+        assert_eq!(decoder.fft_buffer.capacity(), first_capacity);
+    }
+
+    #[test]
+    fn rle_scratch_capacity_is_reused() {
+        let stream = fixture(include_bytes!("../tests/fixtures/v1/rle.bro"));
+        let mut decoder = Decoder::new();
+        let mut output = Vec::new();
+
+        decoder
+            .decode_into(&stream, &mut output)
+            .expect("first RLE decode must succeed");
+        let first_capacity = decoder.rle_runs.capacity();
+        assert!(first_capacity > 0);
+
+        output.clear();
+        decoder
+            .decode_into(&stream, &mut output)
+            .expect("second RLE decode must succeed");
+        assert_eq!(decoder.rle_runs.capacity(), first_capacity);
     }
 }

@@ -123,6 +123,28 @@ fn stream_with_invalid_later_frame() -> CompressedStream {
 }
 
 #[test]
+fn decode_into_preserves_prefix_for_every_codec_fixture() {
+    for (name, fixture) in FIXTURES {
+        let stream = CompressedStream::try_from_bytes(fixture)
+            .unwrap_or_else(|error| panic!("{name} fixture failed to parse: {error}"));
+        let expected = stream
+            .try_decompress()
+            .unwrap_or_else(|error| panic!("{name} fixture failed to decode: {error}"));
+        let prefix = [-11.0, -22.0];
+        let mut output = prefix.to_vec();
+        let mut decoder = Decoder::new();
+
+        let appended = decoder
+            .decode_into(&stream, &mut output)
+            .unwrap_or_else(|error| panic!("{name} fixture failed to decode into output: {error}"));
+
+        assert_eq!(appended, stream.sample_count(), "{name}");
+        assert_eq!(&output[..prefix.len()], &prefix, "{name}");
+        assert_eq!(&output[prefix.len()..], expected, "{name}");
+    }
+}
+
+#[test]
 fn decode_into_appends_and_reports_only_new_samples() {
     let stream = two_frame_stream();
     let mut decoder = Decoder::new();
@@ -197,6 +219,22 @@ fn decode_frame_into_rejects_out_of_bounds_indices() {
         ));
         assert_eq!(output, vec![-1.0]);
     }
+}
+
+#[test]
+fn decode_frame_into_restores_output_after_decode_error() {
+    let stream = stream_with_invalid_outer_frames();
+    let mut decoder = Decoder::new();
+    let mut output = vec![-1.0, -2.0];
+
+    assert!(matches!(
+        decoder.decode_frame_into(&stream, 0, &mut output),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::Auto,
+            ..
+        })
+    ));
+    assert_eq!(output, vec![-1.0, -2.0]);
 }
 
 #[test]

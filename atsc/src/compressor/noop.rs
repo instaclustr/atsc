@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 use super::{decode_payload, BinConfig, Compressor};
-use crate::error::DecodeError;
+use crate::{decoder::Decoder, error::DecodeError};
 use bincode::{Decode, Encode};
 use log::{debug, info};
 
@@ -80,6 +80,16 @@ impl Noop {
     pub fn to_data(&self, _frame_size: usize) -> Vec<i64> {
         self.data.clone()
     }
+
+    pub(crate) fn append_to_data(
+        &self,
+        _frame_size: usize,
+        _decoder: &mut Decoder,
+        output: &mut Vec<f64>,
+    ) {
+        output.reserve(self.data.len());
+        output.extend(self.data.iter().map(|&value| value as f64));
+    }
 }
 
 pub fn noop(data: &[f64]) -> Vec<u8> {
@@ -91,8 +101,10 @@ pub fn noop(data: &[f64]) -> Vec<u8> {
 
 pub fn noop_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
     let c = Noop::decompress(compressed_data);
-    let out_i64 = c.to_data(sample_number);
-    out_i64.iter().map(|&x| x as f64).collect()
+    let mut decoder = Decoder::new();
+    let mut output = Vec::with_capacity(c.data.len());
+    c.append_to_data(sample_number, &mut decoder, &mut output);
+    output
 }
 
 #[cfg(test)]

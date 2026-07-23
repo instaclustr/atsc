@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use crate::{
+    decoder::Decoder,
     error::DecodeError,
     optimizer::utils::DataStats,
     utils::{error::calculate_error, next_size},
@@ -418,13 +419,14 @@ impl FFT {
     fn get_mirrored_freqs(&self, len: usize) -> Vec<Complex<f32>> {
         // Because we are dealing with Real inputs, we only store half the frequencies, but
         // we need all for the ifft
-        let mut data = vec![
-            Complex {
-                re: 0.0f32,
-                im: 0.0f32
-            };
-            len
-        ];
+        let mut data = vec![Complex { re: 0.0, im: 0.0 }; len];
+        self.populate_mirrored_freqs(&mut data);
+        data
+    }
+
+    fn populate_mirrored_freqs(&self, data: &mut [Complex<f32>]) {
+        data.fill(Complex { re: 0.0, im: 0.0 });
+        let len = data.len();
         for f in &self.frequencies {
             let pos = f.pos as usize;
             data[pos] = f.to_complex();
@@ -435,15 +437,32 @@ impl FFT {
             // Mirror and invert the imaginary part
             data[len - pos] = f.to_inv_complex()
         }
-        data
     }
 
     /// Returns an array of data
     /// Runs the ifft, and push residuals into place and/or adjusts max and mins accordingly
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
+        let mut decoder = Decoder::new();
+        let mut output = Vec::with_capacity(frame_size);
+        self.append_to_data(frame_size, &mut decoder, &mut output);
+        output
+    }
+
+    pub(crate) fn append_to_data(
+        &self,
+        frame_size: usize,
+        decoder: &mut Decoder,
+        output: &mut Vec<f64>,
+    ) {
         if self.max_value == self.min_value {
             debug!("Same max and min, faster decompression!");
-            return vec![self.max_value as f64; frame_size];
+            let new_len = output
+                .len()
+                .checked_add(frame_size)
+                .expect("decoded FFT output length overflowed usize");
+            output.reserve(frame_size);
+            output.resize(new_len, self.max_value as f64);
+            return;
         }
         // Was this processed to reduce the Gibbs phenomeon?
         let trim_sizes = if frame_size >= 128 {
@@ -459,23 +478,22 @@ impl FFT {
             (0, 0)
         };
         let gibbs_frame_size = frame_size + trim_sizes.0 + trim_sizes.1;
-        // Vec to process the ifft
-        let mut data = self.get_mirrored_freqs(gibbs_frame_size);
-        // Plan the ifft
-        let mut planner = FftPlanner::new();
+        let (planner, data) = decoder.fft_scratch();
+        data.clear();
+        data.resize(gibbs_frame_size, Complex { re: 0.0, im: 0.0 });
+        self.populate_mirrored_freqs(data);
         let fft = planner.plan_fft_inverse(gibbs_frame_size);
-        // run the ifft
-        fft.process(&mut data);
-        // We need this for normalization
+        fft.process(data);
         let len = gibbs_frame_size as f32;
-        // We only need the real part
-        data.iter()
-            // trim the exceses data
-            .skip(trim_sizes.0)
-            .take(data.len() - trim_sizes.0 - trim_sizes.1)
-            // We only need the real part
-            .map(|&f| self.round(f.re / len, DECIMAL_PRECISION.into()))
-            .collect()
+        output.reserve(frame_size);
+        output.extend(
+            data.iter()
+                // trim the exceses data
+                .skip(trim_sizes.0)
+                .take(data.len() - trim_sizes.0 - trim_sizes.1)
+                // We only need the real part
+                .map(|&f| self.round(f.re / len, DECIMAL_PRECISION.into())),
+        );
     }
 }
 

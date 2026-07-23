@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use crate::decoder::Decoder;
 use crate::error::DecodeError;
 use crate::optimizer::utils::{Bitdepth, DataStats};
 use crate::utils::{error::calculate_error, round_and_limit_f64, round_f64, DECIMAL_PRECISION};
@@ -360,6 +361,18 @@ impl Polynomial {
     }
 
     pub fn polynomial_to_data(&self, frame_size: usize) -> Vec<f64> {
+        let mut decoder = Decoder::new();
+        let mut output = Vec::with_capacity(frame_size);
+        self.append_polynomial_to_data(frame_size, &mut decoder, &mut output);
+        output
+    }
+
+    fn append_polynomial_to_data(
+        &self,
+        frame_size: usize,
+        _decoder: &mut Decoder,
+        output: &mut Vec<f64>,
+    ) {
         // Create the interpolation
         let points = self.get_positions(frame_size);
         let mut key_vec = Vec::with_capacity(points.len());
@@ -377,22 +390,28 @@ impl Polynomial {
         // Build the data
         // There is a problem with the spline calculation, that it might get a value for all positions. In those cases
         // we return the good value calculated. If that doesn't exist, we return the minimum value
-        let mut out_vec = Vec::with_capacity(frame_size);
+        output.reserve(frame_size);
         let mut prev = self.min;
         for value in 0..frame_size {
             let spline_value = spline.clamped_sample(value as f64).unwrap_or(prev);
             prev = spline_value;
-            out_vec.push(round_and_limit_f64(
+            output.push(round_and_limit_f64(
                 spline_value,
                 self.min,
                 self.max,
                 DECIMAL_PRECISION,
             ));
         }
-        out_vec
     }
 
     pub fn idw_to_data(&self, frame_size: usize) -> Vec<f64> {
+        let mut decoder = Decoder::new();
+        let mut output = Vec::with_capacity(frame_size);
+        self.append_idw_to_data(frame_size, &mut decoder, &mut output);
+        output
+    }
+
+    fn append_idw_to_data(&self, frame_size: usize, _decoder: &mut Decoder, output: &mut Vec<f64>) {
         // IDW needs f64 for points :(
         let points = self
             .get_positions(frame_size)
@@ -400,26 +419,45 @@ impl Polynomial {
             .map(|&f| f as f64)
             .collect();
         let idw = IDW::new(points, self.data_points.clone());
-        (0..frame_size)
-            .map(|f| {
-                round_and_limit_f64(
-                    idw.evaluate(f as f64),
-                    self.min,
-                    self.max,
-                    DECIMAL_PRECISION,
-                )
-            })
-            .collect()
+        output.reserve(frame_size);
+        output.extend((0..frame_size).map(|f| {
+            round_and_limit_f64(
+                idw.evaluate(f as f64),
+                self.min,
+                self.max,
+                DECIMAL_PRECISION,
+            )
+        }));
     }
 
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
+        let mut decoder = Decoder::new();
+        let mut output = Vec::with_capacity(frame_size);
+        self.append_to_data(frame_size, &mut decoder, &mut output);
+        output
+    }
+
+    pub(crate) fn append_to_data(
+        &self,
+        frame_size: usize,
+        decoder: &mut Decoder,
+        output: &mut Vec<f64>,
+    ) {
         if self.max == self.min {
             debug!("Same max and min, faster decompression!");
-            return vec![self.max; frame_size];
+            let new_len = output
+                .len()
+                .checked_add(frame_size)
+                .expect("decoded Polynomial output length overflowed usize");
+            output.reserve(frame_size);
+            output.resize(new_len, self.max);
+            return;
         }
         match self.id {
-            PolynomialType::Idw => self.idw_to_data(frame_size),
-            PolynomialType::Polynomial => self.polynomial_to_data(frame_size),
+            PolynomialType::Idw => self.append_idw_to_data(frame_size, decoder, output),
+            PolynomialType::Polynomial => {
+                self.append_polynomial_to_data(frame_size, decoder, output)
+            }
         }
     }
 }

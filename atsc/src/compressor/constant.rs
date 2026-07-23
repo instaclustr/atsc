@@ -16,6 +16,7 @@ limitations under the License.
 
 use crate::{
     compressor::CompressorResult,
+    decoder::Decoder,
     error::DecodeError,
     optimizer::utils::{Bitdepth, DataStats},
 };
@@ -140,8 +141,24 @@ impl Constant {
     /// Returns an array of data. It creates an array of data the size of the frame with a constant value
     /// and pushes the residuals to the right place.
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
-        let data = vec![self.constant; frame_size];
-        data
+        let mut decoder = Decoder::new();
+        let mut output = Vec::with_capacity(frame_size);
+        self.append_to_data(frame_size, &mut decoder, &mut output);
+        output
+    }
+
+    pub(crate) fn append_to_data(
+        &self,
+        frame_size: usize,
+        _decoder: &mut Decoder,
+        output: &mut Vec<f64>,
+    ) {
+        let new_len = output
+            .len()
+            .checked_add(frame_size)
+            .expect("decoded Constant output length overflowed usize");
+        output.reserve(frame_size);
+        output.resize(new_len, self.constant);
     }
 }
 
