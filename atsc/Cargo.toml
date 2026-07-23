@@ -36,3 +36,7 @@ harness= false
 [[bench]]
 name = "polynomial_bench"
 harness= false
+
+[[bench]]
+name = "decompression_bench"
+harness = false
