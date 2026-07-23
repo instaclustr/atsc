@@ -59,12 +59,29 @@ fn two_frame_stream() -> CompressedStream {
     stream
 }
 
+fn three_frame_stream() -> CompressedStream {
+    let mut stream = CompressedStream::new();
+    stream.compress_chunk_with(&[1.0, 1.0], Compressor::Constant);
+    stream.compress_chunk_with(&[2.0, 3.0, 4.0], Compressor::Noop);
+    stream.compress_chunk_with(&[5.0, 5.0, 5.0, 5.0], Compressor::Constant);
+    stream
+}
+
 #[derive(Encode)]
 struct EncodedFrame {
     frame_size: usize,
     sample_count: usize,
     compressor: Compressor,
     data: Vec<u8>,
+}
+
+fn stream_from_encoded_frames(frames: Vec<EncodedFrame>) -> CompressedStream {
+    let mut bytes = b"BRRO".to_vec();
+    bytes.extend_from_slice(&1_u32.to_le_bytes());
+    bytes.push(frames.len() as u8);
+    bincode::encode_into_std_write(frames, &mut bytes, BinConfig::get())
+        .expect("test frames must encode");
+    CompressedStream::try_from_bytes(&bytes).expect("test stream must parse")
 }
 
 fn stream_with_invalid_outer_frames() -> CompressedStream {
@@ -85,12 +102,24 @@ fn stream_with_invalid_outer_frames() -> CompressedStream {
         invalid_frame(),
     ];
 
-    let mut bytes = b"BRRO".to_vec();
-    bytes.extend_from_slice(&1_u32.to_le_bytes());
-    bytes.push(frames.len() as u8);
-    bincode::encode_into_std_write(frames, &mut bytes, BinConfig::get())
-        .expect("test frames must encode");
-    CompressedStream::try_from_bytes(&bytes).expect("test stream must parse")
+    stream_from_encoded_frames(frames)
+}
+
+fn stream_with_invalid_later_frame() -> CompressedStream {
+    stream_from_encoded_frames(vec![
+        EncodedFrame {
+            frame_size: 0,
+            sample_count: 2,
+            compressor: Compressor::Constant,
+            data: Constant::new(2, 7.0, Bitdepth::U8).to_bytes(),
+        },
+        EncodedFrame {
+            frame_size: 0,
+            sample_count: 2,
+            compressor: Compressor::Auto,
+            data: Vec::new(),
+        },
+    ])
 }
 
 #[test]
@@ -105,6 +134,22 @@ fn decode_into_appends_and_reports_only_new_samples() {
 
     assert_eq!(appended, stream.sample_count());
     assert_eq!(output, vec![-1.0, -2.0, 1.0, 1.0, 1.0, 4.0, 5.0]);
+}
+
+#[test]
+fn decode_into_restores_output_after_later_frame_error() {
+    let stream = stream_with_invalid_later_frame();
+    let mut decoder = Decoder::new();
+    let mut output = vec![-1.0, -2.0];
+
+    assert!(matches!(
+        decoder.decode_into(&stream, &mut output),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::Auto,
+            ..
+        })
+    ));
+    assert_eq!(output, vec![-1.0, -2.0]);
 }
 
 #[test]
@@ -174,6 +219,22 @@ fn decode_range_spanning_frames_matches_full_decode() {
         .expect("range must decode");
     assert_eq!(appended, range.len());
     assert_eq!(&output[1..], &full[range]);
+}
+
+#[test]
+fn decode_range_into_restores_output_after_later_frame_error() {
+    let stream = stream_with_invalid_later_frame();
+    let mut decoder = Decoder::new();
+    let mut output = vec![-1.0, -2.0];
+
+    assert!(matches!(
+        decoder.decode_range_into(&stream, 1..3, &mut output),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::Auto,
+            ..
+        })
+    ));
+    assert_eq!(output, vec![-1.0, -2.0]);
 }
 
 #[test]
@@ -249,7 +310,7 @@ fn decode_range_skips_non_intersecting_frames() {
 }
 
 #[test]
-fn frame_info_offsets_cover_the_stream_sample_count() {
+fn frame_info_sequential_collect_preserves_offsets() {
     let stream = two_frame_stream();
     let infos = stream.frame_info();
     assert_eq!(infos.len(), stream.frame_count());
@@ -274,6 +335,85 @@ fn frame_info_offsets_cover_the_stream_sample_count() {
         infos[1].sample_offset.checked_add(infos[1].sample_count),
         Some(stream.sample_count())
     );
+}
+
+#[test]
+fn frame_info_nth_consumes_preceding_offsets() {
+    let stream = three_frame_stream();
+
+    let second = stream
+        .frame_info()
+        .nth(1)
+        .expect("stream must contain a second frame");
+
+    assert_eq!(second.index, 1);
+    assert_eq!(second.sample_offset, 2);
+    assert_eq!(second.sample_count, 3);
+}
+
+#[test]
+fn frame_info_last_consumes_preceding_offsets() {
+    let stream = three_frame_stream();
+
+    let last = stream
+        .frame_info()
+        .last()
+        .expect("stream must contain a last frame");
+
+    assert_eq!(last.index, 2);
+    assert_eq!(last.sample_offset, 5);
+    assert_eq!(last.sample_count, 4);
+}
+
+#[test]
+fn frame_info_size_hint_and_len_track_partial_consumption() {
+    let stream = three_frame_stream();
+    let mut infos = stream.frame_info();
+
+    assert_eq!(infos.size_hint(), (3, Some(3)));
+    assert_eq!(infos.len(), 3);
+    assert_eq!(
+        infos
+            .next()
+            .expect("stream must contain a first frame")
+            .index,
+        0
+    );
+    assert_eq!(infos.size_hint(), (2, Some(2)));
+    assert_eq!(infos.len(), 2);
+    assert_eq!(
+        infos
+            .next()
+            .expect("stream must contain a second frame")
+            .sample_offset,
+        2
+    );
+    assert_eq!(infos.size_hint(), (1, Some(1)));
+    assert_eq!(infos.len(), 1);
+}
+
+#[test]
+fn frame_info_mixed_consumption_preserves_final_offset() {
+    let stream = three_frame_stream();
+    let mut infos = stream.frame_info();
+    assert_eq!(
+        infos
+            .next()
+            .expect("stream must contain a first frame")
+            .index,
+        0
+    );
+
+    let last = infos
+        .nth(1)
+        .expect("stream must contain a third frame after one skip");
+
+    assert_eq!(last.index, 2);
+    assert_eq!(
+        last.sample_offset.checked_add(last.sample_count),
+        Some(stream.sample_count())
+    );
+    assert_eq!(infos.len(), 0);
 }
 
 #[test]
