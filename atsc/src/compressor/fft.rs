@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use crate::{
+    error::DecodeError,
     optimizer::utils::DataStats,
     utils::{error::calculate_error, next_size},
 };
@@ -22,7 +23,7 @@ use bincode::{Decode, Encode};
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{cmp::Ordering, collections::BinaryHeap};
 
-use super::{BinConfig, CompressorResult};
+use super::{decode_payload, BinConfig, Compressor, CompressorResult};
 use log::{debug, error, info, trace, warn};
 
 const FFT_COMPRESSOR_ID: u8 = 15;
@@ -59,6 +60,10 @@ impl FrequencyPoint {
             re: self.freq_real,
             im: self.freq_img * -1.0,
         }
+    }
+
+    pub(crate) fn position(&self) -> usize {
+        self.pos as usize
     }
 }
 
@@ -387,9 +392,21 @@ impl FFT {
         self.frequencies = FFT::fft_trim(&mut buffer, max_freq);
     }
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
-        let (fft, _) = bincode::decode_from_slice(data, config).unwrap();
-        fft
+        Self::try_decompress(data).expect("failed to decompress FFT payload")
+    }
+
+    pub fn try_decompress(data: &[u8]) -> Result<Self, DecodeError> {
+        let fft: Self = decode_payload(data, "FFT payload")?;
+        if fft.id != FFT_COMPRESSOR_ID {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::FFT,
+                reason: format!(
+                    "expected compressor ID {FFT_COMPRESSOR_ID}, found {}",
+                    fft.id
+                ),
+            });
+        }
+        Ok(fft)
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

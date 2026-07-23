@@ -17,13 +17,13 @@ limitations under the License.
 use bincode::config::{self, Configuration};
 use bincode::{Decode, Encode};
 
-use crate::optimizer::utils::DataStats;
+use crate::{error::DecodeError, optimizer::utils::DataStats, utils::is_decomposable};
 
-use self::constant::{constant_compressor, constant_to_data};
-use self::fft::{fft, fft_compressor, fft_to_data};
-use self::noop::{noop, noop_to_data};
-use self::polynomial::{polynomial, polynomial_allowed_error, to_data, PolynomialType};
-use self::rle::{rle_compressor, rle_to_data};
+use self::constant::{constant_compressor, Constant};
+use self::fft::{fft, fft_compressor, FFT};
+use self::noop::{noop, Noop};
+use self::polynomial::{polynomial, polynomial_allowed_error, Polynomial, PolynomialType};
+use self::rle::{rle_compressor, IndexRLE};
 
 pub mod constant;
 pub mod fft;
@@ -107,16 +107,184 @@ impl Compressor {
     }
 
     pub fn decompress(&self, samples: usize, data: &[u8]) -> Vec<f64> {
+        self.try_decompress(samples, data)
+            .expect("failed to decompress BRO frame")
+    }
+
+    pub fn try_decompress(&self, samples: usize, data: &[u8]) -> Result<Vec<f64>, DecodeError> {
         match self {
-            Compressor::Noop => noop_to_data(samples, data),
-            Compressor::FFT => fft_to_data(samples, data),
-            Compressor::Constant => constant_to_data(samples, data),
-            Compressor::Polynomial => to_data(samples, data),
-            Compressor::Idw => to_data(samples, data),
-            Compressor::RLE => rle_to_data(samples, data),
-            _ => todo!(),
+            Compressor::Noop => {
+                let noop = Noop::try_decompress(data)?;
+                if noop.data.len() != samples {
+                    return Err(DecodeError::InvalidFrame {
+                        codec: *self,
+                        reason: format!(
+                            "decoded {} values for {samples} declared samples",
+                            noop.data.len()
+                        ),
+                    });
+                }
+                Ok(noop.data.into_iter().map(|value| value as f64).collect())
+            }
+            Compressor::FFT => {
+                let fft = FFT::try_decompress(data)?;
+                let reconstructed_len =
+                    fft_reconstructed_len(samples).ok_or_else(|| DecodeError::InvalidFrame {
+                        codec: *self,
+                        reason: format!(
+                            "sample count {samples} overflows reconstructed FFT length"
+                        ),
+                    })?;
+                if reconstructed_len == 0 && fft.max_value != fft.min_value {
+                    return Err(DecodeError::InvalidFrame {
+                        codec: *self,
+                        reason: "non-constant FFT frame has zero reconstructed length".to_string(),
+                    });
+                }
+                if let Some(position) = fft
+                    .frequencies
+                    .iter()
+                    .map(|frequency| frequency.position())
+                    .find(|position| *position >= reconstructed_len)
+                {
+                    return Err(DecodeError::InvalidFrame {
+                        codec: *self,
+                        reason: format!(
+                            "frequency position {position} is outside reconstructed length {reconstructed_len}"
+                        ),
+                    });
+                }
+                Ok(fft.to_data(samples))
+            }
+            Compressor::Constant => Ok(Constant::try_decompress(data)?.to_data(samples)),
+            Compressor::Polynomial | Compressor::Idw => {
+                let polynomial = Polynomial::try_decompress(data)?;
+                let expected_type = match self {
+                    Compressor::Polynomial => PolynomialType::Polynomial,
+                    Compressor::Idw => PolynomialType::Idw,
+                    _ => unreachable!(),
+                };
+                if polynomial.id != expected_type {
+                    return Err(DecodeError::InvalidFrame {
+                        codec: *self,
+                        reason: format!(
+                            "payload type {:?} does not match frame codec",
+                            polynomial.id
+                        ),
+                    });
+                }
+                validate_polynomial_point_count(*self, samples, &polynomial)?;
+                Ok(polynomial.to_data(samples))
+            }
+            Compressor::RLE => {
+                let rle = IndexRLE::try_decompress(data)?;
+                let mut starts = 0_usize;
+                let mut has_zero = false;
+                for start in rle.rle.iter().flat_map(|(_, starts)| starts) {
+                    starts = starts
+                        .checked_add(1)
+                        .ok_or_else(|| DecodeError::InvalidFrame {
+                            codec: *self,
+                            reason: "run start count overflowed usize".to_string(),
+                        })?;
+                    has_zero |= *start == 0;
+                    if *start >= samples {
+                        return Err(DecodeError::InvalidFrame {
+                            codec: *self,
+                            reason: format!(
+                                "run start {start} is outside {samples} declared samples"
+                            ),
+                        });
+                    }
+                }
+                if !has_zero {
+                    return Err(DecodeError::InvalidFrame {
+                        codec: *self,
+                        reason: "run starts do not include zero".to_string(),
+                    });
+                }
+                if starts > samples {
+                    return Err(DecodeError::InvalidFrame {
+                        codec: *self,
+                        reason: format!("{starts} run starts exceed {samples} declared samples"),
+                    });
+                }
+                Ok(rle.to_data(samples))
+            }
+            Compressor::Auto => Err(DecodeError::InvalidFrame {
+                codec: *self,
+                reason: "Auto is not a stored frame codec".to_string(),
+            }),
         }
     }
+}
+
+fn fft_reconstructed_len(samples: usize) -> Option<usize> {
+    if samples < 128 {
+        return Some(samples);
+    }
+
+    let mut reconstructed_len = samples.checked_add(1)?;
+    while !is_decomposable(reconstructed_len) {
+        reconstructed_len = reconstructed_len.checked_add(1)?;
+    }
+    Some(reconstructed_len)
+}
+
+fn validate_polynomial_point_count(
+    codec: Compressor,
+    samples: usize,
+    polynomial: &Polynomial,
+) -> Result<(), DecodeError> {
+    if samples == 0 {
+        return Err(DecodeError::InvalidFrame {
+            codec,
+            reason: "polynomial frame has zero samples".to_string(),
+        });
+    }
+
+    let step = polynomial.point_step as usize;
+    let last_position = samples - 1;
+    let mut expected_points = last_position
+        .checked_div(step)
+        .and_then(|count| count.checked_add(1))
+        .ok_or_else(|| DecodeError::InvalidFrame {
+            codec,
+            reason: "polynomial point count overflowed usize".to_string(),
+        })?;
+    if last_position % step != 0 {
+        expected_points =
+            expected_points
+                .checked_add(1)
+                .ok_or_else(|| DecodeError::InvalidFrame {
+                    codec,
+                    reason: "polynomial point count overflowed usize".to_string(),
+                })?;
+    }
+    if polynomial.data_points.len() != expected_points {
+        return Err(DecodeError::InvalidFrame {
+            codec,
+            reason: format!(
+                "decoded {} points but {expected_points} are required for {samples} samples",
+                polynomial.data_points.len()
+            ),
+        });
+    }
+    Ok(())
+}
+
+pub(crate) fn decode_payload<T: Decode>(
+    data: &[u8],
+    context: &'static str,
+) -> Result<T, DecodeError> {
+    let (decoded, consumed) = bincode::decode_from_slice(data, BinConfig::get())
+        .map_err(|source| DecodeError::Bincode { context, source })?;
+    if consumed != data.len() {
+        return Err(DecodeError::TrailingBytes {
+            remaining: data.len() - consumed,
+        });
+    }
+    Ok(decoded)
 }
 
 pub struct BinConfig {

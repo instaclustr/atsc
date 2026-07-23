@@ -16,10 +16,11 @@ limitations under the License.
 
 use crate::{
     compressor::CompressorResult,
+    error::DecodeError,
     optimizer::utils::{Bitdepth, DataStats},
 };
 
-use super::BinConfig;
+use super::{decode_payload, BinConfig, Compressor};
 use bincode::{Decode, Encode};
 use log::{debug, trace};
 use std::collections::BTreeMap;
@@ -190,9 +191,21 @@ impl IndexRLE {
 
     /// Receives a data stream and generates a Constant
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
-        let (ct, _) = bincode::decode_from_slice(data, config).unwrap();
-        ct
+        Self::try_decompress(data).expect("failed to decompress RLE payload")
+    }
+
+    pub fn try_decompress(data: &[u8]) -> Result<Self, DecodeError> {
+        let rle: Self = decode_payload(data, "RLE payload")?;
+        if rle.id != RLE_COMPRESSOR_ID {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::RLE,
+                reason: format!(
+                    "expected compressor ID {RLE_COMPRESSOR_ID}, found {}",
+                    rle.id
+                ),
+            });
+        }
+        Ok(rle)
     }
 
     /// This function transforms the structure into a Binary stream

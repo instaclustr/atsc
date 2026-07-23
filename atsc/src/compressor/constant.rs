@@ -16,10 +16,11 @@ limitations under the License.
 
 use crate::{
     compressor::CompressorResult,
+    error::DecodeError,
     optimizer::utils::{Bitdepth, DataStats},
 };
 
-use super::BinConfig;
+use super::{decode_payload, BinConfig, Compressor};
 use bincode::{Decode, Encode};
 use log::debug;
 
@@ -113,9 +114,21 @@ impl Constant {
 
     /// Receives a data stream and generates a Constant
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
-        let (ct, _) = bincode::decode_from_slice(data, config).unwrap();
-        ct
+        Self::try_decompress(data).expect("failed to decompress Constant payload")
+    }
+
+    pub fn try_decompress(data: &[u8]) -> Result<Self, DecodeError> {
+        let constant: Self = decode_payload(data, "Constant payload")?;
+        if constant.id != CONSTANT_COMPRESSOR_ID {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::Constant,
+                reason: format!(
+                    "expected compressor ID {CONSTANT_COMPRESSOR_ID}, found {}",
+                    constant.id
+                ),
+            });
+        }
+        Ok(constant)
     }
 
     /// This function transforms the structure into a Binary stream

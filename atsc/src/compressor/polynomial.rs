@@ -14,10 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use crate::error::DecodeError;
 use crate::optimizer::utils::{Bitdepth, DataStats};
 use crate::utils::{error::calculate_error, round_and_limit_f64, round_f64, DECIMAL_PRECISION};
 
-use super::{BinConfig, CompressorResult};
+use super::{decode_payload, BinConfig, Compressor, CompressorResult};
 use bincode::{Decode, Encode};
 use inverse_distance_weight::IDW;
 use log::{debug, info, trace};
@@ -314,9 +315,28 @@ impl Polynomial {
     }
 
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
-        let (poly, _) = bincode::decode_from_slice(data, config).unwrap();
-        poly
+        Self::try_decompress(data).expect("failed to decompress Polynomial payload")
+    }
+
+    pub fn try_decompress(data: &[u8]) -> Result<Self, DecodeError> {
+        let polynomial: Self = decode_payload(data, "Polynomial payload")?;
+        let codec = match &polynomial.id {
+            PolynomialType::Polynomial => Compressor::Polynomial,
+            PolynomialType::Idw => Compressor::Idw,
+        };
+        if polynomial.point_step == 0 {
+            return Err(DecodeError::InvalidFrame {
+                codec,
+                reason: "point_step must not be zero".to_string(),
+            });
+        }
+        if polynomial.data_points.is_empty() {
+            return Err(DecodeError::InvalidFrame {
+                codec,
+                reason: "data points must not be empty".to_string(),
+            });
+        }
+        Ok(polynomial)
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

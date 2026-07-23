@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use super::BinConfig;
+use super::{decode_payload, BinConfig, Compressor};
+use crate::error::DecodeError;
 use bincode::{Decode, Encode};
 use log::{debug, info};
 
@@ -53,9 +54,21 @@ impl Noop {
 
     /// Receives a data stream and generates a Noop
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
-        let (noop, _) = bincode::decode_from_slice(data, config).unwrap();
-        noop
+        Self::try_decompress(data).expect("failed to decompress Noop payload")
+    }
+
+    pub fn try_decompress(data: &[u8]) -> Result<Self, DecodeError> {
+        let noop: Self = decode_payload(data, "Noop payload")?;
+        if noop.id != NOOP_COMPRESSOR_ID {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::Noop,
+                reason: format!(
+                    "expected compressor ID {NOOP_COMPRESSOR_ID}, found {}",
+                    noop.id
+                ),
+            });
+        }
+        Ok(noop)
     }
 
     /// This function transforms the structure in a Binary stream to be appended to the frame

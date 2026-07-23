@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::{compressor::Compressor, optimizer::utils::DataStats};
+use crate::{compressor::Compressor, error::DecodeError, optimizer::utils::DataStats};
 use bincode::{Decode, Encode};
 use log::debug;
 use std::mem::size_of_val;
@@ -150,10 +150,20 @@ impl CompressorFrame {
 
     /// Decompresses a frame and returns the resulting data array
     pub fn decompress(&self) -> Vec<f64> {
+        self.try_decompress()
+            .expect("failed to decompress BRO frame")
+    }
+
+    pub fn try_decompress(&self) -> Result<Vec<f64>, DecodeError> {
         debug!(
             "Decompressing Frame. Size: {}, Samples: {}",
             self.frame_size, self.sample_count
         );
-        self.compressor.decompress(self.sample_count, &self.data)
+        self.compressor
+            .try_decompress(self.sample_count, &self.data)
+    }
+
+    pub(crate) fn sample_count(&self) -> usize {
+        self.sample_count
     }
 }
