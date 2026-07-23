@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use tempfile::tempdir;
+use wavbrro::wavbrro::WavBrro;
 
 #[test]
 fn test_noop() {
@@ -23,7 +24,7 @@ fn test_noop() {
 
 #[test]
 fn test_constant() {
-    test_suite("constant");
+    compress_constant_file_and_directory();
 }
 
 #[test]
@@ -79,8 +80,31 @@ fn reject_file_above_bound(compressor: &str) {
         .unwrap();
 
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("bounded stream compression failed"));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(4));
+    assert!(
+        stderr.contains("FFT compression did not meet error bound"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("panicked at"), "{stderr}");
     assert!(!path.join("1.bro").exists());
+}
+
+fn compress_constant_file_and_directory() {
+    let tmp_dir = tempdir().unwrap();
+    let input = tmp_dir.path().join("input");
+    std::fs::create_dir(&input).unwrap();
+    WavBrro::to_file_with_data(&input.join("1.wbro"), &[7.0; 32]);
+    WavBrro::to_file_with_data(&input.join("2.wbro"), &[9.0; 32]);
+
+    run_compressor(&[input.to_str().unwrap(), "--compressor", "constant"]);
+    assert!(input.join("1.bro").is_file());
+    assert!(input.join("2.bro").is_file());
+
+    let single = tmp_dir.path().join("single.wbro");
+    WavBrro::to_file_with_data(&single, &[11.0; 32]);
+    run_compressor(&[single.to_str().unwrap(), "--compressor", "constant"]);
+    assert!(single.with_extension("bro").is_file());
 }
 
 fn test_speed() {

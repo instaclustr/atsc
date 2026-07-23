@@ -1,96 +1,116 @@
 # Usage
 
-## CLI Options
+## Explicit commands
 
-Compressor usage:
+The subcommand interface is recommended for new scripts:
 
-```txt
-Usage: atsc [OPTIONS] <INPUT>
-
-Arguments:
-  <INPUT>  input file
-
-      --compressor <COMPRESSOR>
-          Select a compressor, default is auto [default: auto] [possible values: auto, noop, fft, constant, polynomial, idw]
-  -e, --error <ERROR>
-          Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 5 (5%).
-          0 is lossless compression
-          50 will do a median filter on the data.
-          In between will pick optimize for the error [default: 5]
-  -u
-          Uncompresses the input file/directory
-  -c, --compression-selection-sample-level <COMPRESSION_SELECTION_SAMPLE_LEVEL>
-          Samples the input data instead of using all the data for selecting the optimal compressor.
-          Only impacts speed, might or not increased compression ratio. For best results use 0 (default).
-          Only works when compression = Auto.
-          0 will use all the data (slowest)
-          6 will sample 128 data points (fastest) [default: 0]
-      --verbose
-          Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
-      --csv
-          Defines user input as a CSV file
-      --no-header
-          Defines if the CSV has no header
-      --fields <FIELDS>
-          Defines names of fields in CSV file. It should follow this format:
-            --fields=TIME_FIELD_NAME,VALUE_FIELD_NAME
-          It assumes that the one before comma is a name of time field and the one
-          after comma is value field. [default: time,value]
-  -h, --help
-          Print help
-  -V, --version
-          Print version
+```text
+atsc inspect <INPUT> [--json]
+atsc verify <INPUT>
+atsc compress <INPUT> [-o <OUTPUT>] [OPTIONS]
+atsc decompress <INPUT> [-o <OUTPUT>]
 ```
 
-## Examples
+### Inspect a BRO stream
 
-### Compressing a file with a specific compressor
-
-When this should be used?
-
-When data in known and this way, avoid sample analysis and compress faster.
+`inspect` parses the bounded BRO container and reports its version, frame and
+sample counts, and per-frame codec and payload size. It does not decompress
+frame payloads.
 
 ```bash
-atsc --compressor fft <input-file> 
+atsc inspect metrics.bro
+atsc inspect metrics.bro --json
 ```
 
-### Compressing a file with a specific error level
+`--json` writes exactly one JSON document to stdout. Logs and errors are
+written to stderr.
 
-When this should be used?
+### Verify a BRO stream
 
-When it is necessary to restrict the error of the output data.
+`verify` parses the container and fully decodes every frame, so it detects both
+container errors and malformed codec payloads.
 
 ```bash
-atsc -e 1 <input-file> 
+atsc verify metrics.bro
 ```
 
-### Compressing a file with a specific compressor and a specific error level
+A valid stream prints `valid`.
 
-When this should be used?
-
-When data in known and this way, avoid sample analysis and compress faster and restrict the error of the output data.
+### Compress
 
 ```bash
-atsc --compressor fft -e 1 <input-file> 
+atsc compress metrics.wbro
+atsc compress metrics.wbro -o archive/metrics.bro
+atsc compress metrics.wbro --compressor fft --error 1
+atsc compress metrics.csv --csv --fields=time,value
+atsc compress values.csv --csv --no-header
 ```
 
-### Improving compression speed by reducing sample analysis
+Compression defaults to `--compressor auto` and `--error 3`. Available codecs
+are `auto`, `noop`, `fft`, `constant`, `polynomial`, `idw`, and `rle`.
+`-c/--compression-selection-sample-level` accepts 0 through 6.
 
-When this should be used?
+Without `-o`, a file keeps its base name and receives the `.bro` extension.
+For directory input, ATSC snapshots the initial entries and processes each
+eligible `.wbro` file once, or each `.csv` file once when `--csv` is active.
+`-o/--output` is only valid for a single input file.
 
-There is enough knowledge about the data structure (e.g. it often repeats) that using a reduced sample size is ok.
-The worst case would be a less than ideal compressor selected, impacting the compression ration.
+### Decompress
 
 ```bash
-atsc -c 6 <input-file>
+atsc decompress metrics.bro
+atsc decompress metrics.bro -o restored.wbro
 ```
 
-### Decompressing
+Without `-o`, a file keeps its base name and receives the `.wbro` extension.
+Directory input processes each initial `.bro` file once.
 
-When this should be used?
+## Legacy compatibility
 
-If the data is needed!
+Existing root-level invocations remain supported:
+
+```text
+atsc [OPTIONS] <INPUT>
+atsc -u <INPUT>
+```
+
+For example:
 
 ```bash
-atsc -u <input-file> 
+atsc --compressor rle metrics.wbro
+atsc --csv --fields=time,value metrics.csv
+atsc --csv --no-header values.csv
+atsc -u metrics.bro
+```
+
+Legacy mode uses the same bounded, fallible implementation as `compress` and
+the same safe parser and decoder as `decompress`. Existing file and directory
+output naming is unchanged.
+
+## Exit status
+
+ATSC uses stable exit codes:
+
+- `0`: success
+- `1`: I/O or output-serialization error
+- `2`: command usage error
+- `3`: BRO parse or decode error
+- `4`: bounded compression error
+- `5`: WBRO/CSV input-format error
+
+For a directory with multiple failures, every eligible entry is attempted
+once and the highest applicable failure code is returned.
+
+## Rust library
+
+Use the bounded parser and a caller-owned decoder for reusable full, frame, or
+range decoding:
+
+```rust
+use atsc::{data::CompressedStream, decoder::Decoder};
+
+let bytes = std::fs::read("metrics.bro")?;
+let stream = CompressedStream::try_from_bytes(&bytes)?;
+let mut decoder = Decoder::new();
+let values = decoder.decode_range(&stream, 1_000..2_000)?;
 ```

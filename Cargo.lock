@@ -116,6 +116,8 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "rustfft",
+ "serde",
+ "serde_json",
  "splines",
  "tempfile",
  "thiserror",
