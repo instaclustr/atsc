@@ -236,27 +236,30 @@ impl FFT {
     /// Removes the smallest frequencies from `buffer` until `max_freq` remain.
     /// Bins outside the BRO v1 `u16` position range are not candidates.
     fn fft_trim(buffer: &mut [Complex<f32>], max_freq: usize) -> Vec<FrequencyPoint> {
-        let mut freq_vec = Vec::with_capacity(max_freq);
+        let representable_candidates = buffer.len().min(usize::from(u16::MAX) + 1);
+        let frequency_limit = max_freq.min(representable_candidates);
+        let mut freq_vec = Vec::with_capacity(frequency_limit);
+        if frequency_limit == 0 {
+            return freq_vec;
+        }
         if max_freq == 1 {
             freq_vec.push(FrequencyPoint::from_complex_with_position(buffer[0], 0));
             return freq_vec;
         }
         // More than 1 frequency needed, get the biggest frequencies now.
         // Move from the buffer into Frequency Vectors
-        let tmp_vec: Vec<FrequencyPoint> = buffer
-            .iter()
-            .enumerate()
-            .filter(|(pos, _)| *pos <= usize::from(u16::MAX))
-            .map(|(pos, &f)| {
-                let pos = u16::try_from(pos)
-                    .expect("filtered FFT frequency position must fit BRO v1 u16 storage");
-                FrequencyPoint::from_complex_with_position(f, pos)
-            })
-            .collect();
+        let mut tmp_vec = Vec::with_capacity(representable_candidates);
+        for (pos, &frequency) in buffer.iter().enumerate().take(representable_candidates) {
+            let pos = u16::try_from(pos)
+                .expect("filtered FFT frequency position must fit BRO v1 u16 storage");
+            tmp_vec.push(FrequencyPoint::from_complex_with_position(frequency, pos));
+        }
         // This part, is because Binary heap is very good at "give me the top N elements"
+        // Equal magnitudes intentionally retain the pinned toolchain's heap order
+        // to preserve frozen bytes; cross-version tie ordering remains a format concern.
         let mut heap = BinaryHeap::from(tmp_vec);
         // Now that we have it, let's pop the elements we need!
-        for _ in 0..max_freq {
+        for _ in 0..frequency_limit {
             if let Some(item) = heap.pop() {
                 // If the frequency is 0, we don't need it or any other
                 if item.freq_img == 0.0 && item.freq_real == 0.0 {
@@ -602,7 +605,7 @@ mod tests {
 
     #[test]
     fn fft_trim_skips_unrepresentable_frequency_candidates() {
-        const REPRESENTABLE_POSITION: u16 = 17;
+        const REPRESENTABLE_POSITION: u16 = u16::MAX;
         let unrepresentable_position = usize::from(u16::MAX) + 1;
         let representable_frequency = Complex {
             re: 100.0,
@@ -623,6 +626,53 @@ mod tests {
             usize::from(REPRESENTABLE_POSITION)
         );
         assert_eq!(frequencies[0].to_complex(), representable_frequency);
+    }
+
+    #[test]
+    fn fft_trim_caps_oversized_frequency_limit() {
+        let expected = Complex { re: 10.0, im: 5.0 };
+        let mut buffer = vec![Complex { re: 0.0, im: 0.0 }; 4];
+        buffer[3] = expected;
+
+        let frequencies = FFT::fft_trim(&mut buffer, usize::MAX);
+
+        assert_eq!(frequencies.len(), 1);
+        assert_eq!(frequencies[0].position(), 3);
+        assert_eq!(frequencies[0].to_complex(), expected);
+    }
+
+    #[test]
+    fn equal_magnitude_fft_selection_is_repeatable_on_pinned_toolchain() {
+        let mut first_buffer = vec![Complex { re: 0.0, im: 0.0 }; 8];
+        first_buffer[2] = Complex { re: 3.0, im: 4.0 };
+        first_buffer[5] = Complex { re: 4.0, im: 3.0 };
+        let mut second_buffer = first_buffer.clone();
+
+        let first = FFT::fft_trim(&mut first_buffer, 2);
+        let second = FFT::fft_trim(&mut second_buffer, 2);
+
+        assert_eq!(
+            first
+                .iter()
+                .map(FrequencyPoint::position)
+                .collect::<Vec<_>>(),
+            second
+                .iter()
+                .map(FrequencyPoint::position)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            first
+                .iter()
+                .copied()
+                .map(FrequencyPoint::to_complex)
+                .collect::<Vec<_>>(),
+            second
+                .iter()
+                .copied()
+                .map(FrequencyPoint::to_complex)
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

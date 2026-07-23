@@ -28,17 +28,17 @@ fn test_constant() {
 
 #[test]
 fn test_fft() {
-    test_suite("fft");
+    reject_file_above_bound("fft");
 }
 
 #[test]
 fn test_idw() {
-    test_suite("idw");
+    compress_file("idw");
 }
 
 #[test]
 fn test_polynomial() {
-    test_suite("polynomial");
+    compress_file("polynomial");
 }
 
 #[test]
@@ -59,6 +59,23 @@ fn test_compression_speed() {
 fn test_suite(compressor: &str) {
     compress_dir(compressor);
     compress_file(compressor);
+}
+
+fn reject_file_above_bound(compressor: &str) {
+    let tmp_dir = tempdir().unwrap();
+    let path = tmp_dir.path();
+    let input = path.join("1.wbro");
+    std::fs::copy("tests/wbros/memory_used.wbro", &input).unwrap();
+
+    let command = std::env!("CARGO_BIN_EXE_atsc");
+    let output = std::process::Command::new(command)
+        .args([input.to_str().unwrap(), "--compressor", compressor])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("bounded stream compression failed"));
+    assert!(!path.join("1.bro").exists());
 }
 
 fn test_speed() {

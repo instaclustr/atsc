@@ -4,7 +4,7 @@
 
 **Goal:** Make ATSC's existing BRO v1 format safe and fast to decode from a reusable Rust library, then expose that boundary through a production-oriented CLI without materially increasing compressed output.
 
-**Architecture:** Preserve the BRO v1 wire layout and existing convenience APIs while adding a fallible parse/decode path. A caller-owned `Decoder` holds reusable FFT plans and scratch buffers and can decode full streams, individual frames, or sample ranges into caller-owned output. The CLI becomes a thin adapter over this library API and adds inspect/verify commands while preserving the current invocation syntax.
+**Architecture:** Preserve the BRO v1 wire layout and existing convenience APIs while adding fallible bounded-encode and parse/decode paths. Bounded encoding validates full-frame error before transactionally committing a frame. A caller-owned `Decoder` holds reusable FFT plans and scratch buffers and can decode full streams, individual frames, or sample ranges into caller-owned output. The CLI becomes a thin adapter over this library API and adds inspect/verify commands while preserving the current invocation syntax.
 
 **Tech Stack:** Rust 1.81, bincode 2.0.0-rc.3 for frozen BRO v1 compatibility, rustfft 6.x, Criterion, Clap 4, thiserror 2.
 
@@ -14,9 +14,9 @@
 - Existing valid BRO v1 fixtures must remain byte-for-byte identical when recompressed.
 - Compression may become slower; decompression must show a statistically meaningful improvement on at least the FFT and multi-frame benchmarks, with no statistically meaningful regression in another codec.
 - The 131,072-sample FFT correctness fix may change newly compressed large streams, but compressed size may not regress by more than 1% on any checked corpus case. Stop and reassess if that gate fails.
-- Lossless codecs remain bit-exact. Lossy output remains within the existing declared error bound; changing error-metric semantics is out of scope for this branch.
+- Lossless codecs remain bit-exact. Bounded lossy output is committed only when its reported full-frame error is finite and within the requested bound; changing error-metric semantics is out of scope for this branch.
 - Existing `atsc [OPTIONS] <INPUT>` and `atsc -u <INPUT>` commands remain supported.
-- New public APIs return typed errors. Existing panic-based APIs remain only as compatibility wrappers and are marked deprecated where practical.
+- New public encode and decode APIs return typed errors. Existing panic-based APIs remain only as compatibility wrappers and are marked deprecated where practical.
 - The core decode path remains synchronous and does not add an async runtime.
 - No OpenSearch-specific adapter and no BRO v2 format are added on this branch.
 - Follow TDD: add each behavioral test first, run it to observe the expected failure, then implement the smallest passing change.
@@ -24,16 +24,17 @@
 
 ## File Structure
 
-- `atsc/src/error.rs`: public parse/decode error and decode-limit types.
+- `atsc/src/error.rs`: public encode/decode error and decode-limit types.
 - `atsc/src/decoder.rs`: reusable decoder context, scratch ownership, and full/frame/range APIs.
-- `atsc/src/data.rs`: BRO v1 container parsing, stream metadata, compatibility wrappers.
+- `atsc/src/data.rs`: transactional bounded frame insertion, BRO v1 container parsing, stream metadata, and compatibility wrappers.
 - `atsc/src/header.rs`: fallible nine-byte header parsing and version checks.
-- `atsc/src/frame/mod.rs`: frame metadata/getters and fallible frame dispatch.
+- `atsc/src/frame/mod.rs`: transactional bounded compression, Auto selection, frame metadata/getters, and fallible decode dispatch.
 - `atsc/src/compressor/*.rs`: fallible codec payload parsing and decode-into implementations.
-- `atsc/src/optimizer/mod.rs`: FFT-safe maximum frame sizing.
+- `atsc/src/optimizer/mod.rs`: retains the 131,072-sample maximum frame size.
 - `atsc/src/cli.rs`: CLI argument model and command execution.
 - `atsc/src/main.rs`: logging, parsing, error-to-exit-code boundary only.
 - `atsc/tests/v1_wire_compat.rs`: frozen v1 byte fixtures and round-trip checks.
+- `atsc/tests/encode_api.rs`: bounded-error enforcement, Auto fallback, and transactional stream insertion.
 - `atsc/tests/decode_api.rs`: malformed input, limits, metadata, frame/range decode behavior.
 - `atsc/tests/cli_commands.rs`: new command behavior plus legacy compatibility.
 - `atsc/benches/decompression_bench.rs`: codec and full-stream decompression benchmarks.
@@ -603,97 +604,124 @@ git commit -m "perf: reuse decoder plans and output buffers"
 
 ---
 
-### Task 5: Keep FFT Candidates Within v1 Position Limits
+### Task 5: Enforce v1 FFT and Bounded Encode Safety
 
 **Files:**
+- Modify: `atsc/src/error.rs`
+- Modify: `atsc/src/compressor/mod.rs`
 - Modify: `atsc/src/compressor/fft.rs`
+- Modify: `atsc/src/frame/mod.rs`
+- Modify: `atsc/src/data.rs`
 - Modify: `atsc/tests/decode_api.rs`
+- Modify: `atsc/tests/integration_test.rs`
+- Create: `atsc/tests/encode_api.rs`
 - Create: `atsc/tests/compressed_size.rs`
 
 **Interfaces:**
 - Keeps the BRO v1 wire layout and `FrequencyPoint.pos: u16`.
 - Retains the optimizer maximum frame size of 131,072 samples.
-- Excludes spectral candidates whose positions cannot be represented by BRO v1.
+- Adds public `EncodeError::ErrorBoundNotMet { codec, requested, actual }` and
+  `EncodeError::InvalidCompressionSpeed`.
+- Adds `CompressorFrame::try_compress_bounded`,
+  `CompressorFrame::try_compress_best`, and
+  `CompressedStream::try_compress_chunk_bounded_with`.
+- Existing infallible bounded methods delegate to the fallible methods and
+  panic clearly without committing a failed frame.
+- Does not change `DecodeError` semantics.
 
-- [ ] **Step 1: Write the failing safety tests**
+- [ ] **Step 1: Write failing encode-contract and FFT boundary tests**
 
-Add an `fft_trim` behavior test with a buffer longer than `u16::MAX`. Give an
-unrepresentable bin the largest magnitude and a representable bin the
-next-largest magnitude. Assert that trimming selects the representable bin and
-does not alias the unrepresentable bin to a low position.
+Using a deterministic positive alternating 131,072-sample signal, test forced
+FFT through the fallible stream API. It must either decode within the requested
+bound or return typed `ErrorBoundNotMet` while leaving frame and sample counts
+unchanged. Test the same input through Auto and require a committed frame whose
+decoded error is within the bound.
 
-Add a bounded 131,072-sample FFT regression using an offset sine wave so the
-MAPE denominator never reaches zero. Assert that compression meets the existing
-error bound and decoding returns the requested number of finite values within
-that bound.
+Add transactional invalid-speed and infallible-wrapper tests. Before the
+implementation these tests fail because the typed error and fallible APIs do
+not exist.
 
-Keep the malformed FFT fixture test that expects `DecodeError::InvalidFrame`
-for an out-of-range stored position rather than an indexing panic.
+For `fft_trim`, explicitly prove position 65,535 is retained, position 65,536
+is excluded without aliasing, and `max_freq == usize::MAX` neither overallocates
+nor over-pops. Characterize repeatable equal-magnitude selection on Rust 1.81
+without adding a positional tie-break that would change frozen fixture bytes.
 
-- [ ] **Step 2: Run tests and observe failure**
+- [ ] **Step 2: Add the typed transactional encode boundary**
 
-Run:
+Add public `EncodeError` without changing `DecodeError`. Forced bounded
+compression must call `get_compress_bounded_results` and reject a non-finite
+reported error or one above the requested bound before assigning frame data.
+
+Implement fallible frame and stream methods. Close/push the frame and increment
+the header count only after compression succeeds. Make every existing
+infallible bounded method an `expect`-based compatibility wrapper around its
+fallible equivalent.
+
+Update the legacy CLI integration characterization: a forced FFT input whose
+reported error is `0.04025997998108369` against the default `0.03` bound must
+exit unsuccessfully with the clear compatibility-wrapper panic and must not
+create a `.bro` output.
+
+- [ ] **Step 3: Validate Auto on full-frame results**
+
+Validate the compression-speed index before indexing its lookup table. Sampling
+may rank candidates, but it cannot authorize a full frame. Evaluate every
+eligible codec on the full data and choose the smallest payload whose reported
+error is finite and within the requested bound.
+
+Use fixed codec order to break equal payload-size ties deterministically. RLE's
+reported zero error is the lossless fallback. Assign the chosen compressor,
+payload, and sample count only after a valid result exists.
+
+- [ ] **Step 4: Bound v1 FFT candidate storage**
+
+Exclude every FFT candidate above `u16::MAX` before constructing
+`FrequencyPoint`, then use `u16::try_from` for retained positions. Cap selected
+vector capacity and heap pop count to the number of representable candidates.
+Basic, hinted, and bounded FFT all share this path.
+
+Keep the current magnitude-only heap ordering to preserve frozen bytes. Exact
+fixture and repeatability tests pin the current toolchain behavior; equal-key
+heap order across Rust versions remains a format-freeze concern.
+
+- [ ] **Step 5: Correct and measure deterministic size gates**
+
+The original zero-valued forced sine is invalid for bounded MAPE. Replace only
+that corpus with 131,072 samples generated as
+`10.0 + sin(index / 8.0)`. Keep forced FFT, maximum error `0.03`, compression
+sample level `1`, and the 1% threshold unchanged.
+
+At parent commit `f612040834053c52ba0b8f535d21494d11a9d4a5`, measure the
+corrected corpus from a temporary detached worktree:
 
 ```bash
-cargo test -p atsc fft_trim_skips_unrepresentable_frequency_candidates
-cargo test -p atsc bounded_large_fft_meets_error_bound_and_decodes_valid_values
+cargo test -p atsc --test task5_corrected_baseline -- --nocapture
 ```
 
-Expected: the old unchecked conversion aliases an unrepresentable position to
-a low `u16` position, so the candidate-selection regression fails. The
-large-frame regression protects the bounded path that uses Gibbs padding.
+Measured twice: **13,996 bytes**. Retain the existing baselines of 2,101 bytes
+for stepped Auto and 1,568 bytes for slowly changing Auto. Assert each new
+output is no more than `ceil(old_size * 1.01)` and print old/new bytes and
+percentage in the assertion message.
 
-- [ ] **Step 3: Filter unrepresentable candidates**
-
-In `fft_trim`, exclude every candidate whose index is greater than
-`u16::MAX` before constructing a `FrequencyPoint`. Convert every retained
-position with `u16::try_from`; never use unchecked `pos as u16`.
-
-Because basic, hinted, and bounded FFT compression all call `fft_trim`, this
-single filter prevents wrapping and aliasing in all three paths without
-changing frames or the wire representation.
-
-- [ ] **Step 4: Add a deterministic compressed-size gate**
-
-In `atsc/tests/compressed_size.rs`, generate:
-
-- 131,072-point sine wave, forced FFT; Task 4 baseline: 13,996 bytes.
-- 131,072-point stepped series, Auto; Task 4 baseline: 2,101 bytes.
-- 262,144-point slowly changing series, Auto; Task 4 baseline: 1,568 bytes.
-
-Assert that each new output is no more than `ceil(old_size * 1.01)`. The test
-must print old/new bytes and percentage in its assertion message. Do not alter
-the corpus, measured constants, or threshold after running the gate.
-
-- [ ] **Step 5: Run correctness and size gates**
-
-Run:
+- [ ] **Step 6: Run correctness, compatibility, size, and performance gates**
 
 ```bash
+cargo test -p atsc --test encode_api
 cargo test -p atsc --test compressed_size -- --nocapture
 cargo test -p atsc --test decode_api
 cargo test -p atsc --test v1_wire_compat
 cargo test --workspace --all-targets
-```
-
-Expected: all pass. Stop if any compressed-size case exceeds 1%.
-
-- [ ] **Step 6: Preserve decompression performance**
-
-Run:
-
-```bash
 cargo bench -p atsc --bench decompression_bench -- --baseline before-modernization
 ```
 
-Expected: Task 4 gains remain, while the unchanged decompression paths affected
-by Task 5 are statistically neutral or better.
+Expected: all tests and size gates pass, all six frozen fixtures remain exact,
+and Task 4's FFT/mixed gains remain while Task 5 paths are neutral or better.
 
-- [ ] **Step 7: Commit FFT position safety**
+- [ ] **Step 7: Commit encode and FFT safety**
 
 ```bash
-git add atsc/src/compressor/fft.rs atsc/tests/decode_api.rs atsc/tests/compressed_size.rs docs/superpowers/plans/2026-07-23-decompression-first-modernization.md
-git commit -m "fix: keep FFT bins within v1 position limits"
+git add atsc/src atsc/tests/encode_api.rs atsc/tests/compressed_size.rs atsc/tests/integration_test.rs docs/superpowers/plans/2026-07-23-decompression-first-modernization.md
+git commit -m "fix: enforce bounded compression contracts"
 ```
 
 ---
@@ -929,4 +957,4 @@ git commit -m "ci: enforce safe and fast decoder builds"
 - Task 1 characterization scope: lossless fixtures decode exactly to their source samples; lossy fixtures preserve exact wire bytes and exact existing decoded behavior, retain the source sample count, and contain only finite decoded values. The known-broken source-relative MAPE is not used as a quality gate.
 - Deliberate exclusions: error-metric behavior changes, NaN-preservation format changes, BRO v2, JNI, and OpenSearch adapter work require separate designs because they can change compression semantics or deployment architecture.
 - Placeholder scan: no TBD/TODO implementation steps remain. Task 5 intentionally records measured pre-change numeric sizes from its parent commit rather than inventing values.
-- Type consistency: `DecodeError`, `DecodeLimits`, `Decoder`, `FrameInfo`, and `CompressedStream` signatures are consistent across producing and consuming tasks.
+- Type consistency: `EncodeError`, `DecodeError`, `DecodeLimits`, bounded stream/frame methods, `Decoder`, `FrameInfo`, and `CompressedStream` signatures are consistent across producing and consuming tasks.

@@ -18,7 +18,10 @@ use bincode::config::{self, Configuration};
 use bincode::{Decode, Encode};
 
 use crate::{
-    decoder::Decoder, error::DecodeError, optimizer::utils::DataStats, utils::is_decomposable,
+    decoder::Decoder,
+    error::{DecodeError, EncodeError},
+    optimizer::utils::DataStats,
+    utils::is_decomposable,
 };
 
 use self::constant::{constant_compressor, Constant};
@@ -80,20 +83,31 @@ impl Compressor {
     }
 
     pub fn compress_bounded(&self, data: &[f64], max_error: f64) -> Vec<u8> {
-        let stats = DataStats::new(data);
-        match self {
-            Compressor::Noop => noop(data),
-            Compressor::FFT => fft_compressor(data, max_error, stats).compressed_data,
-            Compressor::Constant => constant_compressor(data, stats).compressed_data,
-            Compressor::Polynomial => {
-                polynomial_allowed_error(data, max_error, PolynomialType::Polynomial)
-                    .compressed_data
-            }
-            Compressor::Idw => {
-                polynomial_allowed_error(data, max_error, PolynomialType::Idw).compressed_data
-            }
-            Compressor::RLE => rle_compressor(data, stats).compressed_data,
-            _ => todo!(),
+        self.try_compress_bounded(data, max_error)
+            .expect("bounded codec compression failed")
+    }
+
+    pub fn try_compress_bounded(
+        &self,
+        data: &[f64],
+        max_error: f64,
+    ) -> Result<Vec<u8>, EncodeError> {
+        if *self == Compressor::Auto {
+            return Err(EncodeError::UnsupportedCompressor {
+                codec: *self,
+                operation: "forced bounded compression",
+            });
+        }
+
+        let result = self.get_compress_bounded_results(data, max_error);
+        if max_error.is_finite() && result.error.is_finite() && result.error <= max_error {
+            Ok(result.compressed_data)
+        } else {
+            Err(EncodeError::ErrorBoundNotMet {
+                codec: *self,
+                requested: max_error,
+                actual: result.error,
+            })
         }
     }
 

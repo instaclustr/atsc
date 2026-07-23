@@ -16,7 +16,7 @@ limitations under the License.
 
 use crate::compressor::{BinConfig, Compressor};
 use crate::decoder::{Decoder, FrameInfo, FrameInfoIter};
-use crate::error::{DecodeError, DecodeLimits};
+use crate::error::{DecodeError, DecodeLimits, EncodeError};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
 //use bincode::{Decode, Encode};
@@ -62,6 +62,17 @@ impl CompressedStream {
         max_error: f32,
         compression_speed: usize,
     ) {
+        self.try_compress_chunk_bounded_with(chunk, compressor, max_error, compression_speed)
+            .expect("bounded stream compression failed");
+    }
+
+    pub fn try_compress_chunk_bounded_with(
+        &mut self,
+        chunk: &[f64],
+        compressor: Compressor,
+        max_error: f32,
+        compression_speed: usize,
+    ) -> Result<(), EncodeError> {
         debug!(
             "Compressing chunk bounded with a max error of {}",
             max_error
@@ -69,12 +80,15 @@ impl CompressedStream {
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         match compressor {
             // Auto means the frame will pick the best
-            Compressor::Auto => compressor_frame.compress_best(chunk, max_error, compression_speed),
-            _ => compressor_frame.compress_bounded(chunk, max_error),
+            Compressor::Auto => {
+                compressor_frame.try_compress_best(chunk, max_error, compression_speed)?
+            }
+            _ => compressor_frame.try_compress_bounded(chunk, max_error)?,
         }
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
         self.header.add_frame();
+        Ok(())
     }
 
     /// Transforms the whole CompressedStream into bytes to be written to a file

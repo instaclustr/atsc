@@ -16,6 +16,25 @@ limitations under the License.
 
 use crate::compressor::Compressor;
 
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum EncodeError {
+    #[error(
+        "{codec:?} compression did not meet error bound {requested}: actual error was {actual}"
+    )]
+    ErrorBoundNotMet {
+        codec: Compressor,
+        requested: f64,
+        actual: f64,
+    },
+    #[error("compression speed index {index} is invalid; maximum index is {max_index}")]
+    InvalidCompressionSpeed { index: usize, max_index: usize },
+    #[error("{codec:?} cannot be used for {operation}")]
+    UnsupportedCompressor {
+        codec: Compressor,
+        operation: &'static str,
+    },
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum DecodeError {
     #[error("BRO header requires 9 bytes, got {actual}")]

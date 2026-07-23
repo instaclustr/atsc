@@ -15,13 +15,38 @@ limitations under the License.
 */
 
 use crate::{
-    compressor::Compressor, decoder::Decoder, error::DecodeError, optimizer::utils::DataStats,
+    compressor::{Compressor, CompressorResult},
+    decoder::Decoder,
+    error::{DecodeError, EncodeError},
+    optimizer::utils::DataStats,
 };
 use bincode::{Decode, Encode};
 use log::debug;
 use std::mem::size_of_val;
 
-const COMPRESSION_SPEED: [i32; 7] = [i32::MAX, 4096, 2048, 1024, 512, 256, 128];
+const COMPRESSION_SPEED: [usize; 7] = [usize::MAX, 4096, 2048, 1024, 512, 256, 128];
+const AUTO_COMPRESSORS: [Compressor; 3] =
+    [Compressor::FFT, Compressor::Polynomial, Compressor::RLE];
+
+fn meets_error_bound(result: &CompressorResult, requested: f64) -> bool {
+    requested.is_finite() && result.error.is_finite() && result.error <= requested
+}
+
+fn validate_error_bound(
+    codec: Compressor,
+    requested: f64,
+    result: CompressorResult,
+) -> Result<CompressorResult, EncodeError> {
+    if meets_error_bound(&result, requested) {
+        Ok(result)
+    } else {
+        Err(EncodeError::ErrorBoundNotMet {
+            codec,
+            requested,
+            actual: result.error,
+        })
+    }
+}
 
 /// This is the structure of a compressor frame
 #[derive(Encode, Decode, Debug, Clone)]
@@ -65,89 +90,116 @@ impl CompressorFrame {
 
     /// Compress a data and stores the result in the frame
     pub fn compress_bounded(&mut self, data: &[f64], max_error: f32) {
+        self.try_compress_bounded(data, max_error)
+            .expect("bounded frame compression failed");
+    }
+
+    pub fn try_compress_bounded(
+        &mut self,
+        data: &[f64],
+        max_error: f32,
+    ) -> Result<(), EncodeError> {
+        if self.compressor == Compressor::Auto {
+            return Err(EncodeError::UnsupportedCompressor {
+                codec: self.compressor,
+                operation: "forced bounded compression",
+            });
+        }
+
+        let requested = f64::from(max_error);
+        let result = self
+            .compressor
+            .get_compress_bounded_results(data, requested);
+        let result = validate_error_bound(self.compressor, requested, result)?;
+
         self.sample_count = data.len();
-        self.data = self.compressor.compress_bounded(data, max_error as f64);
+        self.data = result.compressed_data;
+        Ok(())
     }
 
     /// This function tries to detect the best compressor for use and apply it to the data size
     pub fn compress_best(&mut self, data: &[f64], max_error: f32, compression_speed: usize) {
-        self.sample_count = data.len();
+        self.try_compress_best(data, max_error, compression_speed)
+            .expect("automatic frame compression failed");
+    }
+
+    pub fn try_compress_best(
+        &mut self,
+        data: &[f64],
+        max_error: f32,
+        compression_speed: usize,
+    ) -> Result<(), EncodeError> {
         // Speed factor limits the amount of data that is sampled to calculate the best compressor.
         // We need enough samples to do decent compression, minimum is 128 (2^7)
-        let data_sample = COMPRESSION_SPEED[compression_speed] as usize;
-        // Eligible compressors for use
-        let compressor_list = [Compressor::FFT, Compressor::Polynomial, Compressor::RLE];
+        let data_sample = *COMPRESSION_SPEED.get(compression_speed).ok_or(
+            EncodeError::InvalidCompressionSpeed {
+                index: compression_speed,
+                max_index: COMPRESSION_SPEED.len() - 1,
+            },
+        )?;
+        let requested = f64::from(max_error);
         // Do a statistical analysis of the data, let's see if we can pick a compressor out of this.
         let stats = DataStats::new(data);
         // Checking the statistical analysis and chose, if possible, a compressor
         // If the data is constant, well, constant frame
-        if stats.min == stats.max {
-            self.compressor = Compressor::Constant;
-            // Now do the full data compression
-            self.data = self
-                .compressor
-                .get_compress_bounded_results(data, max_error as f64)
-                .compressed_data;
-        } else if self.sample_count >= data_sample {
-            // Any technique determine the best compressor seems to be slower than this one
-            // Sample the dataset for a fast compressor run
-            // Pick the best compression
-            // Compress the full dataset that way
-            let (_smallest_result, chosen_compressor) = compressor_list
-                .iter()
-                .map(|compressor| {
-                    (
-                        compressor
-                            .get_compress_bounded_results(&data[0..data_sample], max_error as f64),
-                        compressor,
-                    )
-                })
-                .filter(|(result, _)| result.error <= max_error as f64)
-                .min_by_key(|x| x.0.compressed_data.len())
-                .unwrap();
-            self.compressor = *chosen_compressor;
-            // Now do the full data compression
-            self.data = self
-                .compressor
-                .get_compress_bounded_results(data, max_error as f64)
-                .compressed_data;
+        let (compressor, result) = if stats.min == stats.max {
+            let compressor = Compressor::Constant;
+            let result = compressor.get_compress_bounded_results(data, requested);
+            (
+                compressor,
+                validate_error_bound(compressor, requested, result)?,
+            )
         } else {
-            // Run all the eligible compressors and choose smallest
-            let compressor_results: Vec<_> = compressor_list
-                .iter()
-                .map(|compressor| {
+            let mut candidates: Vec<_> = AUTO_COMPRESSORS.iter().copied().enumerate().collect();
+
+            if data_sample != usize::MAX && data.len() >= data_sample {
+                let sample = &data[..data_sample];
+                candidates.sort_by_key(|(stable_rank, compressor)| {
+                    let result = compressor.get_compress_bounded_results(sample, requested);
                     (
-                        compressor.get_compress_bounded_results(data, max_error as f64),
-                        *compressor,
+                        !meets_error_bound(&result, requested),
+                        result.compressed_data.len(),
+                        *stable_rank,
                     )
-                })
-                .collect();
+                });
+            }
 
-            #[allow(
-                clippy::neg_cmp_op_on_partial_ord,
-                reason = "we need to exactly negate `result.error < max_error`, we can't apply de morgans to the expression due to NaN values"
-            )]
-            let best_compressor = if compressor_results
-                .iter()
-                .all(|(result, _)| !(result.error <= max_error as f64))
-            {
-                // To ensure we always have at least one result,
-                // if all results are above the max error just pick the smallest.
-                compressor_results
-                    .into_iter()
-                    .min_by_key(|x| x.0.compressed_data.len())
-            } else {
-                compressor_results
-                    .into_iter()
-                    .filter(|(result, _)| result.error <= max_error as f64)
-                    .min_by_key(|x| x.0.compressed_data.len())
-            };
+            let mut best: Option<(usize, Compressor, CompressorResult)> = None;
+            let mut lowest_actual = f64::INFINITY;
+            for (stable_rank, compressor) in candidates {
+                let result = compressor.get_compress_bounded_results(data, requested);
+                if result.error.is_finite() {
+                    lowest_actual = lowest_actual.min(result.error);
+                }
+                if !meets_error_bound(&result, requested) {
+                    continue;
+                }
 
-            let (result, compressor) = best_compressor.unwrap();
-            self.data = result.compressed_data;
-            self.compressor = compressor;
-        }
+                let candidate_key = (result.compressed_data.len(), stable_rank);
+                let replace = best
+                    .as_ref()
+                    .map(|(best_rank, _, best_result)| {
+                        candidate_key < (best_result.compressed_data.len(), *best_rank)
+                    })
+                    .unwrap_or(true);
+                if replace {
+                    best = Some((stable_rank, compressor, result));
+                }
+            }
+
+            let (_, compressor, result) = best.ok_or(EncodeError::ErrorBoundNotMet {
+                codec: Compressor::Auto,
+                requested,
+                actual: lowest_actual,
+            })?;
+            (compressor, result)
+        };
+
+        self.sample_count = data.len();
+        self.data = result.compressed_data;
+        self.compressor = compressor;
         debug!("Auto Compressor Selection: {:?}", self.compressor);
+        Ok(())
     }
 
     /// Decompresses a frame and returns the resulting data array
