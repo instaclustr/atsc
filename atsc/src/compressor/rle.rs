@@ -258,6 +258,11 @@ impl IndexRLE {
             } else {
                 frame_size
             };
+            let start_index = start_index.min(frame_size);
+            let end_index = end_index.min(frame_size);
+            if start_index >= end_index {
+                continue;
+            }
             output[base + start_index..base + end_index].fill(value);
         }
     }
@@ -316,6 +321,16 @@ mod tests {
     #[test]
     fn test_for_constant() {
         assert_roundtrip(&[1.0; 512], &[60, 3, 1, 1, 1, 0]);
+    }
+
+    #[test]
+    fn legacy_decode_clamps_runs_to_smaller_frame() {
+        let source = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0];
+        let rle = IndexRLE::new(&source, DataStats::new(&source).bitdepth);
+        let encoded = rle.to_bytes();
+
+        assert_eq!(rle.to_data(3), [1.0, 1.0, 2.0]);
+        assert_eq!(rle_to_data(3, &encoded), [1.0, 1.0, 2.0]);
     }
 
     #[test]

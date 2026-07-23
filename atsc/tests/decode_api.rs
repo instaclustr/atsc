@@ -824,6 +824,19 @@ fn fft_frequency_positions_must_fit_reconstructed_length() {
 }
 
 #[test]
+fn fft_overflowing_sample_count_returns_typed_error_without_allocating() {
+    let fft = FFT::new(1, 0.0, 1.0);
+
+    assert!(matches!(
+        Compressor::FFT.try_decompress(usize::MAX, &fft.to_bytes()),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::FFT,
+            ..
+        })
+    ));
+}
+
+#[test]
 fn polynomial_payload_type_must_match_frame_codec() {
     let mut idw = Polynomial::new(1, 0.0, 1.0, PolynomialType::Idw, Bitdepth::U8);
     idw.data_points.push(0.0);
@@ -873,6 +886,17 @@ fn forced_constant_idw_roundtrips() {
 fn auto_is_not_a_valid_stored_frame_codec() {
     assert!(matches!(
         Compressor::Auto.try_decompress(1, &[]),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::Auto,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn auto_max_sample_count_returns_typed_error_without_allocating() {
+    assert!(matches!(
+        Compressor::Auto.try_decompress(usize::MAX, &[]),
         Err(DecodeError::InvalidFrame {
             codec: Compressor::Auto,
             ..

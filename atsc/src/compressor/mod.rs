@@ -119,7 +119,7 @@ impl Compressor {
 
     pub fn try_decompress(&self, samples: usize, data: &[u8]) -> Result<Vec<f64>, DecodeError> {
         let mut decoder = Decoder::new();
-        let mut output = Vec::with_capacity(samples);
+        let mut output = Vec::new();
         self.try_decompress_into(samples, data, &mut decoder, &mut output)?;
         Ok(output)
     }
