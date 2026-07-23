@@ -166,4 +166,12 @@ impl CompressorFrame {
     pub(crate) fn sample_count(&self) -> usize {
         self.sample_count
     }
+
+    pub(crate) fn compressor(&self) -> Compressor {
+        self.compressor
+    }
+
+    pub(crate) fn payload_bytes(&self) -> usize {
+        self.data.len()
+    }
 }

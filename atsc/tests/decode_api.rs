@@ -5,12 +5,14 @@ use atsc::{
         noop::Noop,
         polynomial::{Polynomial, PolynomialType},
         rle::IndexRLE,
-        Compressor,
+        BinConfig, Compressor,
     },
     data::CompressedStream,
+    decoder::{Decoder, FrameInfo},
     error::{DecodeError, DecodeLimits},
     optimizer::utils::Bitdepth,
 };
+use bincode::Encode;
 use rustfft::num_complex::Complex;
 
 const FIXTURES: [(&str, &[u8]); 6] = [
@@ -48,6 +50,230 @@ fn maximum_vector_length_prefix() -> Vec<u8> {
     let mut prefix = vec![253];
     prefix.extend_from_slice(&u64::MAX.to_le_bytes());
     prefix
+}
+
+fn two_frame_stream() -> CompressedStream {
+    let mut stream = CompressedStream::new();
+    stream.compress_chunk_with(&[1.0, 1.0, 1.0], Compressor::Constant);
+    stream.compress_chunk_with(&[4.0, 5.0], Compressor::Noop);
+    stream
+}
+
+#[derive(Encode)]
+struct EncodedFrame {
+    frame_size: usize,
+    sample_count: usize,
+    compressor: Compressor,
+    data: Vec<u8>,
+}
+
+fn stream_with_invalid_outer_frames() -> CompressedStream {
+    let invalid_frame = || EncodedFrame {
+        frame_size: 0,
+        sample_count: 2,
+        compressor: Compressor::Auto,
+        data: Vec::new(),
+    };
+    let frames = vec![
+        invalid_frame(),
+        EncodedFrame {
+            frame_size: 0,
+            sample_count: 2,
+            compressor: Compressor::Constant,
+            data: Constant::new(2, 7.0, Bitdepth::U8).to_bytes(),
+        },
+        invalid_frame(),
+    ];
+
+    let mut bytes = b"BRRO".to_vec();
+    bytes.extend_from_slice(&1_u32.to_le_bytes());
+    bytes.push(frames.len() as u8);
+    bincode::encode_into_std_write(frames, &mut bytes, BinConfig::get())
+        .expect("test frames must encode");
+    CompressedStream::try_from_bytes(&bytes).expect("test stream must parse")
+}
+
+#[test]
+fn decode_into_appends_and_reports_only_new_samples() {
+    let stream = two_frame_stream();
+    let mut decoder = Decoder::new();
+    let mut output = vec![-1.0, -2.0];
+
+    let appended = decoder
+        .decode_into(&stream, &mut output)
+        .expect("stream must decode");
+
+    assert_eq!(appended, stream.sample_count());
+    assert_eq!(output, vec![-1.0, -2.0, 1.0, 1.0, 1.0, 4.0, 5.0]);
+}
+
+#[test]
+fn one_decoder_can_decode_independent_streams() {
+    let first = two_frame_stream();
+    let mut second = CompressedStream::new();
+    second.compress_chunk_with(&[9.0, 9.0], Compressor::Constant);
+    let mut decoder = Decoder::new();
+
+    assert_eq!(
+        decoder.decode(&first).expect("first stream must decode"),
+        vec![1.0, 1.0, 1.0, 4.0, 5.0]
+    );
+    assert_eq!(
+        decoder.decode(&second).expect("second stream must decode"),
+        vec![9.0, 9.0]
+    );
+}
+
+#[test]
+fn decode_frame_into_appends_only_the_requested_frame() {
+    let stream = two_frame_stream();
+    let mut decoder = Decoder::new();
+    let mut output = vec![-1.0];
+
+    let appended = decoder
+        .decode_frame_into(&stream, 1, &mut output)
+        .expect("requested frame must decode");
+
+    assert_eq!(appended, 2);
+    assert_eq!(output, vec![-1.0, 4.0, 5.0]);
+}
+
+#[test]
+fn decode_frame_into_rejects_out_of_bounds_indices() {
+    let stream = two_frame_stream();
+    let mut decoder = Decoder::new();
+
+    for index in [stream.frame_count(), usize::MAX] {
+        let mut output = vec![-1.0];
+        assert!(matches!(
+            decoder.decode_frame_into(&stream, index, &mut output),
+            Err(DecodeError::FrameOutOfBounds { index: actual, frames: 2 })
+                if actual == index
+        ));
+        assert_eq!(output, vec![-1.0]);
+    }
+}
+
+#[test]
+fn decode_range_spanning_frames_matches_full_decode() {
+    let stream = two_frame_stream();
+    let mut decoder = Decoder::new();
+    let full = decoder.decode(&stream).expect("stream must decode");
+    let range = 2..4;
+
+    assert_eq!(
+        decoder
+            .decode_range(&stream, range.clone())
+            .expect("range must decode"),
+        full[range.clone()]
+    );
+
+    let mut output = vec![-1.0];
+    let appended = decoder
+        .decode_range_into(&stream, range.clone(), &mut output)
+        .expect("range must decode");
+    assert_eq!(appended, range.len());
+    assert_eq!(&output[1..], &full[range]);
+}
+
+#[test]
+fn decode_range_accepts_empty_ranges_including_stream_end() {
+    let stream = two_frame_stream();
+    let mut decoder = Decoder::new();
+
+    for position in [0, 3, stream.sample_count()] {
+        assert!(decoder
+            .decode_range(&stream, position..position)
+            .expect("empty range must decode")
+            .is_empty());
+
+        let mut output = vec![-1.0];
+        assert_eq!(
+            decoder
+                .decode_range_into(&stream, position..position, &mut output)
+                .expect("empty range must decode"),
+            0
+        );
+        assert_eq!(output, vec![-1.0]);
+    }
+}
+
+#[test]
+fn decode_range_rejects_reversed_and_out_of_bounds_ranges() {
+    let stream = two_frame_stream();
+    let mut decoder = Decoder::new();
+
+    for range in [4..3, 0..6, 6..6, usize::MAX..usize::MAX] {
+        let start = range.start;
+        let end = range.end;
+        assert!(matches!(
+            decoder.decode_range(&stream, range.clone()),
+            Err(DecodeError::RangeOutOfBounds {
+                start: actual_start,
+                end: actual_end,
+                samples: 5,
+            }) if actual_start == start && actual_end == end
+        ));
+
+        let mut output = vec![-1.0];
+        assert!(matches!(
+            decoder.decode_range_into(&stream, range, &mut output),
+            Err(DecodeError::RangeOutOfBounds {
+                start: actual_start,
+                end: actual_end,
+                samples: 5,
+            }) if actual_start == start && actual_end == end
+        ));
+        assert_eq!(output, vec![-1.0]);
+    }
+}
+
+#[test]
+fn decode_range_skips_non_intersecting_frames() {
+    let stream = stream_with_invalid_outer_frames();
+    let mut decoder = Decoder::new();
+
+    assert_eq!(
+        decoder
+            .decode_range(&stream, 2..4)
+            .expect("only the valid middle frame should be decoded"),
+        vec![7.0, 7.0]
+    );
+    assert!(matches!(
+        decoder.decode(&stream),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::Auto,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn frame_info_offsets_cover_the_stream_sample_count() {
+    let stream = two_frame_stream();
+    let infos = stream.frame_info();
+    assert_eq!(infos.len(), stream.frame_count());
+    let infos: Vec<FrameInfo> = infos.collect();
+
+    assert_eq!(stream.frame_count(), 2);
+    assert_eq!(stream.sample_count(), 5);
+    assert_eq!(infos[0].index, 0);
+    assert_eq!(infos[0].sample_offset, 0);
+    assert_eq!(infos[0].sample_count, 3);
+    assert_eq!(infos[0].compressor, Compressor::Constant);
+    assert!(infos[0].payload_bytes > 0);
+    assert_eq!(infos[1].index, 1);
+    assert_eq!(
+        infos[0].sample_offset.checked_add(infos[0].sample_count),
+        Some(infos[1].sample_offset)
+    );
+    assert_eq!(infos[1].sample_count, 2);
+    assert_eq!(infos[1].compressor, Compressor::Noop);
+    assert!(infos[1].payload_bytes > 0);
+    assert_eq!(
+        infos[1].sample_offset.checked_add(infos[1].sample_count),
+        Some(stream.sample_count())
+    );
 }
 
 #[test]

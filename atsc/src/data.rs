@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use crate::compressor::{BinConfig, Compressor};
+use crate::decoder::{Decoder, FrameInfo};
 use crate::error::{DecodeError, DecodeLimits};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
@@ -160,17 +161,50 @@ impl CompressedStream {
         })
     }
 
+    pub fn frame_count(&self) -> usize {
+        self.data_frames.len()
+    }
+
+    pub fn sample_count(&self) -> usize {
+        self.data_frames
+            .iter()
+            .try_fold(0_usize, |samples, frame| {
+                samples.checked_add(frame.sample_count())
+            })
+            .expect("compressed stream sample count overflowed usize")
+    }
+
+    pub fn frame_info(&self) -> impl ExactSizeIterator<Item = FrameInfo> + '_ {
+        let mut sample_offset = 0_usize;
+        self.data_frames
+            .iter()
+            .enumerate()
+            .map(move |(index, frame)| {
+                let info = FrameInfo {
+                    index,
+                    sample_offset,
+                    sample_count: frame.sample_count(),
+                    compressor: frame.compressor(),
+                    payload_bytes: frame.payload_bytes(),
+                };
+                sample_offset = sample_offset
+                    .checked_add(info.sample_count)
+                    .expect("compressed stream sample count overflowed usize");
+                info
+            })
+    }
+
+    pub(crate) fn frames(&self) -> &[CompressorFrame] {
+        &self.data_frames
+    }
+
     pub fn decompress(&self) -> Vec<f64> {
         self.try_decompress()
             .expect("failed to decompress BRO stream")
     }
 
     pub fn try_decompress(&self) -> Result<Vec<f64>, DecodeError> {
-        let mut samples = Vec::new();
-        for frame in &self.data_frames {
-            samples.extend(frame.try_decompress()?);
-        }
-        Ok(samples)
+        Decoder::new().decode(self)
     }
 }
 
