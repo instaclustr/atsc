@@ -248,7 +248,7 @@ fn legacy_help_keeps_default_error_and_rle() {
 
     assert_success(&output);
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("[default: 3]"), "{stdout}");
+    assert!(stdout.contains("Default is 3 (3%)."), "{stdout}");
     assert!(stdout.contains("rle"), "{stdout}");
 }
 
@@ -397,4 +397,155 @@ fn invalid_wbro_uses_the_stable_input_format_exit_code() {
     assert_eq!(output.status.code(), Some(EXIT_INPUT_FORMAT));
     assert!(!output_path.exists());
     assert!(String::from_utf8_lossy(&output.stderr).contains("Wrong WAVBRRO file"));
+}
+
+#[test]
+fn truncated_wbro_body_is_reported_as_input_format_error_without_panicking() {
+    let temp = tempdir().unwrap();
+    let input = temp.path().join("truncated.wbro");
+    let mut bytes = b"WBRO0000WBRO".to_vec();
+    bytes.push(0);
+    fs::write(&input, bytes).unwrap();
+    let output_path = temp.path().join("output.bro");
+
+    let output = command()
+        .arg("compress")
+        .arg(&input)
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_INPUT_FORMAT));
+    assert!(!output_path.exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("deserialize WAVBRRO"), "{stderr}");
+    assert!(!stderr.contains("panicked at"), "{stderr}");
+}
+
+#[test]
+fn malformed_utf8_csv_is_reported_as_input_format_error_without_panicking() {
+    let temp = tempdir().unwrap();
+    let input = temp.path().join("malformed.csv");
+    fs::write(&input, b"timestamp,value\n1,\xff\n").unwrap();
+    let output_path = temp.path().join("output.bro");
+
+    let output = command()
+        .arg("compress")
+        .arg(&input)
+        .arg("--csv")
+        .arg("--fields=timestamp,value")
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_INPUT_FORMAT));
+    assert!(!output_path.exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("CSV parse error"), "{stderr}");
+    assert!(!stderr.contains("panicked at"), "{stderr}");
+}
+
+#[test]
+fn unequal_csv_record_is_reported_as_input_format_error_without_panicking() {
+    let temp = tempdir().unwrap();
+    let input = temp.path().join("unequal.csv");
+    fs::write(&input, "timestamp,value\n1\n").unwrap();
+    let output_path = temp.path().join("output.bro");
+
+    let output = command()
+        .arg("compress")
+        .arg(&input)
+        .arg("--csv")
+        .arg("--fields=timestamp,value")
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_INPUT_FORMAT));
+    assert!(!output_path.exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("found record with 1 fields"), "{stderr}");
+    assert!(!stderr.contains("panicked at"), "{stderr}");
+}
+
+#[test]
+fn legacy_compressor_option_cannot_be_mixed_with_compress_subcommand() {
+    let temp = tempdir().unwrap();
+    let input = temp.path().join("input.wbro");
+    write_wbro(&input, &[1.0, 2.0]);
+
+    let output = command()
+        .arg("--compressor")
+        .arg("constant")
+        .arg("compress")
+        .arg(&input)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_USAGE));
+    assert!(!input.with_extension("bro").exists());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("legacy root input/options cannot be combined"));
+}
+
+#[test]
+fn legacy_uncompress_option_cannot_be_mixed_with_verify_subcommand() {
+    let temp = tempdir().unwrap();
+    let fixture = temp.path().join("fixture.bro");
+    write_constant_fixture(&fixture);
+
+    let output = command()
+        .arg("-u")
+        .arg("verify")
+        .arg(&fixture)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_USAGE));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("legacy root input/options cannot be combined"));
+}
+
+#[test]
+fn legacy_input_cannot_be_mixed_with_verify_subcommand() {
+    let temp = tempdir().unwrap();
+    let legacy_input = temp.path().join("legacy.wbro");
+    write_wbro(&legacy_input, &[1.0]);
+    let fixture = temp.path().join("fixture.bro");
+    write_constant_fixture(&fixture);
+
+    let output = command()
+        .arg(&legacy_input)
+        .arg("verify")
+        .arg(&fixture)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_USAGE));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("legacy root input/options cannot be combined"));
+}
+
+#[test]
+fn reserved_subcommand_names_can_be_disambiguated_as_legacy_inputs() {
+    let temp = tempdir().unwrap();
+
+    for name in ["inspect", "verify", "compress", "decompress"] {
+        write_wbro(&temp.path().join(name), &[7.0; 16]);
+
+        let output = command()
+            .current_dir(temp.path())
+            .arg("--")
+            .arg(name)
+            .output()
+            .unwrap();
+
+        assert_success(&output);
+        assert!(temp.path().join(name).with_extension("bro").is_file());
+    }
 }

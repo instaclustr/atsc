@@ -11,6 +11,11 @@ atsc compress <INPUT> [-o <OUTPUT>] [OPTIONS]
 atsc decompress <INPUT> [-o <OUTPUT>]
 ```
 
+Options for an explicit command must be placed in that command's argument
+scope, for example `atsc compress --compressor rle metrics.wbro`. Legacy root
+inputs or options cannot be combined with an explicit subcommand; mixed syntax
+is a usage error.
+
 ### Inspect a BRO stream
 
 `inspect` parses the bounded BRO container and reports its version, frame and
@@ -50,6 +55,11 @@ Compression defaults to `--compressor auto` and `--error 3`. Available codecs
 are `auto`, `noop`, `fft`, `constant`, `polynomial`, `idw`, and `rle`.
 `-c/--compression-selection-sample-level` accepts 0 through 6.
 
+WBRO archives are validated before deserialization. CSV readers report invalid
+UTF-8, unequal record lengths, missing fields, and invalid values as input
+format errors instead of panicking. File open and read failures remain I/O
+errors.
+
 Without `-o`, a file keeps its base name and receives the `.bro` extension.
 For directory input, ATSC snapshots the initial entries and processes each
 eligible `.wbro` file once, or each `.csv` file once when `--csv` is active.
@@ -87,16 +97,28 @@ Legacy mode uses the same bounded, fallible implementation as `compress` and
 the same safe parser and decoder as `decompress`. Existing file and directory
 output naming is unchanged.
 
+The four subcommand names are reserved command words. Disambiguate a legacy
+file with one of the standard path forms; ATSC does not guess based on whether
+a file happens to exist:
+
+```bash
+atsc -- inspect
+atsc ./inspect
+```
+
+The same forms apply to legacy files named `verify`, `compress`, or
+`decompress`.
+
 ## Exit status
 
 ATSC uses stable exit codes:
 
 - `0`: success
-- `1`: I/O or output-serialization error
-- `2`: command usage error
+- `1`: file open/read/write I/O or output-serialization error
+- `2`: command usage error, including mixed legacy/subcommand syntax
 - `3`: BRO parse or decode error
 - `4`: bounded compression error
-- `5`: WBRO/CSV input-format error
+- `5`: malformed WBRO header/body or CSV UTF-8/shape/field/value error
 
 For a directory with multiple failures, every eligible entry is attempted
 once and the highest applicable failure code is returned.

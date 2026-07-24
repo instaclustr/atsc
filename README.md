@@ -105,6 +105,9 @@ atsc compress <INPUT> [-o <OUTPUT>] [OPTIONS]
 atsc decompress <INPUT> [-o <OUTPUT>]
 ```
 
+Explicit-command options belong after their subcommand. Combining an explicit
+subcommand with legacy root input/options is a usage error.
+
 Examples:
 
 ```bash
@@ -120,6 +123,8 @@ Compression defaults to automatic codec selection with a 3% maximum error.
 Directory input is supported for compression and decompression; ATSC snapshots
 and filters the initial entries before processing each eligible input once.
 `-o/--output` is only valid for a single input file.
+WBRO bodies and CSV structure are validated and return typed input-format
+errors; file open/read/write failures retain the I/O exit status.
 
 Existing invocations remain available as compatibility mode and use the same
 safe implementation:
@@ -128,6 +133,10 @@ safe implementation:
 atsc [OPTIONS] <INPUT>
 atsc -u <INPUT>
 ```
+
+For a legacy file named `inspect`, `verify`, `compress`, or `decompress`, use
+`atsc -- <name>` or an explicit path such as `atsc ./inspect`. ATSC does not
+guess command intent from filesystem existence.
 
 Library callers can use bounded parsing and a reusable decoder directly:
 

@@ -16,12 +16,14 @@ limitations under the License.
 
 use rkyv::{Archive, Deserialize, Serialize};
 use std::path::Path;
-use std::{error, fmt, io, result};
+use std::{error, fmt, fs, io, result};
 
-use crate::read::{is_wavbrro_file, read_wavbrro_file};
+#[cfg(test)]
+use crate::read::is_wavbrro_file;
 use crate::write::write_wavbrro_file;
 
 const MAX_CHUNK_SIZE: usize = 2048;
+const FILE_HEADER_LEN: usize = 12;
 
 #[derive(Archive, Deserialize, Serialize, Debug, PartialEq, Clone)]
 #[archive(
@@ -98,15 +100,17 @@ impl WavBrro {
         self.chunks.into_iter().flatten().collect::<Vec<f64>>()
     }
 
-    // This should be generic, but first implementation is going to be Vec f64
-    // TODO: This will panic left and right, make it right
     pub fn from_file(file_path: &Path) -> Result<Vec<f64>, Error> {
-        // Check if the header is correct
-        if !is_wavbrro_file(file_path)? {
+        let bytes = fs::read(file_path)?;
+        if bytes.len() < FILE_HEADER_LEN
+            || &bytes[..4] != b"WBRO"
+            || &bytes[8..FILE_HEADER_LEN] != b"WBRO"
+        {
             return Err(Error::FormatError);
-        };
-        let bytes = read_wavbrro_file(file_path)?;
-        let obj = WavBrro::from_bytes(&bytes);
+        }
+        let mut body = rkyv::AlignedVec::with_capacity(bytes.len() - FILE_HEADER_LEN);
+        body.extend_from_slice(&bytes[FILE_HEADER_LEN..]);
+        let obj = WavBrro::try_from_bytes(&body)?;
         Ok(obj.get_samples())
     }
 
@@ -127,8 +131,15 @@ impl WavBrro {
         rkyv::to_bytes::<_, 1024>(self).expect("Failed to serialize data!")
     }
 
+    /// Validates and deserializes an archived WAVBRRO body.
+    pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        rkyv::from_bytes::<WavBrro>(bytes)
+            .map_err(|error| Error::DeserializationError(error.to_string()))
+    }
+
+    /// Compatibility wrapper that panics when the archived body is invalid.
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        rkyv::from_bytes::<WavBrro>(bytes).expect("Failed to deserialize data!")
+        Self::try_from_bytes(bytes).expect("Failed to deserialize data!")
     }
 }
 
@@ -140,6 +151,8 @@ pub enum Error {
     IoError(io::Error),
     /// It's not WAVBRRO
     FormatError,
+    /// The archived WAVBRRO body failed validation or deserialization.
+    DeserializationError(String),
     /// The sample has more bits than the destination type.
     ///
     /// When iterating using the `samples` iterator, this means that the
@@ -166,6 +179,9 @@ impl fmt::Display for Error {
         match *self {
             Error::IoError(ref err) => err.fmt(formatter),
             Error::FormatError => formatter.write_str("Wrong WAVBRRO file!"),
+            Error::DeserializationError(ref error) => {
+                write!(formatter, "Failed to deserialize WAVBRRO data: {error}")
+            }
             Error::TooWide => {
                 formatter.write_str("The sample has more bits than the destination type.")
             }
@@ -190,6 +206,7 @@ impl error::Error for Error {
         match *self {
             // TODO: I don't know if this is actually the right way to do!
             Error::IoError(ref _err) => "IO Error",
+            Error::DeserializationError(_) => "failed to deserialize WAVBRRO data",
             Error::TooWide => "the sample has more bits than the destination type",
             Error::Unsupported => "the wave format of the file is not supported",
             Error::InvalidSampleFormat => "the sample format differs from the destination format",
@@ -200,6 +217,7 @@ impl error::Error for Error {
     fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
             Error::IoError(ref err) => Some(err),
+            Error::DeserializationError(_) => None,
             Error::TooWide => None,
             Error::Unsupported => None,
             Error::InvalidSampleFormat => None,
@@ -241,6 +259,14 @@ mod tests {
         let bytes = wb.to_bytes();
         let wb2 = WavBrro::from_bytes(bytes.as_slice());
         assert_eq!(wb, wb2);
+    }
+
+    #[test]
+    fn try_from_bytes_rejects_truncated_archive() {
+        assert!(matches!(
+            WavBrro::try_from_bytes(&[0]),
+            Err(Error::DeserializationError(_))
+        ));
     }
 
     #[test]

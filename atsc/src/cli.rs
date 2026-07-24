@@ -23,7 +23,7 @@ use std::{
 
 use atsc::{
     compressor::Compressor,
-    csv::{read_samples, read_samples_with_headers},
+    csv::{read_samples, read_samples_with_headers, Error as CsvError},
     data::CompressedStream,
     decoder::Decoder,
     error::{DecodeError, EncodeError},
@@ -50,12 +50,8 @@ pub struct Args {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Uncompresses the input file/directory (legacy compatibility mode)
-    #[arg(short = 'u', action)]
-    uncompress: bool,
-
     #[command(flatten)]
-    compression: CompressionOptions,
+    legacy: LegacyOptions,
 }
 
 #[derive(Subcommand, Debug)]
@@ -107,6 +103,79 @@ struct InspectArgs {
 #[derive(clap::Args, Debug)]
 struct VerifyArgs {
     input: PathBuf,
+}
+
+#[derive(clap::Args, Debug, Default)]
+struct LegacyOptions {
+    /// Uncompresses the input file/directory (legacy compatibility mode)
+    #[arg(short = 'u', action)]
+    uncompress: bool,
+
+    /// Select a compressor, default is auto
+    #[arg(long, value_enum)]
+    compressor: Option<CompressorType>,
+
+    /// Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 3 (3%).
+    #[arg(
+        short = 'e',
+        long,
+        value_parser = clap::value_parser!(u8).range(0..51),
+        verbatim_doc_comment
+    )]
+    error: Option<u8>,
+
+    /// Samples the input data instead of using all the data for selecting the optimal compressor.
+    /// 0 uses all data (default); 6 samples 128 data points.
+    #[arg(
+        short = 'c',
+        long,
+        value_parser = clap::value_parser!(u8).range(0..7),
+        verbatim_doc_comment
+    )]
+    compression_selection_sample_level: Option<u8>,
+
+    /// Verbose output, dumps every input or decompressed sample
+    #[arg(long, action)]
+    verbose: bool,
+
+    /// Defines user input as a CSV file
+    #[arg(long, action)]
+    csv: bool,
+
+    /// Defines if the CSV has no header
+    #[arg(long, action)]
+    no_header: bool,
+
+    /// Defines CSV fields as TIME_FIELD_NAME,VALUE_FIELD_NAME
+    #[arg(long)]
+    fields: Option<String>,
+}
+
+impl LegacyOptions {
+    fn is_present(&self) -> bool {
+        self.uncompress
+            || self.compressor.is_some()
+            || self.error.is_some()
+            || self.compression_selection_sample_level.is_some()
+            || self.verbose
+            || self.csv
+            || self.no_header
+            || self.fields.is_some()
+    }
+
+    fn into_compression_options(self) -> CompressionOptions {
+        CompressionOptions {
+            compressor: self.compressor.unwrap_or_default(),
+            error: self.error.unwrap_or(3),
+            compression_selection_sample_level: self
+                .compression_selection_sample_level
+                .unwrap_or(0),
+            verbose: self.verbose,
+            csv: self.csv,
+            no_header: self.no_header,
+            fields: self.fields.unwrap_or_else(|| "time,value".to_string()),
+        }
+    }
 }
 
 #[derive(clap::Args, Debug)]
@@ -249,27 +318,33 @@ impl fmt::Display for BatchError {
 }
 
 pub fn run(args: Args) -> Result<(), CliError> {
-    match args.command {
-        Some(Command::Compress(command)) => {
-            compress_path(&command.input, command.output.as_deref(), &command.options)
+    if let Some(command) = args.command {
+        if args.input.is_some() || args.legacy.is_present() {
+            return Err(CliError::Usage(
+                "legacy root input/options cannot be combined with an explicit subcommand"
+                    .to_string(),
+            ));
         }
-        Some(Command::Decompress(command)) => {
-            decompress_path(&command.input, command.output.as_deref(), command.verbose)
-        }
-        Some(Command::Inspect(command)) => inspect(&command.input, command.json),
-        Some(Command::Verify(command)) => verify(&command.input),
-        None => {
-            let input = args.input.ok_or_else(|| {
-                CliError::Usage(
-                    "an input file or directory is required; see `atsc --help`".to_string(),
-                )
-            })?;
-            if args.uncompress {
-                decompress_path(&input, None, args.compression.verbose)
-            } else {
-                compress_path(&input, None, &args.compression)
+        return match command {
+            Command::Compress(command) => {
+                compress_path(&command.input, command.output.as_deref(), &command.options)
             }
-        }
+            Command::Decompress(command) => {
+                decompress_path(&command.input, command.output.as_deref(), command.verbose)
+            }
+            Command::Inspect(command) => inspect(&command.input, command.json),
+            Command::Verify(command) => verify(&command.input),
+        };
+    }
+
+    let input = args.input.ok_or_else(|| {
+        CliError::Usage("an input file or directory is required; see `atsc --help`".to_string())
+    })?;
+    if args.legacy.uncompress {
+        decompress_path(&input, None, args.legacy.verbose)
+    } else {
+        let options = args.legacy.into_compression_options();
+        compress_path(&input, None, &options)
     }
 }
 
@@ -377,11 +452,10 @@ fn read_compression_input(
 ) -> Result<Vec<f64>, CliError> {
     if options.csv {
         let samples = if options.no_header {
-            read_samples(input).map_err(|error| CliError::InputFormat(error.to_string()))?
+            read_samples(input).map_err(map_csv_error)?
         } else {
             let (timestamp_field, value_field) = parse_fields(&options.fields)?;
-            read_samples_with_headers(input, timestamp_field, value_field)
-                .map_err(|error| CliError::InputFormat(error.to_string()))?
+            read_samples_with_headers(input, timestamp_field, value_field).map_err(map_csv_error)?
         };
         return Ok(samples.into_iter().map(|sample| sample.value).collect());
     }
@@ -404,6 +478,13 @@ fn parse_fields(fields: &str) -> Result<(&str, &str), CliError> {
 fn map_wavbrro_error(error: WavBrroError) -> CliError {
     match error {
         WavBrroError::IoError(error) => CliError::Io(error),
+        error => CliError::InputFormat(error.to_string()),
+    }
+}
+
+fn map_csv_error(error: CsvError) -> CliError {
+    match error {
+        CsvError::Io(error) => CliError::Io(error),
         error => CliError::InputFormat(error.to_string()),
     }
 }
