@@ -980,3 +980,61 @@ git commit -m "ci: enforce safe and fast decoder builds"
 - Deliberate exclusions: error-metric behavior changes, NaN-preservation format changes, BRO v2, JNI, and OpenSearch adapter work require separate designs because they can change compression semantics or deployment architecture.
 - Placeholder scan: no TBD/TODO implementation steps remain. Task 5 intentionally records measured pre-change numeric sizes from its parent commit rather than inventing values.
 - Type consistency: `EncodeError`, `DecodeError`, `DecodeLimits`, bounded stream/frame methods, `Decoder`, `FrameInfo`, and `CompressedStream` signatures are consistent across producing and consuming tasks.
+
+## Final review hardening
+
+The final review accepted the following hardening wave without changing BRO v1
+wire bytes, bincode 2.0.0-rc.3 configuration, codec IDs/order, or the existing
+error metric:
+
+1. Bounded Noop compression measures reconstruction error from its encoded
+   rounded `i64` values. Exact source/reconstruction pairs contribute zero,
+   including zero-valued samples, so valid exact integers retain zero error
+   while fractional input can no longer pass a lossless bound.
+2. Every fallible bounded encode entry point rejects empty and non-finite input
+   before statistics or codec work. `OptimizerPlan::try_plan` preserves this
+   typed boundary, `plan` is its panic-based compatibility wrapper, and the CLI
+   uses `try_plan`.
+3. BRO v1's 255-frame limit is checked before compression. The checked
+   `CompressorHeader::try_add_frame` and stream preflight keep header count,
+   body count, and serialized bytes unchanged when a 256th frame is attempted;
+   infallible compatibility methods panic before mutation.
+4. Public fallible decode paths use checked length arithmetic and
+   `Vec::try_reserve` for caller output, frame/range output, Constant, Noop,
+   RLE scratch/output, FFT complex/output, and Polynomial/IDW
+   position/key/output buffers. Capacity failures return
+   `DecodeError::AllocationFailed`, and caller output remains transactional.
+   IDW evaluation uses allocation-free two-pass weighting with the same
+   arithmetic order. FFT and interpolation paths narrowly reject a
+   non-finite reconstructed value if finite validated parameters still cause
+   arithmetic overflow or cancellation.
+5. Container parsing decodes the bincode outer-vector length prefix as `usize`
+   with the frozen standard-varint decode configuration. Header and body
+   counts are checked against `max_frames` and each other before the outer
+   frame vector is decoded, while the existing 256 MiB bincode cap remains.
+6. CLI BRO reads are synchronous and bounded to
+   `DecodeLimits::default().max_input_bytes`; metadata preflight and max-plus-one
+   streaming detection return the typed decode input-limit error before parser
+   allocation.
+7. WAVBRRO exposes defaultable byte/sample read limits. File input is read
+   directly into aligned archive storage without a second whole-file byte
+   vector. Archived metadata is semantically checked before vector
+   deserialization: f64 bitdepth, sample count, checked chunk sum/count, fixed
+   non-final chunks, bounded non-empty final chunk, and sample limit. Header
+   bytes 4 through 7 remain intentionally opaque because the writer emits the
+   ASCII text `0000`.
+8. CSV exposes matching byte/sample limits and value-only APIs used by the CLI.
+   A bounded reader and file-size preflight prevent any record from growing
+   beyond the byte limit; compatibility APIs still return `Sample` values.
+9. Fallible payload decode validates finite Constant and RLE values, FFT
+   extrema/frequencies, and Polynomial/IDW extrema/data points. Consequently,
+   `verify` rejects non-finite BRO payload parameters without an extra
+   whole-output scan on the normal decode hot path.
+10. Directory compression and decompression derive all input/output pairs and
+    reject duplicate `PathBuf` outputs before processing any input, including
+    case-different eligible extensions that collapse to one output name.
+11. `frame_size` is deliberately not validated. BRO v1 writers populated it
+    with an in-memory host-layout estimate, not a serialized frame byte length,
+    and decoding never depended on it. Arbitrary legacy values therefore
+    remain compatible and opaque. An authoritative frame length requires an
+    explicitly specified BRO v2 field.

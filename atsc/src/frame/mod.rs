@@ -17,7 +17,7 @@ limitations under the License.
 use crate::{
     compressor::{Compressor, CompressorResult},
     decoder::Decoder,
-    error::{DecodeError, EncodeError},
+    error::{validate_encode_input, DecodeError, EncodeError},
     optimizer::utils::DataStats,
 };
 use bincode::{Decode, Encode};
@@ -51,7 +51,11 @@ fn validate_error_bound(
 /// This is the structure of a compressor frame
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct CompressorFrame {
-    /// The frame size in bytes,
+    /// Opaque BRO v1 legacy metadata.
+    ///
+    /// Historical writers stored a host-layout estimate here, not a serialized
+    /// frame length. Decoders intentionally ignore arbitrary values for wire
+    /// compatibility; an authoritative byte length requires a BRO v2 field.
     frame_size: usize,
     sample_count: usize,
     compressor: Compressor,
@@ -99,6 +103,7 @@ impl CompressorFrame {
         data: &[f64],
         max_error: f32,
     ) -> Result<(), EncodeError> {
+        validate_encode_input(data)?;
         if self.compressor == Compressor::Auto {
             return Err(EncodeError::UnsupportedCompressor {
                 codec: self.compressor,
@@ -129,6 +134,7 @@ impl CompressorFrame {
         max_error: f32,
         compression_speed: usize,
     ) -> Result<(), EncodeError> {
+        validate_encode_input(data)?;
         // Speed factor limits the amount of data that is sampled to calculate the best compressor.
         // We need enough samples to do decent compression, minimum is 128 (2^7)
         let data_sample = *COMPRESSION_SPEED.get(compression_speed).ok_or(

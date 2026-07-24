@@ -33,7 +33,8 @@ written to stderr.
 ### Verify a BRO stream
 
 `verify` parses the container and fully decodes every frame, so it detects both
-container errors and malformed codec payloads.
+container errors and malformed codec payloads, including non-finite
+reconstruction parameters.
 
 ```bash
 atsc verify metrics.bro
@@ -55,14 +56,18 @@ Compression defaults to `--compressor auto` and `--error 3`. Available codecs
 are `auto`, `noop`, `fft`, `constant`, `polynomial`, `idw`, and `rle`.
 `-c/--compression-selection-sample-level` accepts 0 through 6.
 
-WBRO archives are validated before deserialization. CSV readers report invalid
-UTF-8, unequal record lengths, missing fields, and invalid values as input
-format errors instead of panicking. File open and read failures remain I/O
-errors.
+BRO, WBRO, and CSV readers default to a 256 MiB input limit and a 33,423,360
+sample limit. WBRO archive shape is validated before archived vectors are
+deserialized. CSV readers bound individual records and report invalid UTF-8,
+unequal record lengths, missing fields, and invalid values as input-format
+errors instead of panicking. Non-finite compression inputs are rejected with
+their sample index. File open and read failures remain I/O errors.
 
 Without `-o`, a file keeps its base name and receives the `.bro` extension.
 For directory input, ATSC snapshots the initial entries and processes each
 eligible `.wbro` file once, or each `.csv` file once when `--csv` is active.
+All input/output pairs are derived first; if two eligible names would produce
+the same `.bro` path, no file is processed.
 `-o/--output` is only valid for a single input file.
 
 ### Decompress
@@ -74,6 +79,7 @@ atsc decompress metrics.bro -o restored.wbro
 
 Without `-o`, a file keeps its base name and receives the `.wbro` extension.
 Directory input processes each initial `.bro` file once.
+Duplicate derived `.wbro` paths are rejected before any output is written.
 
 ## Legacy compatibility
 
@@ -136,3 +142,12 @@ let stream = CompressedStream::try_from_bytes(&bytes)?;
 let mut decoder = Decoder::new();
 let values = decoder.decode_range(&stream, 1_000..2_000)?;
 ```
+
+`wavbrro::wavbrro::ReadLimits` and `atsc::csv::CsvReadLimits` expose the same
+byte/sample controls for library callers. Their existing convenience readers
+remain default-limit wrappers, while CSV value-only readers avoid building an
+intermediate `Vec<Sample>`.
+
+BRO v1's `frame_size` field is opaque metadata produced from a historical
+host-layout estimate. It is not validated or used for decoding; a real frame
+byte length belongs in BRO v2.

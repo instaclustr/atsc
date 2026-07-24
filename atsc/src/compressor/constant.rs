@@ -17,7 +17,7 @@ limitations under the License.
 use crate::{
     compressor::CompressorResult,
     decoder::Decoder,
-    error::DecodeError,
+    error::{reserve_decode, DecodeError},
     optimizer::utils::{Bitdepth, DataStats},
     utils::error::calculate_error,
 };
@@ -130,6 +130,12 @@ impl Constant {
                 ),
             });
         }
+        if !constant.constant.is_finite() {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::Constant,
+                reason: "constant value must be finite".to_string(),
+            });
+        }
         Ok(constant)
     }
 
@@ -144,7 +150,8 @@ impl Constant {
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
         let mut decoder = Decoder::new();
         let mut output = Vec::with_capacity(frame_size);
-        self.append_to_data(frame_size, &mut decoder, &mut output);
+        self.append_to_data(frame_size, &mut decoder, &mut output)
+            .expect("failed to allocate Constant output");
         output
     }
 
@@ -153,13 +160,10 @@ impl Constant {
         frame_size: usize,
         _decoder: &mut Decoder,
         output: &mut Vec<f64>,
-    ) {
-        let new_len = output
-            .len()
-            .checked_add(frame_size)
-            .expect("decoded Constant output length overflowed usize");
-        output.reserve(frame_size);
+    ) -> Result<(), DecodeError> {
+        let new_len = reserve_decode(output, frame_size, "Constant output")?;
         output.resize(new_len, self.constant);
+        Ok(())
     }
 }
 

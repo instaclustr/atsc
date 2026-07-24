@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::error::DecodeError;
+use crate::error::{DecodeError, EncodeError};
 use log::{debug, trace};
 
 /*  The current file version.
@@ -50,8 +50,24 @@ impl CompressorHeader {
         }
     }
 
-    pub fn add_frame(&mut self) {
+    pub(crate) fn ensure_frame_available(&self) -> Result<(), EncodeError> {
+        if self.frame_count == u8::MAX {
+            return Err(EncodeError::FrameLimitExceeded {
+                limit: usize::from(u8::MAX),
+            });
+        }
+        Ok(())
+    }
+
+    pub fn try_add_frame(&mut self) -> Result<(), EncodeError> {
+        self.ensure_frame_available()?;
         self.frame_count += 1;
+        Ok(())
+    }
+
+    pub fn add_frame(&mut self) {
+        self.try_add_frame()
+            .expect("BRO v1 frame limit exceeded before header mutation");
     }
 
     pub fn get_frame_count(&self) -> u8 {

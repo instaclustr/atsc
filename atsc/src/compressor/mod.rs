@@ -19,14 +19,14 @@ use bincode::{Decode, Encode};
 
 use crate::{
     decoder::Decoder,
-    error::{DecodeError, EncodeError},
+    error::{validate_encode_input, DecodeError, EncodeError},
     optimizer::utils::DataStats,
     utils::is_decomposable,
 };
 
 use self::constant::{constant_compressor, Constant};
 use self::fft::{fft, fft_compressor, FFT};
-use self::noop::{noop, Noop};
+use self::noop::{noop, noop_compressor, Noop};
 use self::polynomial::{polynomial, polynomial_allowed_error, Polynomial, PolynomialType};
 use self::rle::{rle_compressor, IndexRLE};
 
@@ -92,6 +92,7 @@ impl Compressor {
         data: &[f64],
         max_error: f64,
     ) -> Result<Vec<u8>, EncodeError> {
+        validate_encode_input(data)?;
         if *self == Compressor::Auto {
             return Err(EncodeError::UnsupportedCompressor {
                 codec: *self,
@@ -114,7 +115,7 @@ impl Compressor {
     pub fn get_compress_bounded_results(&self, data: &[f64], max_error: f64) -> CompressorResult {
         let stats = DataStats::new(data);
         match self {
-            Compressor::Noop => CompressorResult::new(noop(data), 0.0),
+            Compressor::Noop => noop_compressor(data),
             Compressor::FFT => fft_compressor(data, max_error, stats),
             Compressor::Constant => constant_compressor(data, stats),
             Compressor::RLE => rle_compressor(data, stats),
@@ -158,7 +159,7 @@ impl Compressor {
                         ),
                     });
                 }
-                noop.append_to_data(samples, decoder, output);
+                noop.append_to_data(samples, decoder, output)?;
             }
             Compressor::FFT => {
                 let fft = FFT::try_decompress(data)?;
@@ -188,10 +189,10 @@ impl Compressor {
                         ),
                     });
                 }
-                fft.append_to_data(samples, decoder, output);
+                fft.append_to_data(samples, decoder, output)?;
             }
             Compressor::Constant => {
-                Constant::try_decompress(data)?.append_to_data(samples, decoder, output);
+                Constant::try_decompress(data)?.append_to_data(samples, decoder, output)?;
             }
             Compressor::Polynomial | Compressor::Idw => {
                 let polynomial = Polynomial::try_decompress(data)?;
@@ -210,7 +211,7 @@ impl Compressor {
                     });
                 }
                 validate_polynomial_point_count(*self, samples, &polynomial)?;
-                polynomial.append_to_data(samples, decoder, output);
+                polynomial.append_to_data(samples, decoder, output)?;
             }
             Compressor::RLE => {
                 let rle = IndexRLE::try_decompress(data)?;
@@ -245,7 +246,7 @@ impl Compressor {
                         reason: format!("{starts} run starts exceed {samples} declared samples"),
                     });
                 }
-                rle.append_to_data(samples, decoder, output);
+                rle.append_to_data(samples, decoder, output)?;
             }
             Compressor::Auto => {
                 return Err(DecodeError::InvalidFrame {

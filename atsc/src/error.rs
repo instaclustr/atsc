@@ -18,6 +18,12 @@ use crate::compressor::Compressor;
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum EncodeError {
+    #[error("compression input must not be empty")]
+    EmptyInput,
+    #[error("compression input at index {index} is not finite")]
+    NonFiniteInput { index: usize },
+    #[error("BRO v1 supports at most {limit} frames")]
+    FrameLimitExceeded { limit: usize },
     #[error(
         "{codec:?} compression did not meet error bound {requested}: actual error was {actual}"
     )]
@@ -35,6 +41,20 @@ pub enum EncodeError {
     },
 }
 
+pub(crate) fn validate_encode_input(data: &[f64]) -> Result<(), EncodeError> {
+    if data.is_empty() {
+        return Err(EncodeError::EmptyInput);
+    }
+    if let Some((index, _)) = data
+        .iter()
+        .enumerate()
+        .find(|(_, value)| !value.is_finite())
+    {
+        return Err(EncodeError::NonFiniteInput { index });
+    }
+    Ok(())
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum DecodeError {
     #[error("BRO header requires 9 bytes, got {actual}")]
@@ -49,6 +69,11 @@ pub enum DecodeError {
     FrameLimitExceeded { actual: usize, limit: usize },
     #[error("stream contains {actual} samples, above configured limit {limit}")]
     SampleLimitExceeded { actual: usize, limit: usize },
+    #[error("could not allocate capacity for {requested} items while decoding {context}")]
+    AllocationFailed {
+        context: &'static str,
+        requested: usize,
+    },
     #[error("header declares {header} frames but body contains {body}")]
     FrameCountMismatch { header: usize, body: usize },
     #[error("trailing bytes after BRO body: {remaining}")]
@@ -69,6 +94,24 @@ pub enum DecodeError {
         end: usize,
         samples: usize,
     },
+}
+
+pub(crate) fn reserve_decode<T>(
+    values: &mut Vec<T>,
+    additional: usize,
+    context: &'static str,
+) -> Result<usize, DecodeError> {
+    let requested = values
+        .len()
+        .checked_add(additional)
+        .ok_or(DecodeError::AllocationFailed {
+            context,
+            requested: usize::MAX,
+        })?;
+    values
+        .try_reserve(additional)
+        .map_err(|_| DecodeError::AllocationFailed { context, requested })?;
+    Ok(requested)
 }
 
 #[derive(Debug, Clone, Copy)]

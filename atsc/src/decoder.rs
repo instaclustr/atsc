@@ -17,7 +17,10 @@ limitations under the License.
 use std::{fmt, iter::FusedIterator, mem, ops::Range, slice};
 
 use crate::{
-    compressor::Compressor, data::CompressedStream, error::DecodeError, frame::CompressorFrame,
+    compressor::Compressor,
+    data::CompressedStream,
+    error::{reserve_decode, DecodeError},
+    frame::CompressorFrame,
 };
 use rustfft::{num_complex::Complex, FftPlanner};
 
@@ -146,7 +149,8 @@ impl Decoder {
         output: &mut Vec<f64>,
     ) -> Result<usize, DecodeError> {
         append_transactionally(output, |output| {
-            output.reserve(stream.sample_count());
+            let samples = stream.try_sample_count()?;
+            reserve_decode(output, samples, "full stream output")?;
             for frame in stream.frames() {
                 frame.try_decompress_into(self, output)?;
             }
@@ -168,7 +172,7 @@ impl Decoder {
                 frames: stream.frame_count(),
             })?;
         append_transactionally(output, |output| {
-            output.reserve(frame.sample_count());
+            reserve_decode(output, frame.sample_count(), "single frame output")?;
             frame.try_decompress_into(self, output)?;
             Ok(())
         })
@@ -196,7 +200,7 @@ impl Decoder {
         output: &mut Vec<f64>,
     ) -> Result<usize, DecodeError> {
         append_transactionally(output, |output| {
-            let samples = stream.sample_count();
+            let samples = stream.try_sample_count()?;
             if range.start > range.end || range.end > samples {
                 return Err(DecodeError::RangeOutOfBounds {
                     start: range.start,
@@ -210,12 +214,15 @@ impl Decoder {
                 return Ok(());
             }
 
-            output.reserve(requested);
+            reserve_decode(output, requested, "sample range output")?;
             let mut frame_start = 0_usize;
             for frame in stream.frames() {
-                let frame_end = frame_start
-                    .checked_add(frame.sample_count())
-                    .expect("compressed stream sample count overflowed usize");
+                let frame_end = frame_start.checked_add(frame.sample_count()).ok_or(
+                    DecodeError::AllocationFailed {
+                        context: "stream sample metadata",
+                        requested: usize::MAX,
+                    },
+                )?;
                 if frame_start == frame_end || frame_end <= range.start {
                     frame_start = frame_end;
                     continue;

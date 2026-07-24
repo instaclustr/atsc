@@ -16,7 +16,7 @@ limitations under the License.
 
 use crate::compressor::{BinConfig, Compressor};
 use crate::decoder::{Decoder, FrameInfo, FrameInfoIter};
-use crate::error::{DecodeError, DecodeLimits, EncodeError};
+use crate::error::{validate_encode_input, DecodeError, DecodeLimits, EncodeError};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
 //use bincode::{Decode, Encode};
@@ -38,6 +38,8 @@ impl CompressedStream {
 
     /// Compress a chunk of data adding it as a new frame to the current stream
     pub fn compress_chunk(&mut self, chunk: &[f64]) {
+        self.ensure_frame_available()
+            .expect("BRO v1 frame limit exceeded before stream mutation");
         let mut compressor_frame = CompressorFrame::new(None);
         compressor_frame.compress(chunk);
         compressor_frame.close();
@@ -47,6 +49,8 @@ impl CompressedStream {
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
     pub fn compress_chunk_with(&mut self, chunk: &[f64], compressor: Compressor) {
+        self.ensure_frame_available()
+            .expect("BRO v1 frame limit exceeded before stream mutation");
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         compressor_frame.compress(chunk);
         compressor_frame.close();
@@ -73,6 +77,8 @@ impl CompressedStream {
         max_error: f32,
         compression_speed: usize,
     ) -> Result<(), EncodeError> {
+        validate_encode_input(chunk)?;
+        self.ensure_frame_available()?;
         debug!(
             "Compressing chunk bounded with a max error of {}",
             max_error
@@ -87,8 +93,19 @@ impl CompressedStream {
         }
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
-        self.header.add_frame();
+        self.header
+            .try_add_frame()
+            .expect("preflighted BRO v1 frame insertion must succeed");
         Ok(())
+    }
+
+    fn ensure_frame_available(&self) -> Result<(), EncodeError> {
+        if self.data_frames.len() >= usize::from(u8::MAX) {
+            return Err(EncodeError::FrameLimitExceeded {
+                limit: usize::from(u8::MAX),
+            });
+        }
+        self.header.ensure_frame_available()
     }
 
     /// Transforms the whole CompressedStream into bytes to be written to a file
@@ -124,6 +141,33 @@ impl CompressedStream {
         let header_len = data.len().min(9);
         let header = CompressorHeader::try_from_slice(&data[..header_len])?;
         let binary_data = &data[9..];
+        let header_frames = usize::from(header.get_frame_count());
+        let (declared_body_frames, _prefix_bytes): (usize, usize) =
+            bincode::decode_from_slice(binary_data, BinConfig::get_decode()).map_err(|source| {
+                DecodeError::Bincode {
+                    context: "BRO frame vector length",
+                    source,
+                }
+            })?;
+        if header_frames > limits.max_frames {
+            return Err(DecodeError::FrameLimitExceeded {
+                actual: header_frames,
+                limit: limits.max_frames,
+            });
+        }
+        if declared_body_frames > limits.max_frames {
+            return Err(DecodeError::FrameLimitExceeded {
+                actual: declared_body_frames,
+                limit: limits.max_frames,
+            });
+        }
+        if header_frames != declared_body_frames {
+            return Err(DecodeError::FrameCountMismatch {
+                header: header_frames,
+                body: declared_body_frames,
+            });
+        }
+
         let (data_frames, consumed): (Vec<CompressorFrame>, usize) =
             bincode::decode_from_slice(binary_data, BinConfig::get_decode()).map_err(|source| {
                 DecodeError::Bincode {
@@ -138,18 +182,11 @@ impl CompressedStream {
             });
         }
 
-        let header_frames = usize::from(header.get_frame_count());
         let body_frames = data_frames.len();
         if header_frames != body_frames {
             return Err(DecodeError::FrameCountMismatch {
                 header: header_frames,
                 body: body_frames,
-            });
-        }
-        if body_frames > limits.max_frames {
-            return Err(DecodeError::FrameLimitExceeded {
-                actual: body_frames,
-                limit: limits.max_frames,
             });
         }
 
@@ -180,12 +217,19 @@ impl CompressedStream {
     }
 
     pub fn sample_count(&self) -> usize {
-        self.data_frames
-            .iter()
-            .try_fold(0_usize, |samples, frame| {
-                samples.checked_add(frame.sample_count())
-            })
+        self.try_sample_count()
             .expect("compressed stream sample count overflowed usize")
+    }
+
+    pub(crate) fn try_sample_count(&self) -> Result<usize, DecodeError> {
+        self.data_frames.iter().try_fold(0_usize, |samples, frame| {
+            samples
+                .checked_add(frame.sample_count())
+                .ok_or(DecodeError::AllocationFailed {
+                    context: "stream sample metadata",
+                    requested: usize::MAX,
+                })
+        })
     }
 
     pub fn frame_info(&self) -> impl ExactSizeIterator<Item = FrameInfo> + '_ {

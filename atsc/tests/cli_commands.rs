@@ -4,7 +4,10 @@ use std::{
     process::{Command, Output},
 };
 
-use atsc::compressor::{BinConfig, Compressor};
+use atsc::{
+    compressor::{constant::Constant, BinConfig, Compressor},
+    optimizer::utils::Bitdepth,
+};
 use serde_json::Value;
 use tempfile::tempdir;
 use wavbrro::wavbrro::WavBrro;
@@ -67,6 +70,24 @@ fn bro_with_invalid_inner_payload() -> Vec<u8> {
         BinConfig::get(),
     )
     .expect("invalid inner fixture must encode");
+    bytes
+}
+
+fn bro_with_non_finite_constant() -> Vec<u8> {
+    let mut bytes = b"BRRO".to_vec();
+    bytes.extend_from_slice(&1_u32.to_le_bytes());
+    bytes.push(1);
+    bincode::encode_into_std_write(
+        vec![EncodedFrame {
+            frame_size: 0,
+            sample_count: 1,
+            compressor: Compressor::Constant,
+            data: Constant::new(1, f64::NAN, Bitdepth::F64).to_bytes(),
+        }],
+        &mut bytes,
+        BinConfig::get(),
+    )
+    .expect("non-finite inner fixture must encode");
     bytes
 }
 
@@ -163,6 +184,60 @@ fn verify_fully_decodes_inner_payloads() {
         stderr.contains("Auto is not a stored frame codec"),
         "{stderr}"
     );
+}
+
+#[test]
+fn verify_rejects_non_finite_codec_parameters() {
+    let temp = tempdir().unwrap();
+    let fixture = temp.path().join("non-finite.bro");
+    fs::write(&fixture, bro_with_non_finite_constant()).unwrap();
+
+    let verification = command().arg("verify").arg(&fixture).output().unwrap();
+
+    assert_eq!(verification.status.code(), Some(EXIT_DECODE));
+    let stderr = String::from_utf8_lossy(&verification.stderr);
+    assert!(stderr.contains("constant value must be finite"), "{stderr}");
+}
+
+#[test]
+fn bro_input_above_default_limit_returns_typed_decode_error() {
+    let temp = tempdir().unwrap();
+    let fixture = temp.path().join("oversized.bro");
+    let file = fs::File::create(&fixture).unwrap();
+    file.set_len((256_u64 * 1024 * 1024) + 1).unwrap();
+
+    let output = command().arg("inspect").arg(&fixture).output().unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_DECODE));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("above configured limit 268435456"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn cli_reports_non_finite_encoder_input_with_its_index() {
+    let temp = tempdir().unwrap();
+    let input = temp.path().join("non-finite.wbro");
+    write_wbro(&input, &[1.0, f64::NAN, 3.0]);
+    let output_path = temp.path().join("output.bro");
+
+    let output = command()
+        .arg("compress")
+        .arg(&input)
+        .arg("--compressor")
+        .arg("noop")
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_ENCODE));
+    assert!(!output_path.exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("index 1 is not finite"), "{stderr}");
+    assert!(!stderr.contains("panicked at"), "{stderr}");
 }
 
 #[test]
@@ -276,6 +351,62 @@ fn directory_compression_filters_initial_entries_and_keeps_names() {
     assert_eq!(fs::read(existing_bro).unwrap(), existing_bytes);
     assert!(!directory.join("existing.wbro").exists());
     assert!(!directory.join("ignored.bro").exists());
+}
+
+fn directory_supports_case_distinct_names(directory: &std::path::Path, names: &[&str]) -> bool {
+    let entries = fs::read_dir(directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    names
+        .iter()
+        .all(|name| entries.iter().any(|entry| entry == OsStr::new(name)))
+}
+
+#[test]
+fn directory_compression_rejects_output_collisions_before_writing() {
+    let temp = tempdir().unwrap();
+    let directory = temp.path().join("inputs");
+    fs::create_dir(&directory).unwrap();
+    write_wbro(&directory.join("series.wbro"), &[1.0]);
+    write_wbro(&directory.join("series.WBRO"), &[2.0]);
+    if !directory_supports_case_distinct_names(&directory, &["series.wbro", "series.WBRO"]) {
+        return;
+    }
+
+    let output = command()
+        .arg("compress")
+        .arg(&directory)
+        .arg("--compressor")
+        .arg("noop")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_USAGE));
+    assert!(!directory.join("series.bro").exists());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("map to the same output"));
+}
+
+#[test]
+fn directory_decompression_rejects_output_collisions_before_writing() {
+    let temp = tempdir().unwrap();
+    let directory = temp.path().join("inputs");
+    fs::create_dir(&directory).unwrap();
+    write_constant_fixture(&directory.join("series.bro"));
+    write_constant_fixture(&directory.join("series.BRO"));
+    if !directory_supports_case_distinct_names(&directory, &["series.bro", "series.BRO"]) {
+        return;
+    }
+
+    let output = command()
+        .arg("decompress")
+        .arg(&directory)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_USAGE));
+    assert!(!directory.join("series.wbro").exists());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("map to the same output"));
 }
 
 #[test]

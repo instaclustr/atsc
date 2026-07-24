@@ -16,7 +16,7 @@ limitations under the License.
 
 use crate::{
     decoder::Decoder,
-    error::DecodeError,
+    error::{reserve_decode, DecodeError},
     optimizer::utils::DataStats,
     utils::{error::calculate_error, next_size},
 };
@@ -416,6 +416,22 @@ impl FFT {
                 ),
             });
         }
+        if !fft.min_value.is_finite() || !fft.max_value.is_finite() {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::FFT,
+                reason: "minimum and maximum values must be finite".to_string(),
+            });
+        }
+        if fft
+            .frequencies
+            .iter()
+            .any(|frequency| !frequency.freq_real.is_finite() || !frequency.freq_img.is_finite())
+        {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::FFT,
+                reason: "frequency components must be finite".to_string(),
+            });
+        }
         Ok(fft)
     }
 
@@ -453,7 +469,8 @@ impl FFT {
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
         let mut decoder = Decoder::new();
         let mut output = Vec::with_capacity(frame_size);
-        self.append_to_data(frame_size, &mut decoder, &mut output);
+        self.append_to_data(frame_size, &mut decoder, &mut output)
+            .expect("failed to allocate FFT output");
         output
     }
 
@@ -462,20 +479,17 @@ impl FFT {
         frame_size: usize,
         decoder: &mut Decoder,
         output: &mut Vec<f64>,
-    ) {
+    ) -> Result<(), DecodeError> {
         if self.max_value == self.min_value {
             debug!("Same max and min, faster decompression!");
-            let new_len = output
-                .len()
-                .checked_add(frame_size)
-                .expect("decoded FFT output length overflowed usize");
-            output.reserve(frame_size);
+            let new_len = reserve_decode(output, frame_size, "FFT output")?;
             output.resize(new_len, self.max_value as f64);
-            return;
+            return Ok(());
         }
         // Was this processed to reduce the Gibbs phenomeon?
+        let gibbs_frame_size = checked_reconstructed_len(frame_size)?;
         let trim_sizes = if frame_size >= 128 {
-            let added_len = next_size(frame_size) - frame_size;
+            let added_len = gibbs_frame_size - frame_size;
             let prefix_len = added_len / 2;
             let suffix_len = added_len - prefix_len;
             debug!(
@@ -486,24 +500,54 @@ impl FFT {
         } else {
             (0, 0)
         };
-        let gibbs_frame_size = frame_size + trim_sizes.0 + trim_sizes.1;
         let (planner, data) = decoder.fft_scratch();
         data.clear();
+        reserve_decode(data, gibbs_frame_size, "FFT complex scratch")?;
         data.resize(gibbs_frame_size, Complex { re: 0.0, im: 0.0 });
         self.populate_mirrored_freqs(data);
         let fft = planner.plan_fft_inverse(gibbs_frame_size);
         fft.process(data);
         let len = gibbs_frame_size as f32;
-        output.reserve(frame_size);
-        output.extend(
-            data.iter()
-                // trim the exceses data
-                .skip(trim_sizes.0)
-                .take(data.len() - trim_sizes.0 - trim_sizes.1)
-                // We only need the real part
-                .map(|&f| self.round(f.re / len, DECIMAL_PRECISION.into())),
-        );
+        reserve_decode(output, frame_size, "FFT output")?;
+        for frequency in data
+            .iter()
+            // trim the excess data
+            .skip(trim_sizes.0)
+            .take(data.len() - trim_sizes.0 - trim_sizes.1)
+        {
+            let value = self.round(frequency.re / len, DECIMAL_PRECISION.into());
+            if !value.is_finite() {
+                return Err(DecodeError::InvalidFrame {
+                    codec: Compressor::FFT,
+                    reason: "inverse transform produced a non-finite sample".to_string(),
+                });
+            }
+            output.push(value);
+        }
+        Ok(())
     }
+}
+
+fn checked_reconstructed_len(samples: usize) -> Result<usize, DecodeError> {
+    if samples < 128 {
+        return Ok(samples);
+    }
+
+    let mut reconstructed = samples
+        .checked_add(1)
+        .ok_or(DecodeError::AllocationFailed {
+            context: "FFT complex scratch",
+            requested: usize::MAX,
+        })?;
+    while !crate::utils::is_decomposable(reconstructed) {
+        reconstructed = reconstructed
+            .checked_add(1)
+            .ok_or(DecodeError::AllocationFailed {
+                context: "FFT complex scratch",
+                requested: usize::MAX,
+            })?;
+    }
+    Ok(reconstructed)
 }
 
 /// Compresses a data segment via FFT.

@@ -15,13 +15,12 @@ limitations under the License.
 */
 
 use crate::decoder::Decoder;
-use crate::error::DecodeError;
+use crate::error::{reserve_decode, DecodeError};
 use crate::optimizer::utils::{Bitdepth, DataStats};
 use crate::utils::{error::calculate_error, round_and_limit_f64, round_f64, DECIMAL_PRECISION};
 
 use super::{decode_payload, BinConfig, Compressor, CompressorResult};
 use bincode::{Decode, Encode};
-use inverse_distance_weight::IDW;
 use log::{debug, info, trace};
 use splines::{Interpolation, Key, Spline};
 
@@ -325,6 +324,22 @@ impl Polynomial {
             PolynomialType::Polynomial => Compressor::Polynomial,
             PolynomialType::Idw => Compressor::Idw,
         };
+        if !polynomial.min.is_finite() || !polynomial.max.is_finite() {
+            return Err(DecodeError::InvalidFrame {
+                codec,
+                reason: "minimum and maximum values must be finite".to_string(),
+            });
+        }
+        if polynomial
+            .data_points
+            .iter()
+            .any(|value| !value.is_finite())
+        {
+            return Err(DecodeError::InvalidFrame {
+                codec,
+                reason: "data points must be finite".to_string(),
+            });
+        }
         if polynomial.point_step == 0 {
             return Err(DecodeError::InvalidFrame {
                 codec,
@@ -347,8 +362,23 @@ impl Polynomial {
 
     /// Since IDW and Polynomial are the same code everywhere, this function prepares the data
     /// to be used by one of the polynomial decompression methods
-    fn get_positions(&self, frame_size: usize) -> Vec<usize> {
-        let mut points = Vec::with_capacity(frame_size);
+    fn get_positions(&self, frame_size: usize) -> Result<Vec<usize>, DecodeError> {
+        let codec = match self.id {
+            PolynomialType::Polynomial => Compressor::Polynomial,
+            PolynomialType::Idw => Compressor::Idw,
+        };
+        if frame_size == 0 {
+            return Err(DecodeError::InvalidFrame {
+                codec,
+                reason: "non-constant interpolation frame has zero samples".to_string(),
+            });
+        }
+        let mut points = Vec::new();
+        reserve_decode(
+            &mut points,
+            self.data_points.len(),
+            "Polynomial/IDW positions",
+        )?;
         for position_value in (0..frame_size).step_by(self.point_step as usize) {
             points.push(position_value);
         }
@@ -357,13 +387,14 @@ impl Polynomial {
             points.push(frame_size - 1);
         }
         trace!("points {:?}", points);
-        points
+        Ok(points)
     }
 
     pub fn polynomial_to_data(&self, frame_size: usize) -> Vec<f64> {
         let mut decoder = Decoder::new();
         let mut output = Vec::with_capacity(frame_size);
-        self.append_polynomial_to_data(frame_size, &mut decoder, &mut output);
+        self.append_polynomial_to_data(frame_size, &mut decoder, &mut output)
+            .expect("failed to allocate Polynomial output");
         output
     }
 
@@ -374,10 +405,11 @@ impl Polynomial {
         frame_size: usize,
         _decoder: &mut Decoder,
         output: &mut Vec<f64>,
-    ) {
+    ) -> Result<(), DecodeError> {
         // Create the interpolation
-        let points = self.get_positions(frame_size);
-        let mut key_vec = Vec::with_capacity(points.len());
+        let points = self.get_positions(frame_size)?;
+        let mut key_vec = Vec::new();
+        reserve_decode(&mut key_vec, points.len(), "Polynomial spline keys")?;
         for (current_key, (point, value)) in points.iter().zip(self.data_points.iter()).enumerate()
         {
             // CatmullRom needs at least 1 key behind and 2 ahead so this check.
@@ -392,50 +424,60 @@ impl Polynomial {
         // Build the data
         // There is a problem with the spline calculation, that it might get a value for all positions. In those cases
         // we return the good value calculated. If that doesn't exist, we return the minimum value
-        output.reserve(frame_size);
+        reserve_decode(output, frame_size, "Polynomial output")?;
         let mut prev = self.min;
         for value in 0..frame_size {
             let spline_value = spline.clamped_sample(value as f64).unwrap_or(prev);
             prev = spline_value;
-            output.push(round_and_limit_f64(
-                spline_value,
-                self.min,
-                self.max,
-                DECIMAL_PRECISION,
-            ));
+            let reconstructed =
+                round_and_limit_f64(spline_value, self.min, self.max, DECIMAL_PRECISION);
+            if !reconstructed.is_finite() {
+                return Err(DecodeError::InvalidFrame {
+                    codec: Compressor::Polynomial,
+                    reason: "interpolation produced a non-finite sample".to_string(),
+                });
+            }
+            output.push(reconstructed);
         }
+        Ok(())
     }
 
     pub fn idw_to_data(&self, frame_size: usize) -> Vec<f64> {
         let mut decoder = Decoder::new();
         let mut output = Vec::with_capacity(frame_size);
-        self.append_idw_to_data(frame_size, &mut decoder, &mut output);
+        self.append_idw_to_data(frame_size, &mut decoder, &mut output)
+            .expect("failed to allocate IDW output");
         output
     }
 
-    fn append_idw_to_data(&self, frame_size: usize, _decoder: &mut Decoder, output: &mut Vec<f64>) {
-        // IDW needs f64 for points :(
-        let points = self
-            .get_positions(frame_size)
-            .iter()
-            .map(|&f| f as f64)
-            .collect();
-        let idw = IDW::new(points, self.data_points.clone());
-        output.reserve(frame_size);
-        output.extend((0..frame_size).map(|f| {
-            round_and_limit_f64(
-                idw.evaluate(f as f64),
-                self.min,
-                self.max,
-                DECIMAL_PRECISION,
-            )
-        }));
+    fn append_idw_to_data(
+        &self,
+        frame_size: usize,
+        _decoder: &mut Decoder,
+        output: &mut Vec<f64>,
+    ) -> Result<(), DecodeError> {
+        let points = self.get_positions(frame_size)?;
+        reserve_decode(output, frame_size, "IDW output")?;
+        for position in 0..frame_size {
+            let interpolated = evaluate_idw(&points, &self.data_points, position);
+            let reconstructed =
+                round_and_limit_f64(interpolated, self.min, self.max, DECIMAL_PRECISION);
+            if !reconstructed.is_finite() {
+                return Err(DecodeError::InvalidFrame {
+                    codec: Compressor::Idw,
+                    reason: "interpolation produced a non-finite sample".to_string(),
+                });
+            }
+            output.push(reconstructed);
+        }
+        Ok(())
     }
 
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
         let mut decoder = Decoder::new();
         let mut output = Vec::with_capacity(frame_size);
-        self.append_to_data(frame_size, &mut decoder, &mut output);
+        self.append_to_data(frame_size, &mut decoder, &mut output)
+            .expect("failed to allocate Polynomial/IDW output");
         output
     }
 
@@ -444,16 +486,12 @@ impl Polynomial {
         frame_size: usize,
         decoder: &mut Decoder,
         output: &mut Vec<f64>,
-    ) {
+    ) -> Result<(), DecodeError> {
         if self.max == self.min {
             debug!("Same max and min, faster decompression!");
-            let new_len = output
-                .len()
-                .checked_add(frame_size)
-                .expect("decoded Polynomial output length overflowed usize");
-            output.reserve(frame_size);
+            let new_len = reserve_decode(output, frame_size, "Polynomial/IDW output")?;
             output.resize(new_len, self.max);
-            return;
+            return Ok(());
         }
         match self.id {
             PolynomialType::Idw => self.append_idw_to_data(frame_size, decoder, output),
@@ -462,6 +500,26 @@ impl Polynomial {
             }
         }
     }
+}
+
+fn evaluate_idw(points: &[usize], values: &[f64], position: usize) -> f64 {
+    if let Some(index) = points.iter().position(|point| *point == position) {
+        return values[index];
+    }
+
+    let position = position as f64;
+    let weight_sum = points.iter().fold(0.0, |sum, point| {
+        let distance = (position - *point as f64).abs();
+        sum + 1.0 / distance.powf(2.0)
+    });
+    points
+        .iter()
+        .zip(values)
+        .fold(0.0, |interpolated, (point, value)| {
+            let distance = (position - *point as f64).abs();
+            let weight = 1.0 / distance.powf(2.0);
+            interpolated + (weight / weight_sum) * value
+        })
 }
 
 pub fn polynomial(data: &[f64], p_type: PolynomialType) -> Vec<u8> {

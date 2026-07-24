@@ -76,12 +76,38 @@ struct EncodedFrame {
 }
 
 fn stream_from_encoded_frames(frames: Vec<EncodedFrame>) -> CompressedStream {
+    stream_from_encoded_frames_with_limits(frames, DecodeLimits::default())
+}
+
+fn stream_from_encoded_frames_with_limits(
+    frames: Vec<EncodedFrame>,
+    limits: DecodeLimits,
+) -> CompressedStream {
     let mut bytes = b"BRRO".to_vec();
     bytes.extend_from_slice(&1_u32.to_le_bytes());
     bytes.push(frames.len() as u8);
     bincode::encode_into_std_write(frames, &mut bytes, BinConfig::get())
         .expect("test frames must encode");
-    CompressedStream::try_from_bytes(&bytes).expect("test stream must parse")
+    CompressedStream::try_from_bytes_with_limits(&bytes, limits).expect("test stream must parse")
+}
+
+fn huge_constant_stream() -> CompressedStream {
+    stream_from_encoded_frames_with_limits(
+        vec![EncodedFrame {
+            frame_size: 0,
+            sample_count: usize::MAX,
+            compressor: Compressor::Constant,
+            data: Constant::new(1, 7.0, Bitdepth::U8).to_bytes(),
+        }],
+        DecodeLimits {
+            max_samples: usize::MAX,
+            ..DecodeLimits::default()
+        },
+    )
+}
+
+fn assert_allocation_error<T>(result: Result<T, DecodeError>) {
+    assert!(matches!(result, Err(DecodeError::AllocationFailed { .. })));
 }
 
 fn stream_with_invalid_outer_frames() -> CompressedStream {
@@ -557,6 +583,46 @@ fn frame_limit_is_enforced() {
 }
 
 #[test]
+fn frame_limit_preflight_wins_over_truncated_outer_frame_data() {
+    let mut data = b"BRRO".to_vec();
+    data.extend_from_slice(&1_u32.to_le_bytes());
+    data.push(1);
+    data.push(1);
+
+    assert!(matches!(
+        CompressedStream::try_from_bytes_with_limits(
+            &data,
+            DecodeLimits {
+                max_frames: 0,
+                ..DecodeLimits::default()
+            },
+        ),
+        Err(DecodeError::FrameLimitExceeded {
+            actual: 1,
+            limit: 0
+        })
+    ));
+}
+
+#[test]
+fn outer_frame_count_mismatch_is_rejected_before_frame_allocation() {
+    for (header, body) in [(1_u8, 2_u8), (2_u8, 1_u8)] {
+        let mut data = b"BRRO".to_vec();
+        data.extend_from_slice(&1_u32.to_le_bytes());
+        data.push(header);
+        data.push(body);
+
+        assert!(matches!(
+            CompressedStream::try_from_bytes(&data),
+            Err(DecodeError::FrameCountMismatch {
+                header: actual_header,
+                body: actual_body,
+            }) if actual_header == usize::from(header) && actual_body == usize::from(body)
+        ));
+    }
+}
+
+#[test]
 fn sample_limit_is_enforced() {
     assert!(matches!(
         CompressedStream::try_from_bytes_with_limits(
@@ -582,7 +648,10 @@ fn outer_frame_vector_length_prefix_is_bounded() {
 
     assert!(matches!(
         CompressedStream::try_from_bytes(&data),
-        Err(DecodeError::Bincode { .. })
+        Err(DecodeError::FrameLimitExceeded {
+            actual: usize::MAX,
+            limit: 255
+        })
     ));
 }
 
@@ -639,6 +708,71 @@ fn codec_payloads_reject_wrong_ids() {
             ..
         })
     ));
+}
+
+#[test]
+fn codec_payloads_reject_non_finite_reconstruction_parameters() {
+    let constant = Constant::new(1, f64::NAN, Bitdepth::F64);
+    assert!(matches!(
+        Constant::try_decompress(&constant.to_bytes()),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::Constant,
+            ..
+        })
+    ));
+
+    let mut rle = IndexRLE::new(&[1.5], Bitdepth::F64);
+    rle.rle[0].0 = f64::INFINITY;
+    assert!(matches!(
+        IndexRLE::try_decompress(&rle.to_bytes()),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::RLE,
+            ..
+        })
+    ));
+
+    let mut fft = FFT::new(1, 0.0, 1.0);
+    fft.max_value = f32::NAN;
+    assert!(matches!(
+        FFT::try_decompress(&fft.to_bytes()),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::FFT,
+            ..
+        })
+    ));
+
+    let mut fft = FFT::new(1, 0.0, 1.0);
+    fft.frequencies
+        .push(FrequencyPoint::from_complex_with_position(
+            Complex {
+                re: f32::INFINITY,
+                im: 0.0,
+            },
+            0,
+        ));
+    assert!(matches!(
+        FFT::try_decompress(&fft.to_bytes()),
+        Err(DecodeError::InvalidFrame {
+            codec: Compressor::FFT,
+            ..
+        })
+    ));
+
+    for polynomial_type in [PolynomialType::Polynomial, PolynomialType::Idw] {
+        let codec = match polynomial_type {
+            PolynomialType::Polynomial => Compressor::Polynomial,
+            PolynomialType::Idw => Compressor::Idw,
+        };
+        let mut polynomial = Polynomial::new(2, 0.0, 1.0, polynomial_type, Bitdepth::F64);
+        polynomial.data_points.extend([0.0, f64::NEG_INFINITY]);
+        assert!(matches!(
+            Polynomial::try_decompress(&polynomial.to_bytes()),
+            Err(DecodeError::InvalidFrame {
+                codec: actual,
+                ..
+            }) if actual == codec
+        ));
+    }
 }
 
 #[test]
@@ -843,6 +977,61 @@ fn fft_overflowing_sample_count_returns_typed_error_without_allocating() {
 }
 
 #[test]
+fn constant_decode_reports_capacity_failure_instead_of_panicking() {
+    let payload = Constant::new(1, 7.0, Bitdepth::U8).to_bytes();
+
+    assert_allocation_error(Compressor::Constant.try_decompress(usize::MAX, &payload));
+}
+
+#[test]
+fn rle_decode_reports_output_capacity_failure_instead_of_panicking() {
+    let payload = IndexRLE::new(&[7.0], Bitdepth::U8).to_bytes();
+
+    assert_allocation_error(Compressor::RLE.try_decompress(usize::MAX, &payload));
+}
+
+#[test]
+fn fft_decode_reports_scratch_capacity_failure_instead_of_panicking() {
+    let samples = 3_usize
+        .checked_mul(1_usize << (usize::BITS - 3))
+        .and_then(|value| value.checked_sub(1))
+        .expect("test sample count must fit");
+    let mut fft = FFT::new(1, 0.0, 1.0);
+    fft.frequencies
+        .push(FrequencyPoint::from_complex_with_position(
+            Complex { re: 1.0, im: 0.0 },
+            0,
+        ));
+
+    assert_allocation_error(Compressor::FFT.try_decompress(samples, &fft.to_bytes()));
+}
+
+#[test]
+fn decoder_allocation_failures_are_typed_and_transactional_for_all_public_paths() {
+    let stream = huge_constant_stream();
+    let mut decoder = Decoder::new();
+
+    assert_allocation_error(decoder.decode(&stream));
+
+    let prefix = vec![-1.0, -2.0];
+    let mut full_output = prefix.clone();
+    assert_allocation_error(decoder.decode_into(&stream, &mut full_output));
+    assert_eq!(full_output, prefix);
+
+    let mut frame_output = prefix.clone();
+    assert_allocation_error(decoder.decode_frame_into(&stream, 0, &mut frame_output));
+    assert_eq!(frame_output, prefix);
+
+    let mut range_output = prefix.clone();
+    assert_allocation_error(decoder.decode_range_into(&stream, 0..usize::MAX, &mut range_output));
+    assert_eq!(range_output, prefix);
+
+    let mut partial_range_output = prefix.clone();
+    assert_allocation_error(decoder.decode_range_into(&stream, 0..1, &mut partial_range_output));
+    assert_eq!(partial_range_output, prefix);
+}
+
+#[test]
 fn polynomial_payload_type_must_match_frame_codec() {
     let mut idw = Polynomial::new(1, 0.0, 1.0, PolynomialType::Idw, Bitdepth::U8);
     idw.data_points.push(0.0);
@@ -920,4 +1109,16 @@ fn valid_fixtures_use_the_fallible_decode_path() {
             .unwrap_or_else(|error| panic!("{name} fixture failed to decompress: {error}"));
         assert!(!samples.is_empty(), "{name} fixture decoded no samples");
     }
+}
+
+#[test]
+fn frame_size_is_opaque_legacy_metadata_and_does_not_affect_decoding() {
+    let stream = stream_from_encoded_frames(vec![EncodedFrame {
+        frame_size: usize::MAX,
+        sample_count: 3,
+        compressor: Compressor::Constant,
+        data: Constant::new(3, 7.0, Bitdepth::U8).to_bytes(),
+    }]);
+
+    assert_eq!(stream.try_decompress().unwrap(), [7.0, 7.0, 7.0]);
 }

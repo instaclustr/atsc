@@ -71,7 +71,10 @@ fn reject_file_above_bound(compressor: &str) {
     let tmp_dir = tempdir().unwrap();
     let path = tmp_dir.path();
     let input = path.join("1.wbro");
-    std::fs::copy("tests/wbros/memory_used.wbro", &input).unwrap();
+    let samples = (0..131_072)
+        .map(|index| if index % 2 == 0 { 1.0 } else { 3.0 })
+        .collect::<Vec<_>>();
+    WavBrro::to_file_with_data(&input, &samples);
 
     let command = std::env!("CARGO_BIN_EXE_atsc");
     let output = std::process::Command::new(command)
@@ -117,8 +120,9 @@ fn compress_dir(compressor: &str) {
     let tmp_dir = tempdir().unwrap();
     let input = tmp_dir.path().join("input");
     std::fs::create_dir(&input).unwrap();
-    std::fs::copy("tests/wbros/memory_used.wbro", input.join("1.wbro")).unwrap();
-    std::fs::copy("tests/wbros/uptime.wbro", input.join("2.wbro")).unwrap();
+    let samples = finite_test_samples();
+    WavBrro::to_file_with_data(&input.join("1.wbro"), &samples);
+    WavBrro::to_file_with_data(&input.join("2.wbro"), &samples);
 
     run_compressor(&[input.to_str().unwrap(), "--compressor", compressor]);
     assert!(input.join("1.bro").is_file());
@@ -129,10 +133,9 @@ fn compress_bounded_dir(compressor: &str) {
     let tmp_dir = tempdir().unwrap();
     let input = tmp_dir.path().join("input");
     std::fs::create_dir(&input).unwrap();
-    // uptime.wbro contains zeros, so its source-relative MAPE is undefined.
-    // Use two bounded-valid fixtures to retain multi-file directory coverage.
-    std::fs::copy("tests/wbros/memory_used.wbro", input.join("1.wbro")).unwrap();
-    std::fs::copy("tests/wbros/memory_used.wbro", input.join("2.wbro")).unwrap();
+    let samples = finite_test_samples();
+    WavBrro::to_file_with_data(&input.join("1.wbro"), &samples);
+    WavBrro::to_file_with_data(&input.join("2.wbro"), &samples);
 
     run_compressor(&[input.to_str().unwrap(), "--compressor", compressor]);
     assert!(input.join("1.bro").is_file());
@@ -142,7 +145,7 @@ fn compress_bounded_dir(compressor: &str) {
 fn compress_file(compressor: &str) {
     let tmp_dir = tempdir().unwrap();
     let path = tmp_dir.path();
-    std::fs::copy("tests/wbros/memory_used.wbro", path.join("1.wbro")).unwrap();
+    WavBrro::to_file_with_data(&path.join("1.wbro"), &finite_test_samples());
 
     run_compressor(&[
         path.join("1.wbro").to_str().unwrap(),
@@ -155,7 +158,7 @@ fn compress_file(compressor: &str) {
 fn compress_file_with_speed(speed: u8) {
     let tmp_dir = tempdir().unwrap();
     let path = tmp_dir.path();
-    std::fs::copy("tests/wbros/memory_used.wbro", path.join("1.wbro")).unwrap();
+    WavBrro::to_file_with_data(&path.join("1.wbro"), &finite_test_samples());
 
     run_compressor(&[
         path.join("1.wbro").to_str().unwrap(),
@@ -163,6 +166,12 @@ fn compress_file_with_speed(speed: u8) {
         &speed.to_string(),
     ]);
     assert!(path.join("1.bro").is_file());
+}
+
+fn finite_test_samples() -> Vec<f64> {
+    (0..4096)
+        .map(|index| 10.0 + ((index / 64) % 8) as f64)
+        .collect()
 }
 
 fn run_compressor(args: &[&str]) {

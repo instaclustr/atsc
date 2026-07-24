@@ -14,8 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use super::{decode_payload, BinConfig, Compressor};
-use crate::{decoder::Decoder, error::DecodeError};
+use super::{decode_payload, BinConfig, Compressor, CompressorResult};
+use crate::{
+    decoder::Decoder,
+    error::{reserve_decode, DecodeError},
+};
 use bincode::{Decode, Encode};
 use log::{debug, info};
 
@@ -86,9 +89,10 @@ impl Noop {
         _frame_size: usize,
         _decoder: &mut Decoder,
         output: &mut Vec<f64>,
-    ) {
-        output.reserve(self.data.len());
+    ) -> Result<(), DecodeError> {
+        reserve_decode(output, self.data.len(), "Noop output")?;
         output.extend(self.data.iter().map(|&value| value as f64));
+        Ok(())
     }
 }
 
@@ -99,11 +103,32 @@ pub fn noop(data: &[f64]) -> Vec<u8> {
     c.to_bytes()
 }
 
+pub fn noop_compressor(data: &[f64]) -> CompressorResult {
+    info!("Initializing bounded Noop Compressor");
+    let mut compressor = Noop::new(data.len());
+    compressor.compress(data);
+    let error = data
+        .iter()
+        .zip(&compressor.data)
+        .map(|(original, encoded)| {
+            let reconstructed = *encoded as f64;
+            if *original == reconstructed {
+                0.0
+            } else {
+                ((reconstructed - original) / original).abs()
+            }
+        })
+        .sum::<f64>()
+        / data.len() as f64;
+    CompressorResult::new(compressor.to_bytes(), error)
+}
+
 pub fn noop_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
     let c = Noop::decompress(compressed_data);
     let mut decoder = Decoder::new();
     let mut output = Vec::with_capacity(c.data.len());
-    c.append_to_data(sample_number, &mut decoder, &mut output);
+    c.append_to_data(sample_number, &mut decoder, &mut output)
+        .expect("failed to allocate Noop output");
     output
 }
 

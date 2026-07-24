@@ -121,10 +121,13 @@ atsc decompress metrics.bro -o restored.wbro
 
 Compression defaults to automatic codec selection with a 3% maximum error.
 Directory input is supported for compression and decompression; ATSC snapshots
-and filters the initial entries before processing each eligible input once.
+and filters the initial entries, rejects duplicate derived output paths, then
+processes each eligible input once.
 `-o/--output` is only valid for a single input file.
-WBRO bodies and CSV structure are validated and return typed input-format
-errors; file open/read/write failures retain the I/O exit status.
+BRO, WBRO, and CSV reads default to 256 MiB and 33,423,360 samples. WBRO
+metadata and CSV structure are validated before unbounded allocations, and
+non-finite encoder inputs report their sample index. File open/read/write
+failures retain the I/O exit status.
 
 Existing invocations remain available as compatibility mode and use the same
 safe implementation:
@@ -148,6 +151,10 @@ let stream = CompressedStream::try_from_bytes(&bytes)?;
 let mut decoder = Decoder::new();
 let values = decoder.decode_range(&stream, 1_000..2_000)?;
 ```
+
+BRO v1's serialized `frame_size` value is opaque legacy host-layout metadata,
+not an encoded frame length, and is intentionally ignored while decoding.
+An authoritative frame byte length requires a future BRO v2 field.
 
 See [the usage guide](docs/usage.md) for all compression options, output naming,
 JSON behavior, and stable exit codes.

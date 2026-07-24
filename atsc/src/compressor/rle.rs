@@ -17,7 +17,7 @@ limitations under the License.
 use crate::{
     compressor::CompressorResult,
     decoder::Decoder,
-    error::DecodeError,
+    error::{reserve_decode, DecodeError},
     optimizer::utils::{Bitdepth, DataStats},
 };
 
@@ -206,6 +206,12 @@ impl IndexRLE {
                 ),
             });
         }
+        if rle.rle.iter().any(|(value, _)| !value.is_finite()) {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::RLE,
+                reason: "run values must be finite".to_string(),
+            });
+        }
         Ok(rle)
     }
 
@@ -218,7 +224,8 @@ impl IndexRLE {
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
         let mut decoder = Decoder::new();
         let mut output = Vec::with_capacity(frame_size);
-        self.append_to_data(frame_size, &mut decoder, &mut output);
+        self.append_to_data(frame_size, &mut decoder, &mut output)
+            .expect("failed to allocate RLE output");
         output
     }
 
@@ -227,11 +234,20 @@ impl IndexRLE {
         frame_size: usize,
         decoder: &mut Decoder,
         output: &mut Vec<f64>,
-    ) {
-        let total_elements: usize = self.rle.iter().map(|(_, indices)| indices.len()).sum();
+    ) -> Result<(), DecodeError> {
+        let total_elements = self
+            .rle
+            .iter()
+            .try_fold(0_usize, |total, (_, indices)| {
+                total.checked_add(indices.len())
+            })
+            .ok_or(DecodeError::AllocationFailed {
+                context: "RLE run scratch",
+                requested: usize::MAX,
+            })?;
         let flattened = decoder.rle_scratch();
         flattened.clear();
-        flattened.reserve(total_elements);
+        reserve_decode(flattened, total_elements, "RLE run scratch")?;
 
         // Flatten the RLE representation into a vector of (index, value) pairs
         for (value, indices) in &self.rle {
@@ -244,10 +260,7 @@ impl IndexRLE {
         flattened.sort_unstable_by_key(|&(index, _)| index);
 
         let base = output.len();
-        let new_len = base
-            .checked_add(frame_size)
-            .expect("decoded RLE output length overflowed usize");
-        output.reserve(frame_size);
+        let new_len = reserve_decode(output, frame_size, "RLE output")?;
         output.resize(new_len, 0.0);
 
         // Fill the sequence based on the sorted (index, value) pairs
@@ -265,6 +278,7 @@ impl IndexRLE {
             }
             output[base + start_index..base + end_index].fill(value);
         }
+        Ok(())
     }
 }
 

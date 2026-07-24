@@ -15,23 +15,28 @@ limitations under the License.
 */
 
 use std::{
+    collections::HashSet,
     ffi::OsStr,
     fmt, fs,
-    io::{self, Write},
+    fs::File,
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 
 use atsc::{
     compressor::Compressor,
-    csv::{read_samples, read_samples_with_headers, Error as CsvError},
+    csv::{
+        read_values_with_headers_and_limits, read_values_with_limits, CsvReadLimits,
+        Error as CsvError,
+    },
     data::CompressedStream,
     decoder::Decoder,
-    error::{DecodeError, EncodeError},
+    error::{DecodeError, DecodeLimits, EncodeError},
     optimizer::OptimizerPlan,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
-use wavbrro::wavbrro::{Error as WavBrroError, WavBrro};
+use wavbrro::wavbrro::{Error as WavBrroError, ReadLimits as WavBrroReadLimits, WavBrro};
 
 /// Stable process exit codes for failures handled by the CLI boundary.
 pub const EXIT_IO: i32 = 1;
@@ -363,9 +368,8 @@ fn compress_path(
     if metadata.is_dir() {
         reject_directory_output(output)?;
         let extension = if options.csv { "csv" } else { "wbro" };
-        return process_directory(input, extension, |path| {
-            let output = path.with_extension("bro");
-            compress_file(path, &output, options)
+        return process_directory(input, extension, "bro", |path, output| {
+            compress_file(path, output, options)
         });
     }
     Err(CliError::Usage(format!(
@@ -384,9 +388,8 @@ fn decompress_path(input: &Path, output: Option<&Path>, verbose: bool) -> Result
     }
     if metadata.is_dir() {
         reject_directory_output(output)?;
-        return process_directory(input, "bro", |path| {
-            let output = path.with_extension("wbro");
-            decompress_file(path, &output, verbose)
+        return process_directory(input, "bro", "wbro", |path, output| {
+            decompress_file(path, output, verbose)
         });
     }
     Err(CliError::Usage(format!(
@@ -407,7 +410,8 @@ fn reject_directory_output(output: Option<&Path>) -> Result<(), CliError> {
 fn process_directory(
     input: &Path,
     extension: &str,
-    mut process: impl FnMut(&Path) -> Result<(), CliError>,
+    output_extension: &str,
+    mut process: impl FnMut(&Path, &Path) -> Result<(), CliError>,
 ) -> Result<(), CliError> {
     let mut entries = fs::read_dir(input)?
         .map(|entry| entry.map(|entry| entry.path()))
@@ -415,15 +419,37 @@ fn process_directory(
     entries.retain(|path| path.is_file() && has_extension(path, extension));
     entries.sort();
 
-    let failures = entries
+    let pairs = entries
         .into_iter()
-        .filter_map(|path| process(&path).err().map(|error| (path, error)))
+        .map(|path| {
+            let output = path.with_extension(output_extension);
+            (path, output)
+        })
+        .collect::<Vec<_>>();
+    validate_unique_outputs(&pairs)?;
+
+    let failures = pairs
+        .into_iter()
+        .filter_map(|(path, output)| process(&path, &output).err().map(|error| (path, error)))
         .collect::<Vec<_>>();
     if failures.is_empty() {
         Ok(())
     } else {
         Err(CliError::Batch(BatchError { failures }))
     }
+}
+
+fn validate_unique_outputs(pairs: &[(PathBuf, PathBuf)]) -> Result<(), CliError> {
+    let mut outputs = HashSet::with_capacity(pairs.len());
+    for (_, output) in pairs {
+        if !outputs.insert(output.clone()) {
+            return Err(CliError::Usage(format!(
+                "multiple directory inputs map to the same output {}",
+                output.display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn has_extension(path: &Path, expected: &str) -> bool {
@@ -451,16 +477,29 @@ fn read_compression_input(
     options: &CompressionOptions,
 ) -> Result<Vec<f64>, CliError> {
     if options.csv {
-        let samples = if options.no_header {
-            read_samples(input).map_err(map_csv_error)?
+        let decode_limits = DecodeLimits::default();
+        let limits = CsvReadLimits {
+            max_input_bytes: decode_limits.max_input_bytes,
+            max_samples: decode_limits.max_samples,
+        };
+        return if options.no_header {
+            read_values_with_limits(input, limits).map_err(map_csv_error)
         } else {
             let (timestamp_field, value_field) = parse_fields(&options.fields)?;
-            read_samples_with_headers(input, timestamp_field, value_field).map_err(map_csv_error)?
+            read_values_with_headers_and_limits(input, timestamp_field, value_field, limits)
+                .map_err(map_csv_error)
         };
-        return Ok(samples.into_iter().map(|sample| sample.value).collect());
     }
 
-    WavBrro::from_file(input).map_err(map_wavbrro_error)
+    let decode_limits = DecodeLimits::default();
+    WavBrro::from_file_with_limits(
+        input,
+        WavBrroReadLimits {
+            max_input_bytes: decode_limits.max_input_bytes,
+            max_samples: decode_limits.max_samples,
+        },
+    )
+    .map_err(map_wavbrro_error)
 }
 
 fn parse_fields(fields: &str) -> Result<(&str, &str), CliError> {
@@ -490,7 +529,7 @@ fn map_csv_error(error: CsvError) -> CliError {
 }
 
 fn compress_data(data: &[f64], options: &CompressionOptions) -> Result<Vec<u8>, EncodeError> {
-    let mut plan = OptimizerPlan::plan(data);
+    let mut plan = OptimizerPlan::try_plan(data)?;
     plan.set_compressor(options.compressor.into());
     let mut stream = CompressedStream::new();
     let max_error = f32::from(options.error) / 100.0;
@@ -529,8 +568,62 @@ fn write_wbro(output: &Path, data: &[f64]) -> Result<(), CliError> {
 }
 
 fn read_stream(input: &Path) -> Result<CompressedStream, CliError> {
-    let bytes = fs::read(input)?;
-    Ok(CompressedStream::try_from_bytes(&bytes)?)
+    let limits = DecodeLimits::default();
+    let bytes = read_bounded(input, limits.max_input_bytes)?;
+    Ok(CompressedStream::try_from_bytes_with_limits(
+        &bytes, limits,
+    )?)
+}
+
+fn read_bounded(input: &Path, limit: usize) -> Result<Vec<u8>, CliError> {
+    let mut file = File::open(input)?;
+    let metadata_len = usize::try_from(file.metadata()?.len()).unwrap_or(usize::MAX);
+    if metadata_len > limit {
+        return Err(DecodeError::InputLimitExceeded {
+            actual: metadata_len,
+            limit,
+        }
+        .into());
+    }
+
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve(metadata_len)
+        .map_err(|_| DecodeError::AllocationFailed {
+            context: "BRO input buffer",
+            requested: metadata_len,
+        })?;
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        let remaining = limit.saturating_sub(bytes.len());
+        let read_limit = remaining.saturating_add(1).min(buffer.len());
+        let read = file.read(&mut buffer[..read_limit])?;
+        if read == 0 {
+            break;
+        }
+        if read > remaining {
+            return Err(DecodeError::InputLimitExceeded {
+                actual: limit.saturating_add(1),
+                limit,
+            }
+            .into());
+        }
+        let requested = bytes
+            .len()
+            .checked_add(read)
+            .ok_or(DecodeError::AllocationFailed {
+                context: "BRO input buffer",
+                requested: usize::MAX,
+            })?;
+        bytes
+            .try_reserve(read)
+            .map_err(|_| DecodeError::AllocationFailed {
+                context: "BRO input buffer",
+                requested,
+            })?;
+        bytes.extend_from_slice(&buffer[..read]);
+    }
+    Ok(bytes)
 }
 
 #[derive(Serialize)]
@@ -618,5 +711,24 @@ fn compressor_name(compressor: Compressor) -> &'static str {
         Compressor::Polynomial => "polynomial",
         Compressor::Auto => "auto",
         Compressor::RLE => "rle",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_derived_outputs_are_rejected_without_processing() {
+        let output = PathBuf::from("series.bro");
+        let pairs = vec![
+            (PathBuf::from("series.wbro"), output.clone()),
+            (PathBuf::from("series.WBRO"), output),
+        ];
+
+        assert!(matches!(
+            validate_unique_outputs(&pairs),
+            Err(CliError::Usage(message)) if message.contains("map to the same output")
+        ));
     }
 }
