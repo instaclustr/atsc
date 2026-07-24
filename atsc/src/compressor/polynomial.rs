@@ -367,6 +367,8 @@ impl Polynomial {
         output
     }
 
+    // Thin LTO regresses this hot interpolation loop when it is inlined.
+    #[inline(never)]
     fn append_polynomial_to_data(
         &self,
         frame_size: usize,

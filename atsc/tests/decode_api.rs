@@ -302,7 +302,12 @@ fn decode_range_rejects_reversed_and_out_of_bounds_ranges() {
     let stream = two_frame_stream();
     let mut decoder = Decoder::new();
 
-    for range in [4..3, 0..6, 6..6, usize::MAX..usize::MAX] {
+    for range in [
+        std::ops::Range { start: 4, end: 3 },
+        0..6,
+        6..6,
+        usize::MAX..usize::MAX,
+    ] {
         let start = range.start;
         let end = range.end;
         assert!(matches!(

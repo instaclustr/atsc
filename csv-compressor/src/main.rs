@@ -19,7 +19,7 @@ use atsc::compressor::Compressor;
 use atsc::data::CompressedStream;
 use atsc::optimizer::OptimizerPlan;
 use atsc::utils::readers::bro_reader::read_file;
-use clap::{arg, Parser};
+use clap::Parser;
 use log::debug;
 use std::fs;
 use std::path::{Path, PathBuf};

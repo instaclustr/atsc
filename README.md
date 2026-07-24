@@ -91,7 +91,7 @@ For full documentation please go to [Docs](https://github.com/instaclustr/atsc/t
 
 ### Prerequisites
 
-* Ensure you have [Rust](https://www.rust-lang.org/tools/install) installed on your system.
+* Ensure you have [Rust 1.81 or newer](https://www.rust-lang.org/tools/install) installed on your system.
 
 ### Usage
 

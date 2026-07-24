@@ -70,9 +70,9 @@ impl Iterator for FrameInfoIter<'_> {
         self.next()
     }
 
-    fn last(mut self) -> Option<Self::Item> {
+    fn last(self) -> Option<Self::Item> {
         let mut last = None;
-        while let Some(info) = self.next() {
+        for info in self {
             last = Some(info);
         }
         last
@@ -105,6 +105,7 @@ fn append_transactionally(
     }
 }
 
+#[derive(Default)]
 pub struct Decoder {
     fft_planner: Option<FftPlanner<f32>>,
     fft_buffer: Vec<Complex<f32>>,
@@ -121,17 +122,6 @@ impl fmt::Debug for Decoder {
             .field("frame_output", &self.frame_output)
             .field("rle_runs", &self.rle_runs)
             .finish_non_exhaustive()
-    }
-}
-
-impl Default for Decoder {
-    fn default() -> Self {
-        Self {
-            fft_planner: None,
-            fft_buffer: Vec::new(),
-            frame_output: Vec::new(),
-            rle_runs: Vec::new(),
-        }
     }
 }
 
