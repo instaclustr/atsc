@@ -195,7 +195,7 @@ impl Compressor {
                 Constant::try_decompress(data)?.append_to_data(samples, decoder, output)?;
             }
             Compressor::Polynomial | Compressor::Idw => {
-                let polynomial = Polynomial::try_decompress(data)?;
+                let polynomial = Polynomial::try_decompress_for_frame(data, samples, *self)?;
                 let expected_type = match self {
                     Compressor::Polynomial => PolynomialType::Polynomial,
                     Compressor::Idw => PolynomialType::Idw,

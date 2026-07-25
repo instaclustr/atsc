@@ -14,6 +14,7 @@ use atsc::{
 };
 use bincode::Encode;
 use rustfft::num_complex::Complex;
+use std::panic::catch_unwind;
 
 const FIXTURES: [(&str, &[u8]); 6] = [
     ("constant", include_bytes!("fixtures/v1/constant.bro")),
@@ -23,6 +24,7 @@ const FIXTURES: [(&str, &[u8]); 6] = [
     ("polynomial", include_bytes!("fixtures/v1/polynomial.bro")),
     ("idw", include_bytes!("fixtures/v1/idw.bro")),
 ];
+const MAX_V1_POLYNOMIAL_POINTS: usize = 131_072;
 
 fn truncated(mut data: Vec<u8>) -> Vec<u8> {
     data.pop().expect("test payload must not be empty");
@@ -44,6 +46,40 @@ fn polynomial_payload(polynomial_type: PolynomialType) -> Vec<u8> {
     let mut polynomial = Polynomial::new(2, 0.0, 1.0, polynomial_type, Bitdepth::U8);
     polynomial.data_points.extend([0.0, 1.0]);
     polynomial.to_bytes()
+}
+
+fn polynomial_point_prefix(
+    polynomial_type: PolynomialType,
+    bitdepth: Bitdepth,
+    point_count: u64,
+) -> Vec<u8> {
+    let mut payload = Vec::new();
+    bincode::encode_into_std_write(polynomial_type, &mut payload, BinConfig::get())
+        .expect("polynomial type must encode");
+    bincode::encode_into_std_write(bitdepth, &mut payload, BinConfig::get())
+        .expect("bitdepth must encode");
+    bincode::encode_into_std_write(point_count, &mut payload, BinConfig::get())
+        .expect("point count must encode");
+    payload
+}
+
+fn assert_polynomial_point_cap(error: DecodeError) {
+    assert!(matches!(
+        error,
+        DecodeError::Bincode {
+            context: "Polynomial payload",
+            source: bincode::error::DecodeError::Other(
+                "Polynomial/IDW point count exceeds BRO v1 maximum"
+            ),
+        }
+    ));
+}
+
+fn assert_bincode_point_cap(error: bincode::error::DecodeError) {
+    assert!(matches!(
+        error,
+        bincode::error::DecodeError::Other("Polynomial/IDW point count exceeds BRO v1 maximum")
+    ));
 }
 
 fn maximum_vector_length_prefix() -> Vec<u8> {
@@ -875,6 +911,129 @@ fn trailing_idw_payload_returns_trailing_bytes() {
         Polynomial::try_decompress(&with_trailing_byte(polynomial_payload(PolynomialType::Idw))),
         Err(DecodeError::TrailingBytes { remaining: 1 })
     ));
+}
+
+#[test]
+fn integer_polynomial_and_idw_point_counts_are_capped_before_scalar_storage() {
+    for polynomial_type in [PolynomialType::Polynomial, PolynomialType::Idw] {
+        for bitdepth in [Bitdepth::U8, Bitdepth::I16, Bitdepth::I32] {
+            let payload = polynomial_point_prefix(
+                polynomial_type.clone(),
+                bitdepth,
+                (MAX_V1_POLYNOMIAL_POINTS + 1) as u64,
+            );
+
+            assert_polynomial_point_cap(
+                Polynomial::try_decompress(&payload)
+                    .expect_err("direct payload decode must reject an oversized point vector"),
+            );
+            assert_bincode_point_cap(
+                bincode::borrow_decode_from_slice::<Polynomial, _>(&payload, BinConfig::get())
+                    .expect_err("borrowed payload decode must reject an oversized point vector"),
+            );
+        }
+    }
+}
+
+#[test]
+fn huge_polynomial_point_prefix_is_typed_for_decode_and_borrow_decode() {
+    let payload = polynomial_point_prefix(PolynomialType::Polynomial, Bitdepth::U8, u64::MAX);
+
+    assert_polynomial_point_cap(
+        Polynomial::try_decompress(&payload)
+            .expect_err("direct payload decode must reject the maximum length prefix"),
+    );
+    let borrowed = catch_unwind(|| {
+        bincode::borrow_decode_from_slice::<Polynomial, _>(&payload, BinConfig::get())
+    });
+    assert!(
+        matches!(borrowed, Ok(Err(error)) if matches!(
+            error,
+            bincode::error::DecodeError::Other(
+                "Polynomial/IDW point count exceeds BRO v1 maximum"
+            )
+        )),
+        "borrowed decode must return the typed cap error without panicking"
+    );
+}
+
+#[test]
+fn polynomial_widened_storage_honors_the_bincode_decoder_limit() {
+    let payload = polynomial_point_prefix(PolynomialType::Polynomial, Bitdepth::U8, 2);
+
+    assert!(matches!(
+        bincode::decode_from_slice::<Polynomial, _>(
+            &payload,
+            bincode::config::standard().with_limit::<24>(),
+        ),
+        Err(bincode::error::DecodeError::LimitExceeded)
+    ));
+    assert!(matches!(
+        bincode::borrow_decode_from_slice::<Polynomial, _>(
+            &payload,
+            bincode::config::standard().with_limit::<24>(),
+        ),
+        Err(bincode::error::DecodeError::LimitExceeded)
+    ));
+}
+
+#[test]
+fn frame_dispatch_rejects_many_points_before_reading_a_one_sample_payload() {
+    for (polynomial_type, codec) in [
+        (PolynomialType::Polynomial, Compressor::Polynomial),
+        (PolynomialType::Idw, Compressor::Idw),
+    ] {
+        let payload = polynomial_point_prefix(polynomial_type, Bitdepth::U8, 1024);
+
+        assert!(matches!(
+            codec.try_decompress(1, &payload),
+            Err(DecodeError::InvalidFrame {
+                codec: actual_codec,
+                reason,
+            }) if actual_codec == codec
+                && reason.contains("encoded 1024 points exceed 1 declared samples")
+        ));
+    }
+}
+
+#[test]
+fn direct_and_borrowed_polynomial_decodes_preserve_valid_integer_payloads() {
+    for polynomial_type in [PolynomialType::Polynomial, PolynomialType::Idw] {
+        for (bitdepth, points) in [
+            (Bitdepth::U8, vec![1.0, 2.0, 3.0]),
+            (Bitdepth::I16, vec![-2.0, 0.0, 2.0]),
+            (Bitdepth::I32, vec![-40_000.0, 0.0, 40_000.0]),
+        ] {
+            let mut expected = Polynomial::new(
+                points.len(),
+                points[0],
+                points[points.len() - 1],
+                polynomial_type.clone(),
+                bitdepth,
+            );
+            expected.data_points = points.clone();
+            let payload = expected.to_bytes();
+
+            let decoded = Polynomial::try_decompress(&payload)
+                .expect("valid direct Polynomial/IDW payload must decode");
+            assert_eq!(decoded, expected);
+
+            let (borrowed, consumed) =
+                bincode::borrow_decode_from_slice::<Polynomial, _>(&payload, BinConfig::get())
+                    .expect("valid borrowed Polynomial/IDW payload must decode");
+            assert_eq!(consumed, payload.len());
+            assert_eq!(borrowed, expected);
+
+            let output = match &polynomial_type {
+                PolynomialType::Polynomial => {
+                    Compressor::Polynomial.try_decompress(points.len(), &payload)
+                }
+                PolynomialType::Idw => Compressor::Idw.try_decompress(points.len(), &payload),
+            }
+            .expect("valid frame-aware Polynomial/IDW payload must decode");
+            assert_eq!(output, points);
+        }
+    }
 }
 
 #[test]

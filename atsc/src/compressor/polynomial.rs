@@ -20,12 +20,17 @@ use crate::optimizer::utils::{Bitdepth, DataStats};
 use crate::utils::{error::calculate_error, round_and_limit_f64, round_f64, DECIMAL_PRECISION};
 
 use super::{decode_payload, BinConfig, Compressor, CompressorResult};
-use bincode::{Decode, Encode};
+use bincode::{
+    de::Decoder as BincodeDecoder, error::DecodeError as BincodeDecodeError, Decode, Encode,
+};
 use log::{debug, info, trace};
 use splines::{Interpolation, Key, Spline};
 
 const POLYNOMIAL_COMPRESSOR_ID: u8 = 0;
 const IDW_COMPRESSOR_ID: u8 = 1;
+const MAX_V1_POINT_COUNT: usize = 131_072;
+const POINT_COUNT_LIMIT_ERROR: &str = "Polynomial/IDW point count exceeds BRO v1 maximum";
+const POINT_RESERVE_ERROR: &str = "failed to reserve Polynomial/IDW point storage";
 
 #[derive(Encode, Decode, Default, Debug, Clone, PartialEq)]
 pub enum PolynomialType {
@@ -91,43 +96,7 @@ impl Decode for Polynomial {
     fn decode<__D: ::bincode::de::Decoder>(
         decoder: &mut __D,
     ) -> Result<Self, ::bincode::error::DecodeError> {
-        let id = Decode::decode(decoder)?;
-        let bitdepth = Decode::decode(decoder)?;
-        let data_points: Vec<f64> = match bitdepth {
-            Bitdepth::U8 => {
-                debug!("Decoding as u8");
-                let vec_u8: Vec<u8> = Decode::decode(decoder)?;
-                vec_u8.iter().map(|f| *f as f64).collect()
-            }
-            Bitdepth::I16 => {
-                debug!("Decoding as i16");
-                let vec_i16: Vec<i16> = Decode::decode(decoder)?;
-                vec_i16.iter().map(|f| *f as f64).collect()
-            }
-            Bitdepth::I32 => {
-                debug!("Decoding as i32");
-                let vec_i32: Vec<i32> = Decode::decode(decoder)?;
-                vec_i32.iter().map(|f| *f as f64).collect()
-            }
-            Bitdepth::F64 => {
-                debug!("Decoding as f64");
-                let vec_f64: Vec<f64> = Decode::decode(decoder)?;
-                vec_f64
-            }
-        };
-        let min = Decode::decode(decoder)?;
-        let max = Decode::decode(decoder)?;
-        let point_step = Decode::decode(decoder)?;
-
-        Ok(Self {
-            id,
-            bitdepth,
-            data_points,
-            min,
-            max,
-            point_step,
-            error: None,
-        })
+        decode_polynomial(decoder)
     }
 }
 
@@ -135,45 +104,81 @@ impl<'__de> ::bincode::BorrowDecode<'__de> for Polynomial {
     fn borrow_decode<__D: ::bincode::de::BorrowDecoder<'__de>>(
         decoder: &mut __D,
     ) -> Result<Self, ::bincode::error::DecodeError> {
-        let id = ::bincode::BorrowDecode::borrow_decode(decoder)?;
-        let bitdepth = ::bincode::BorrowDecode::borrow_decode(decoder)?;
-        // Here is where the pig twists the tail
-        let data_points: Vec<f64> = match bitdepth {
-            Bitdepth::U8 => {
-                debug!("Decoding as u8");
-                let vec_u8: Vec<u8> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
-                vec_u8.iter().map(|f| *f as f64).collect()
-            }
-            Bitdepth::I16 => {
-                debug!("Decoding as i16");
-                let vec_i16: Vec<i16> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
-                vec_i16.iter().map(|f| *f as f64).collect()
-            }
-            Bitdepth::I32 => {
-                debug!("Decoding as i32");
-                let vec_i32: Vec<i32> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
-                vec_i32.iter().map(|f| *f as f64).collect()
-            }
-            Bitdepth::F64 => {
-                debug!("Decoding as f64");
-                let vec_f64: Vec<f64> = ::bincode::BorrowDecode::borrow_decode(decoder)?;
-                vec_f64
-            }
-        };
-        let min = Decode::decode(decoder)?;
-        let max = Decode::decode(decoder)?;
-        let point_step = Decode::decode(decoder)?;
-
-        Ok(Self {
-            id,
-            bitdepth,
-            data_points,
-            min,
-            max,
-            point_step,
-            error: None,
-        })
+        decode_polynomial(decoder)
     }
+}
+
+fn decode_polynomial<D: BincodeDecoder>(decoder: &mut D) -> Result<Polynomial, BincodeDecodeError> {
+    let id = Decode::decode(decoder)?;
+    let bitdepth = Decode::decode(decoder)?;
+    let point_count = decode_point_count(decoder)?;
+    let data_points = match bitdepth {
+        Bitdepth::U8 => {
+            debug!("Decoding as u8");
+            decode_points::<D, u8>(decoder, point_count, |value| value as f64)?
+        }
+        Bitdepth::I16 => {
+            debug!("Decoding as i16");
+            decode_points::<D, i16>(decoder, point_count, |value| value as f64)?
+        }
+        Bitdepth::I32 => {
+            debug!("Decoding as i32");
+            decode_points::<D, i32>(decoder, point_count, |value| value as f64)?
+        }
+        Bitdepth::F64 => {
+            debug!("Decoding as f64");
+            decode_points::<D, f64>(decoder, point_count, |value| value)?
+        }
+    };
+    let min = Decode::decode(decoder)?;
+    let max = Decode::decode(decoder)?;
+    let point_step = Decode::decode(decoder)?;
+
+    Ok(Polynomial {
+        id,
+        bitdepth,
+        data_points,
+        min,
+        max,
+        point_step,
+        error: None,
+    })
+}
+
+fn decode_point_count<D: BincodeDecoder>(decoder: &mut D) -> Result<usize, BincodeDecodeError> {
+    let encoded = u64::decode(decoder)?;
+    let point_count = checked_v1_point_count(encoded)?;
+    decoder.claim_container_read::<f64>(point_count)?;
+    Ok(point_count)
+}
+
+fn checked_v1_point_count(encoded: u64) -> Result<usize, BincodeDecodeError> {
+    let point_count =
+        usize::try_from(encoded).map_err(|_| BincodeDecodeError::OutsideUsizeRange(encoded))?;
+    if point_count > MAX_V1_POINT_COUNT {
+        return Err(BincodeDecodeError::Other(POINT_COUNT_LIMIT_ERROR));
+    }
+    Ok(point_count)
+}
+
+fn decode_points<D, T>(
+    decoder: &mut D,
+    point_count: usize,
+    widen: impl Fn(T) -> f64,
+) -> Result<Vec<f64>, BincodeDecodeError>
+where
+    D: BincodeDecoder,
+    T: Decode,
+{
+    let mut points = Vec::new();
+    points
+        .try_reserve(point_count)
+        .map_err(|_| BincodeDecodeError::Other(POINT_RESERVE_ERROR))?;
+    for _ in 0..point_count {
+        decoder.unclaim_bytes_read(std::mem::size_of::<f64>());
+        points.push(widen(T::decode(decoder)?));
+    }
+    Ok(points)
 }
 
 impl Polynomial {
@@ -353,6 +358,36 @@ impl Polynomial {
             });
         }
         Ok(polynomial)
+    }
+
+    pub(crate) fn try_decompress_for_frame(
+        data: &[u8],
+        sample_count: usize,
+        codec: Compressor,
+    ) -> Result<Self, DecodeError> {
+        let ((_polynomial_type, _bitdepth, encoded_point_count), _): (
+            (PolynomialType, Bitdepth, u64),
+            usize,
+        ) = bincode::decode_from_slice(data, BinConfig::get_decode()).map_err(|source| {
+            DecodeError::Bincode {
+                context: "Polynomial payload",
+                source,
+            }
+        })?;
+        let point_count =
+            checked_v1_point_count(encoded_point_count).map_err(|source| DecodeError::Bincode {
+                context: "Polynomial payload",
+                source,
+            })?;
+        if point_count > sample_count {
+            return Err(DecodeError::InvalidFrame {
+                codec,
+                reason: format!(
+                    "encoded {point_count} points exceed {sample_count} declared samples"
+                ),
+            });
+        }
+        Self::try_decompress(data)
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
