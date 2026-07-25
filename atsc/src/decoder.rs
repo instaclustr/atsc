@@ -114,6 +114,7 @@ pub struct Decoder {
     fft_buffer: Vec<Complex<f32>>,
     frame_output: Vec<f64>,
     rle_runs: Vec<(usize, f64)>,
+    idw_weights: Vec<f64>,
 }
 
 impl fmt::Debug for Decoder {
@@ -259,6 +260,10 @@ impl Decoder {
     pub(crate) fn rle_scratch(&mut self) -> &mut Vec<(usize, f64)> {
         &mut self.rle_runs
     }
+
+    pub(crate) fn idw_scratch(&mut self) -> &mut Vec<f64> {
+        &mut self.idw_weights
+    }
 }
 
 #[cfg(test)]
@@ -307,5 +312,24 @@ mod tests {
             .decode_into(&stream, &mut output)
             .expect("second RLE decode must succeed");
         assert_eq!(decoder.rle_runs.capacity(), first_capacity);
+    }
+
+    #[test]
+    fn idw_scratch_capacity_is_reused() {
+        let stream = fixture(include_bytes!("../tests/fixtures/v1/idw.bro"));
+        let mut decoder = Decoder::new();
+        let mut output = Vec::new();
+
+        decoder
+            .decode_into(&stream, &mut output)
+            .expect("first IDW decode must succeed");
+        let first_capacity = decoder.idw_weights.capacity();
+        assert!(first_capacity > 0);
+
+        output.clear();
+        decoder
+            .decode_into(&stream, &mut output)
+            .expect("second IDW decode must succeed");
+        assert_eq!(decoder.idw_weights.capacity(), first_capacity);
     }
 }

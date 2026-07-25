@@ -488,13 +488,17 @@ impl Polynomial {
     fn append_idw_to_data(
         &self,
         frame_size: usize,
-        _decoder: &mut Decoder,
+        decoder: &mut Decoder,
         output: &mut Vec<f64>,
     ) -> Result<(), DecodeError> {
         let points = self.get_positions(frame_size)?;
         reserve_decode(output, frame_size, "IDW output")?;
+        let weights = decoder.idw_scratch();
+        weights.clear();
+        reserve_decode(weights, points.len(), "IDW weights")?;
         for position in 0..frame_size {
-            let interpolated = evaluate_idw(&points, &self.data_points, position);
+            let interpolated =
+                evaluate_idw_with_scratch(&points, &self.data_points, position, weights)?;
             let reconstructed =
                 round_and_limit_f64(interpolated, self.min, self.max, DECIMAL_PRECISION);
             if !reconstructed.is_finite() {
@@ -537,24 +541,31 @@ impl Polynomial {
     }
 }
 
-fn evaluate_idw(points: &[usize], values: &[f64], position: usize) -> f64 {
-    if let Some(index) = points.iter().position(|point| *point == position) {
-        return values[index];
+fn evaluate_idw_with_scratch(
+    points: &[usize],
+    values: &[f64],
+    position: usize,
+    weights: &mut Vec<f64>,
+) -> Result<f64, DecodeError> {
+    weights.clear();
+    if let Ok(index) = points.binary_search(&position) {
+        return Ok(values[index]);
     }
 
     let position = position as f64;
-    let weight_sum = points.iter().fold(0.0, |sum, point| {
+    let mut weight_sum = 0.0;
+    weights.extend(points.iter().map(|point| {
         let distance = (position - *point as f64).abs();
-        sum + 1.0 / distance.powf(2.0)
-    });
-    points
+        let weight = 1.0 / distance.powf(2.0);
+        weight_sum += weight;
+        weight
+    }));
+    Ok(weights
         .iter()
         .zip(values)
-        .fold(0.0, |interpolated, (point, value)| {
-            let distance = (position - *point as f64).abs();
-            let weight = 1.0 / distance.powf(2.0);
+        .fold(0.0, |interpolated, (weight, value)| {
             interpolated + (weight / weight_sum) * value
-        })
+        }))
 }
 
 pub fn polynomial(data: &[f64], p_type: PolynomialType) -> Vec<u8> {
@@ -585,6 +596,45 @@ pub fn to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn evaluate_idw_two_pass_reference(points: &[usize], values: &[f64], position: usize) -> f64 {
+        if let Some(index) = points.iter().position(|point| *point == position) {
+            return values[index];
+        }
+
+        let position = position as f64;
+        let weight_sum = points.iter().fold(0.0, |sum, point| {
+            let distance = (position - *point as f64).abs();
+            sum + 1.0 / distance.powf(2.0)
+        });
+        points
+            .iter()
+            .zip(values)
+            .fold(0.0, |interpolated, (point, value)| {
+                let distance = (position - *point as f64).abs();
+                let weight = 1.0 / distance.powf(2.0);
+                interpolated + (weight / weight_sum) * value
+            })
+    }
+
+    #[test]
+    fn idw_reusable_weights_match_two_pass_reference_bit_exactly() {
+        let points = [0, 4, 9, 15, 22];
+        let values = [1.25, -3.5, 8.0, 0.125, 13.75];
+        let positions = [0, 1, 4, 2, 9, 3, 5, 7, 15, 11, 14, 18, 22, 21];
+        let mut weights = Vec::with_capacity(points.len());
+
+        for position in positions {
+            let expected = evaluate_idw_two_pass_reference(&points, &values, position);
+            let actual = evaluate_idw_with_scratch(&points, &values, position, &mut weights)
+                .expect("IDW weight scratch allocation must succeed");
+            assert_eq!(
+                actual.to_bits(),
+                expected.to_bits(),
+                "position {position} changed IDW evaluation bits"
+            );
+        }
+    }
 
     #[test]
     fn test_polynomial_u8() {
