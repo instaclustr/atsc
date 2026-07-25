@@ -23,7 +23,7 @@ The fastest way to test ATSC is with a CSV file!
 3. Execute the following command:
 
     ```bash
-    cargo run --release -- --csv <input-file>
+    cargo run --release -- compress --csv <input-file>
     ```
 
 4. You have a compressed timeseries!
@@ -91,69 +91,73 @@ For full documentation please go to [Docs](https://github.com/instaclustr/atsc/t
 
 ### Prerequisites
 
-* Ensure you have [Rust](https://www.rust-lang.org/tools/install) installed on your system.
+* Ensure you have [Rust 1.81 or newer](https://www.rust-lang.org/tools/install) installed on your system.
 
 ### Usage
 
-ATSC relies on files with a WBRO extension to operate, learn more about that here: [WBRO - A time series format](https://github.com/instaclustr/atsc/tree/main/wavbrro)
-You can also compress from CSV with the provided [CSV tool](https://github.com/instaclustr/atsc/tree/main/csv-compressor)
-Those files would work as input for the compressor.
+ATSC accepts WBRO input, or CSV input with `--csv`, and writes BRO v1 without
+changing the wire format. Prefer the explicit commands:
 
-Compressor usage:
-
-```txt
-Usage: atsc [OPTIONS] <INPUT>
-
-Arguments:
-  <INPUT>  input file
-
-      --compressor <COMPRESSOR>
-          Select a compressor, default is auto [default: auto] [possible values: auto, noop, fft, constant, polynomial, idw]
-  -e, --error <ERROR>
-          Sets the maximum allowed error for the compressed data, must be between 0 and 50. Default is 5 (5%).
-          0 is lossless compression
-          50 will do a median filter on the data.
-          In between will pick optimize for the error [default: 5]
-  -u
-          Uncompresses the input file/directory
-  -c, --compression-selection-sample-level <COMPRESSION_SELECTION_SAMPLE_LEVEL>
-          Samples the input data instead of using all the data for selecting the optimal compressor.
-          Only impacts speed, might or not increased compression ratio. For best results use 0 (default).
-          Only works when compression = Auto.
-          0 will use all the data (slowest)
-          6 will sample 128 data points (fastest) [default: 0]
-      --verbose
-          Verbose output, dumps everysample in the input file (for compression) and in the ouput file (for decompression)
-      --csv
-          Defines user input as a CSV file
-      --no-header
-          Defines if the CSV has no header
-      --fields <FIELDS>
-          Defines names of fields in CSV file. It should follow this format:
-            --fields=TIME_FIELD_NAME,VALUE_FIELD_NAME
-          It assumes that the one before comma is a name of time field and the one
-          after comma is value field. [default: time,value]
-  -h, --help
-          Print help
-  -V, --version
-          Print version
+```text
+atsc inspect <INPUT> [--json]
+atsc verify <INPUT>
+atsc compress <INPUT> [-o <OUTPUT>] [OPTIONS]
+atsc decompress <INPUT> [-o <OUTPUT>]
 ```
 
-#### Compress a File
+Explicit-command options belong after their subcommand. Combining an explicit
+subcommand with legacy root input/options is a usage error.
 
-To compress a file using ATSC, run:
+Examples:
 
 ```bash
-atsc <input-file>
+atsc inspect metrics.bro
+atsc inspect metrics.bro --json
+atsc verify metrics.bro
+atsc compress metrics.wbro --compressor rle
+atsc compress metrics.csv --csv --fields=time,value -o metrics.bro
+atsc decompress metrics.bro -o restored.wbro
 ```
 
-#### Decompress a File
+Compression defaults to automatic codec selection with a 3% maximum error.
+Directory input is supported for compression and decompression; ATSC snapshots
+and filters the initial entries, rejects duplicate derived output paths, then
+processes each eligible input once.
+`-o/--output` is only valid for a single input file.
+BRO, WBRO, and CSV reads default to 256 MiB and 33,423,360 samples. WBRO
+metadata and CSV structure are validated before unbounded allocations, and
+non-finite encoder inputs report their sample index. File open/read/write
+failures retain the I/O exit status.
 
-To decompress a file, use:
+Existing invocations remain available as compatibility mode and use the same
+safe implementation:
 
 ```bash
-atsc -u <input-file>
+atsc [OPTIONS] <INPUT>
+atsc -u <INPUT>
 ```
+
+For a legacy file named `inspect`, `verify`, `compress`, or `decompress`, use
+`atsc -- <name>` or an explicit path such as `atsc ./inspect`. ATSC does not
+guess command intent from filesystem existence.
+
+Library callers can use bounded parsing and a reusable decoder directly:
+
+```rust
+use atsc::{data::CompressedStream, decoder::Decoder};
+
+let bytes = std::fs::read("metrics.bro")?;
+let stream = CompressedStream::try_from_bytes(&bytes)?;
+let mut decoder = Decoder::new();
+let values = decoder.decode_range(&stream, 1_000..2_000)?;
+```
+
+BRO v1's serialized `frame_size` value is opaque legacy host-layout metadata,
+not an encoded frame length, and is intentionally ignored while decoding.
+An authoritative frame byte length requires a future BRO v2 field.
+
+See [the usage guide](docs/usage.md) for all compression options, output naming,
+JSON behavior, and stable exit codes.
 
 ## Releases
 

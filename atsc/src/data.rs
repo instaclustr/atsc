@@ -15,6 +15,8 @@ limitations under the License.
 */
 
 use crate::compressor::{BinConfig, Compressor};
+use crate::decoder::{Decoder, FrameInfo, FrameInfoIter};
+use crate::error::{validate_encode_input, DecodeError, DecodeLimits, EncodeError};
 use crate::frame::CompressorFrame;
 use crate::header::CompressorHeader;
 //use bincode::{Decode, Encode};
@@ -36,6 +38,8 @@ impl CompressedStream {
 
     /// Compress a chunk of data adding it as a new frame to the current stream
     pub fn compress_chunk(&mut self, chunk: &[f64]) {
+        self.ensure_frame_available()
+            .expect("BRO v1 frame limit exceeded before stream mutation");
         let mut compressor_frame = CompressorFrame::new(None);
         compressor_frame.compress(chunk);
         compressor_frame.close();
@@ -45,6 +49,8 @@ impl CompressedStream {
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
     pub fn compress_chunk_with(&mut self, chunk: &[f64], compressor: Compressor) {
+        self.ensure_frame_available()
+            .expect("BRO v1 frame limit exceeded before stream mutation");
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         compressor_frame.compress(chunk);
         compressor_frame.close();
@@ -60,6 +66,19 @@ impl CompressedStream {
         max_error: f32,
         compression_speed: usize,
     ) {
+        self.try_compress_chunk_bounded_with(chunk, compressor, max_error, compression_speed)
+            .expect("bounded stream compression failed");
+    }
+
+    pub fn try_compress_chunk_bounded_with(
+        &mut self,
+        chunk: &[f64],
+        compressor: Compressor,
+        max_error: f32,
+        compression_speed: usize,
+    ) -> Result<(), EncodeError> {
+        validate_encode_input(chunk)?;
+        self.ensure_frame_available()?;
         debug!(
             "Compressing chunk bounded with a max error of {}",
             max_error
@@ -67,12 +86,26 @@ impl CompressedStream {
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         match compressor {
             // Auto means the frame will pick the best
-            Compressor::Auto => compressor_frame.compress_best(chunk, max_error, compression_speed),
-            _ => compressor_frame.compress_bounded(chunk, max_error),
+            Compressor::Auto => {
+                compressor_frame.try_compress_best(chunk, max_error, compression_speed)?
+            }
+            _ => compressor_frame.try_compress_bounded(chunk, max_error)?,
         }
         compressor_frame.close();
         self.data_frames.push(compressor_frame);
-        self.header.add_frame();
+        self.header
+            .try_add_frame()
+            .expect("preflighted BRO v1 frame insertion must succeed");
+        Ok(())
+    }
+
+    fn ensure_frame_available(&self) -> Result<(), EncodeError> {
+        if self.data_frames.len() >= usize::from(u8::MAX) {
+            return Err(EncodeError::FrameLimitExceeded {
+                limit: usize::from(u8::MAX),
+            });
+        }
+        self.header.ensure_frame_available()
     }
 
     /// Transforms the whole CompressedStream into bytes to be written to a file
@@ -87,25 +120,133 @@ impl CompressedStream {
     /// Gets a binary stream and generates a Compressed Stream, at this point, anything inside the stream is
     /// still in the compressed state
     pub fn from_bytes(data: &[u8]) -> Self {
-        let config = BinConfig::get();
-        // Split the binary data into header and data
-        let (binary_header, binary_data) = data.split_at(9);
-        let header = CompressorHeader::from_bytes(
-            binary_header
-                .try_into()
-                .expect("Header with incorrect length!"),
-        );
-        let (data_frames, _) = bincode::decode_from_slice(binary_data, config).unwrap();
-        CompressedStream {
+        Self::try_from_bytes(data).expect("failed to decode BRO stream")
+    }
+
+    pub fn try_from_bytes(data: &[u8]) -> Result<Self, DecodeError> {
+        Self::try_from_bytes_with_limits(data, DecodeLimits::default())
+    }
+
+    pub fn try_from_bytes_with_limits(
+        data: &[u8],
+        limits: DecodeLimits,
+    ) -> Result<Self, DecodeError> {
+        if data.len() > limits.max_input_bytes {
+            return Err(DecodeError::InputLimitExceeded {
+                actual: data.len(),
+                limit: limits.max_input_bytes,
+            });
+        }
+
+        let header_len = data.len().min(9);
+        let header = CompressorHeader::try_from_slice(&data[..header_len])?;
+        let binary_data = &data[9..];
+        let header_frames = usize::from(header.get_frame_count());
+        let (declared_body_frames, _prefix_bytes): (usize, usize) =
+            bincode::decode_from_slice(binary_data, BinConfig::get_decode()).map_err(|source| {
+                DecodeError::Bincode {
+                    context: "BRO frame vector length",
+                    source,
+                }
+            })?;
+        if header_frames > limits.max_frames {
+            return Err(DecodeError::FrameLimitExceeded {
+                actual: header_frames,
+                limit: limits.max_frames,
+            });
+        }
+        if declared_body_frames > limits.max_frames {
+            return Err(DecodeError::FrameLimitExceeded {
+                actual: declared_body_frames,
+                limit: limits.max_frames,
+            });
+        }
+        if header_frames != declared_body_frames {
+            return Err(DecodeError::FrameCountMismatch {
+                header: header_frames,
+                body: declared_body_frames,
+            });
+        }
+
+        let (data_frames, consumed): (Vec<CompressorFrame>, usize) =
+            bincode::decode_from_slice(binary_data, BinConfig::get_decode()).map_err(|source| {
+                DecodeError::Bincode {
+                    context: "BRO frame vector",
+                    source,
+                }
+            })?;
+
+        if consumed != binary_data.len() {
+            return Err(DecodeError::TrailingBytes {
+                remaining: binary_data.len() - consumed,
+            });
+        }
+
+        let body_frames = data_frames.len();
+        if header_frames != body_frames {
+            return Err(DecodeError::FrameCountMismatch {
+                header: header_frames,
+                body: body_frames,
+            });
+        }
+
+        let mut samples = 0_usize;
+        for frame in &data_frames {
+            samples = samples.checked_add(frame.sample_count()).ok_or(
+                DecodeError::SampleLimitExceeded {
+                    actual: usize::MAX,
+                    limit: limits.max_samples,
+                },
+            )?;
+            if samples > limits.max_samples {
+                return Err(DecodeError::SampleLimitExceeded {
+                    actual: samples,
+                    limit: limits.max_samples,
+                });
+            }
+        }
+
+        Ok(CompressedStream {
             header,
             data_frames,
-        }
+        })
     }
+
+    pub fn frame_count(&self) -> usize {
+        self.data_frames.len()
+    }
+
+    pub fn sample_count(&self) -> usize {
+        self.try_sample_count()
+            .expect("compressed stream sample count overflowed usize")
+    }
+
+    pub(crate) fn try_sample_count(&self) -> Result<usize, DecodeError> {
+        self.data_frames.iter().try_fold(0_usize, |samples, frame| {
+            samples
+                .checked_add(frame.sample_count())
+                .ok_or(DecodeError::AllocationFailed {
+                    context: "stream sample metadata",
+                    requested: usize::MAX,
+                })
+        })
+    }
+
+    pub fn frame_info(&self) -> impl ExactSizeIterator<Item = FrameInfo> + '_ {
+        FrameInfoIter::new(&self.data_frames)
+    }
+
+    pub(crate) fn frames(&self) -> &[CompressorFrame] {
+        &self.data_frames
+    }
+
     pub fn decompress(&self) -> Vec<f64> {
-        self.data_frames
-            .iter()
-            .flat_map(|f| f.decompress())
-            .collect()
+        self.try_decompress()
+            .expect("failed to decompress BRO stream")
+    }
+
+    pub fn try_decompress(&self) -> Result<Vec<f64>, DecodeError> {
+        Decoder::new().decode(self)
     }
 }
 

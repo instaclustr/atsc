@@ -3,6 +3,7 @@ name = "tools"
 version = "0.1.0"
 authors = ["Carlos Rolo <carlos.rolo@netapp.com>"]
 edition = "2021"
+rust-version = "1.81"
 license = "Apache-2.0"
 description = "Tools for testing/supporting the development/validation of the compressor"
 

@@ -16,6 +16,7 @@ limitations under the License.
 
 use crate::{
     compressor::Compressor,
+    error::{validate_encode_input, EncodeError},
     utils::{f64_to_u64, prev_power_of_two},
 };
 
@@ -45,14 +46,20 @@ pub struct OptimizerPlan {
 impl OptimizerPlan {
     /// Creates an optimal data compression plan
     pub fn plan(data: &[f64]) -> Self {
-        let c_data = OptimizerPlan::clean_data(data);
+        Self::try_plan(data).expect("optimizer planning failed")
+    }
+
+    /// Creates an optimal compression plan after validating all input samples.
+    pub fn try_plan(data: &[f64]) -> Result<Self, EncodeError> {
+        validate_encode_input(data)?;
+        let c_data = data.to_vec();
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
         let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, None);
-        OptimizerPlan {
+        Ok(OptimizerPlan {
             data: c_data,
             chunk_sizes: chunks,
             compressors: optimizer,
-        }
+        })
     }
 
     pub fn set_compressor(&mut self, compressor: Compressor) {

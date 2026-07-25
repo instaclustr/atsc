@@ -15,6 +15,8 @@ limitations under the License.
 */
 
 use crate::{
+    decoder::Decoder,
+    error::{reserve_decode, DecodeError},
     optimizer::utils::DataStats,
     utils::{error::calculate_error, next_size},
 };
@@ -22,7 +24,7 @@ use bincode::{Decode, Encode};
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::{cmp::Ordering, collections::BinaryHeap};
 
-use super::{BinConfig, CompressorResult};
+use super::{decode_payload, BinConfig, Compressor, CompressorResult};
 use log::{debug, error, info, trace, warn};
 
 const FFT_COMPRESSOR_ID: u8 = 15;
@@ -59,6 +61,10 @@ impl FrequencyPoint {
             re: self.freq_real,
             im: self.freq_img * -1.0,
         }
+    }
+
+    pub(crate) fn position(&self) -> usize {
+        self.pos as usize
     }
 }
 
@@ -227,24 +233,33 @@ impl FFT {
             .collect()
     }
 
-    /// Removes the smallest frequencies from `buffer` until `max_freq` remain
+    /// Removes the smallest frequencies from `buffer` until `max_freq` remain.
+    /// Bins outside the BRO v1 `u16` position range are not candidates.
     fn fft_trim(buffer: &mut [Complex<f32>], max_freq: usize) -> Vec<FrequencyPoint> {
-        let mut freq_vec = Vec::with_capacity(max_freq);
+        let representable_candidates = buffer.len().min(usize::from(u16::MAX) + 1);
+        let frequency_limit = max_freq.min(representable_candidates);
+        let mut freq_vec = Vec::with_capacity(frequency_limit);
+        if frequency_limit == 0 {
+            return freq_vec;
+        }
         if max_freq == 1 {
             freq_vec.push(FrequencyPoint::from_complex_with_position(buffer[0], 0));
             return freq_vec;
         }
         // More than 1 frequency needed, get the biggest frequencies now.
         // Move from the buffer into Frequency Vectors
-        let tmp_vec: Vec<FrequencyPoint> = buffer
-            .iter()
-            .enumerate()
-            .map(|(pos, &f)| FrequencyPoint::from_complex_with_position(f, pos as u16))
-            .collect();
+        let mut tmp_vec = Vec::with_capacity(representable_candidates);
+        for (pos, &frequency) in buffer.iter().enumerate().take(representable_candidates) {
+            let pos = u16::try_from(pos)
+                .expect("filtered FFT frequency position must fit BRO v1 u16 storage");
+            tmp_vec.push(FrequencyPoint::from_complex_with_position(frequency, pos));
+        }
         // This part, is because Binary heap is very good at "give me the top N elements"
+        // Equal magnitudes intentionally retain the pinned toolchain's heap order
+        // to preserve frozen bytes; cross-version tie ordering remains a format concern.
         let mut heap = BinaryHeap::from(tmp_vec);
         // Now that we have it, let's pop the elements we need!
-        for _ in 0..max_freq {
+        for _ in 0..frequency_limit {
             if let Some(item) = heap.pop() {
                 // If the frequency is 0, we don't need it or any other
                 if item.freq_img == 0.0 && item.freq_real == 0.0 {
@@ -387,9 +402,37 @@ impl FFT {
         self.frequencies = FFT::fft_trim(&mut buffer, max_freq);
     }
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
-        let (fft, _) = bincode::decode_from_slice(data, config).unwrap();
-        fft
+        Self::try_decompress(data).expect("failed to decompress FFT payload")
+    }
+
+    pub fn try_decompress(data: &[u8]) -> Result<Self, DecodeError> {
+        let fft: Self = decode_payload(data, "FFT payload")?;
+        if fft.id != FFT_COMPRESSOR_ID {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::FFT,
+                reason: format!(
+                    "expected compressor ID {FFT_COMPRESSOR_ID}, found {}",
+                    fft.id
+                ),
+            });
+        }
+        if !fft.min_value.is_finite() || !fft.max_value.is_finite() {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::FFT,
+                reason: "minimum and maximum values must be finite".to_string(),
+            });
+        }
+        if fft
+            .frequencies
+            .iter()
+            .any(|frequency| !frequency.freq_real.is_finite() || !frequency.freq_img.is_finite())
+        {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::FFT,
+                reason: "frequency components must be finite".to_string(),
+            });
+        }
+        Ok(fft)
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -401,13 +444,14 @@ impl FFT {
     fn get_mirrored_freqs(&self, len: usize) -> Vec<Complex<f32>> {
         // Because we are dealing with Real inputs, we only store half the frequencies, but
         // we need all for the ifft
-        let mut data = vec![
-            Complex {
-                re: 0.0f32,
-                im: 0.0f32
-            };
-            len
-        ];
+        let mut data = vec![Complex { re: 0.0, im: 0.0 }; len];
+        self.populate_mirrored_freqs(&mut data);
+        data
+    }
+
+    fn populate_mirrored_freqs(&self, data: &mut [Complex<f32>]) {
+        data.fill(Complex { re: 0.0, im: 0.0 });
+        let len = data.len();
         for f in &self.frequencies {
             let pos = f.pos as usize;
             data[pos] = f.to_complex();
@@ -418,19 +462,34 @@ impl FFT {
             // Mirror and invert the imaginary part
             data[len - pos] = f.to_inv_complex()
         }
-        data
     }
 
     /// Returns an array of data
     /// Runs the ifft, and push residuals into place and/or adjusts max and mins accordingly
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
+        let mut decoder = Decoder::new();
+        let mut output = Vec::with_capacity(frame_size);
+        self.append_to_data(frame_size, &mut decoder, &mut output)
+            .expect("failed to allocate FFT output");
+        output
+    }
+
+    pub(crate) fn append_to_data(
+        &self,
+        frame_size: usize,
+        decoder: &mut Decoder,
+        output: &mut Vec<f64>,
+    ) -> Result<(), DecodeError> {
         if self.max_value == self.min_value {
             debug!("Same max and min, faster decompression!");
-            return vec![self.max_value as f64; frame_size];
+            let new_len = reserve_decode(output, frame_size, "FFT output")?;
+            output.resize(new_len, self.max_value as f64);
+            return Ok(());
         }
         // Was this processed to reduce the Gibbs phenomeon?
+        let gibbs_frame_size = checked_reconstructed_len(frame_size)?;
         let trim_sizes = if frame_size >= 128 {
-            let added_len = next_size(frame_size) - frame_size;
+            let added_len = gibbs_frame_size - frame_size;
             let prefix_len = added_len / 2;
             let suffix_len = added_len - prefix_len;
             debug!(
@@ -441,25 +500,54 @@ impl FFT {
         } else {
             (0, 0)
         };
-        let gibbs_frame_size = frame_size + trim_sizes.0 + trim_sizes.1;
-        // Vec to process the ifft
-        let mut data = self.get_mirrored_freqs(gibbs_frame_size);
-        // Plan the ifft
-        let mut planner = FftPlanner::new();
+        let (planner, data) = decoder.fft_scratch();
+        data.clear();
+        reserve_decode(data, gibbs_frame_size, "FFT complex scratch")?;
+        data.resize(gibbs_frame_size, Complex { re: 0.0, im: 0.0 });
+        self.populate_mirrored_freqs(data);
         let fft = planner.plan_fft_inverse(gibbs_frame_size);
-        // run the ifft
-        fft.process(&mut data);
-        // We need this for normalization
+        fft.process(data);
         let len = gibbs_frame_size as f32;
-        // We only need the real part
-        data.iter()
-            // trim the exceses data
+        reserve_decode(output, frame_size, "FFT output")?;
+        for frequency in data
+            .iter()
+            // trim the excess data
             .skip(trim_sizes.0)
             .take(data.len() - trim_sizes.0 - trim_sizes.1)
-            // We only need the real part
-            .map(|&f| self.round(f.re / len, DECIMAL_PRECISION.into()))
-            .collect()
+        {
+            let value = self.round(frequency.re / len, DECIMAL_PRECISION.into());
+            if !value.is_finite() {
+                return Err(DecodeError::InvalidFrame {
+                    codec: Compressor::FFT,
+                    reason: "inverse transform produced a non-finite sample".to_string(),
+                });
+            }
+            output.push(value);
+        }
+        Ok(())
     }
+}
+
+fn checked_reconstructed_len(samples: usize) -> Result<usize, DecodeError> {
+    if samples < 128 {
+        return Ok(samples);
+    }
+
+    let mut reconstructed = samples
+        .checked_add(1)
+        .ok_or(DecodeError::AllocationFailed {
+            context: "FFT complex scratch",
+            requested: usize::MAX,
+        })?;
+    while !crate::utils::is_decomposable(reconstructed) {
+        reconstructed = reconstructed
+            .checked_add(1)
+            .ok_or(DecodeError::AllocationFailed {
+                context: "FFT complex scratch",
+                requested: usize::MAX,
+            })?;
+    }
+    Ok(reconstructed)
 }
 
 /// Compresses a data segment via FFT.
@@ -556,6 +644,106 @@ mod tests {
                 15, 2, 0, 0, 0, 152, 65, 0, 0, 0, 0, 4, 0, 0, 96, 192, 102, 144, 138, 64, 0, 0,
                 160, 64, 0, 0, 128, 63
             ]
+        );
+    }
+
+    #[test]
+    fn fft_trim_skips_unrepresentable_frequency_candidates() {
+        const REPRESENTABLE_POSITION: u16 = u16::MAX;
+        let unrepresentable_position = usize::from(u16::MAX) + 1;
+        let representable_frequency = Complex {
+            re: 100.0,
+            im: 25.0,
+        };
+        let mut buffer = vec![Complex { re: 0.0, im: 0.0 }; unrepresentable_position + 1];
+        buffer[usize::from(REPRESENTABLE_POSITION)] = representable_frequency;
+        buffer[unrepresentable_position] = Complex {
+            re: 1_000.0,
+            im: 250.0,
+        };
+
+        let frequencies = FFT::fft_trim(&mut buffer, 2);
+
+        assert_eq!(frequencies.len(), 1);
+        assert_eq!(
+            frequencies[0].position(),
+            usize::from(REPRESENTABLE_POSITION)
+        );
+        assert_eq!(frequencies[0].to_complex(), representable_frequency);
+    }
+
+    #[test]
+    fn fft_trim_caps_oversized_frequency_limit() {
+        let expected = Complex { re: 10.0, im: 5.0 };
+        let mut buffer = vec![Complex { re: 0.0, im: 0.0 }; 4];
+        buffer[3] = expected;
+
+        let frequencies = FFT::fft_trim(&mut buffer, usize::MAX);
+
+        assert_eq!(frequencies.len(), 1);
+        assert_eq!(frequencies[0].position(), 3);
+        assert_eq!(frequencies[0].to_complex(), expected);
+    }
+
+    #[test]
+    fn equal_magnitude_fft_selection_is_repeatable_on_pinned_toolchain() {
+        let mut first_buffer = vec![Complex { re: 0.0, im: 0.0 }; 8];
+        first_buffer[2] = Complex { re: 3.0, im: 4.0 };
+        first_buffer[5] = Complex { re: 4.0, im: 3.0 };
+        let mut second_buffer = first_buffer.clone();
+
+        let first = FFT::fft_trim(&mut first_buffer, 2);
+        let second = FFT::fft_trim(&mut second_buffer, 2);
+
+        assert_eq!(
+            first
+                .iter()
+                .map(FrequencyPoint::position)
+                .collect::<Vec<_>>(),
+            second
+                .iter()
+                .map(FrequencyPoint::position)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            first
+                .iter()
+                .copied()
+                .map(FrequencyPoint::to_complex)
+                .collect::<Vec<_>>(),
+            second
+                .iter()
+                .copied()
+                .map(FrequencyPoint::to_complex)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn bounded_large_fft_meets_error_bound_and_decodes_valid_values() {
+        const FRAME_SIZE: usize = 131_072;
+        const MAX_ERROR: f64 = 0.03;
+        let samples: Vec<f64> = (0..FRAME_SIZE)
+            .map(|index| 2.0 + ((index as f64) / 8.0).sin())
+            .collect();
+
+        let compressed_result = fft_allowed_error(&samples, MAX_ERROR);
+        assert!(
+            compressed_result.error <= MAX_ERROR,
+            "encoder reported error {} above bound {MAX_ERROR}",
+            compressed_result.error
+        );
+
+        let decoded = Compressor::FFT
+            .try_decompress(FRAME_SIZE, &compressed_result.compressed_data)
+            .expect("large bounded FFT payload must decode");
+        assert_eq!(decoded.len(), FRAME_SIZE);
+        assert!(decoded.iter().all(|value| value.is_finite()));
+
+        let decoded_error = calculate_error(&samples, &decoded);
+        assert!(
+            decoded_error <= MAX_ERROR,
+            "decoded error {decoded_error} above bound {MAX_ERROR}"
         );
     }
 

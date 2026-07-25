@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use crate::error::{DecodeError, EncodeError};
 use log::{debug, trace};
-use std::panic;
 
 /*  The current file version.
     On file read, compressors check the version and uncompress accordingly to that (or fail)
@@ -27,16 +27,17 @@ pub struct CompressorHeader {
     frame_count: u8,
 }
 
-fn verify_header_versions(version: u32) {
+fn verify_header_versions(version: u32) -> Result<(), DecodeError> {
     let current_version = CURRENT_VERSION;
     trace!("Versions: c:{} h:{}", current_version, version);
     match current_version.cmp(&version) {
-        std::cmp::Ordering::Less => panic!(
-            "Can't decompress! File is version ({}) which is higher than compressor version ({})!",
-            version, current_version
-        ),
+        std::cmp::Ordering::Less => Err(DecodeError::UnsupportedVersion {
+            found: version,
+            supported: current_version,
+        }),
         std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => {
-            debug!("File version: {}", version)
+            debug!("File version: {}", version);
+            Ok(())
         }
     }
 }
@@ -49,11 +50,27 @@ impl CompressorHeader {
         }
     }
 
-    pub fn add_frame(&mut self) {
-        self.frame_count += 1;
+    pub(crate) fn ensure_frame_available(&self) -> Result<(), EncodeError> {
+        if self.frame_count == u8::MAX {
+            return Err(EncodeError::FrameLimitExceeded {
+                limit: usize::from(u8::MAX),
+            });
+        }
+        Ok(())
     }
 
-    pub fn get_frame_count(&mut self) -> u8 {
+    pub fn try_add_frame(&mut self) -> Result<(), EncodeError> {
+        self.ensure_frame_available()?;
+        self.frame_count += 1;
+        Ok(())
+    }
+
+    pub fn add_frame(&mut self) {
+        self.try_add_frame()
+            .expect("BRO v1 frame limit exceeded before header mutation");
+    }
+
+    pub fn get_frame_count(&self) -> u8 {
         self.frame_count
     }
 
@@ -67,20 +84,29 @@ impl CompressorHeader {
     }
 
     pub fn from_bytes(data: [u8; 9]) -> Self {
-        // Extract initial_segment
+        Self::try_from_slice(&data).expect("failed to decode BRO header")
+    }
+
+    pub fn try_from_slice(data: &[u8]) -> Result<Self, DecodeError> {
+        if data.len() < 9 {
+            return Err(DecodeError::TruncatedHeader { actual: data.len() });
+        }
+
         let initial_segment = [data[0], data[1], data[2], data[3]];
         if initial_segment != *b"BRRO" {
-            panic!("Magic bytes are not correct!");
+            return Err(DecodeError::InvalidMagic {
+                found: initial_segment,
+            });
         }
-        // Extract version (u32 from 4 bytes)
+
         let version = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-        // Extract frame_count
         let frame_count = data[8];
-        verify_header_versions(version);
-        CompressorHeader {
+        verify_header_versions(version)?;
+
+        Ok(CompressorHeader {
             version,
             frame_count,
-        }
+        })
     }
 }
 
@@ -103,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "is higher than compressor version")]
+    #[should_panic(expected = "failed to decode BRO stream")]
     fn test_higher_version() {
         let vector1 = vec![1.0; 1024];
         let mut cs = CompressedStream::new();

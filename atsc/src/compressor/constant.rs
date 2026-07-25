@@ -16,10 +16,13 @@ limitations under the License.
 
 use crate::{
     compressor::CompressorResult,
+    decoder::Decoder,
+    error::{reserve_decode, DecodeError},
     optimizer::utils::{Bitdepth, DataStats},
+    utils::error::calculate_error,
 };
 
-use super::BinConfig;
+use super::{decode_payload, BinConfig, Compressor};
 use bincode::{Decode, Encode};
 use log::debug;
 
@@ -113,9 +116,27 @@ impl Constant {
 
     /// Receives a data stream and generates a Constant
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
-        let (ct, _) = bincode::decode_from_slice(data, config).unwrap();
-        ct
+        Self::try_decompress(data).expect("failed to decompress Constant payload")
+    }
+
+    pub fn try_decompress(data: &[u8]) -> Result<Self, DecodeError> {
+        let constant: Self = decode_payload(data, "Constant payload")?;
+        if constant.id != CONSTANT_COMPRESSOR_ID {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::Constant,
+                reason: format!(
+                    "expected compressor ID {CONSTANT_COMPRESSOR_ID}, found {}",
+                    constant.id
+                ),
+            });
+        }
+        if !constant.constant.is_finite() {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::Constant,
+                reason: "constant value must be finite".to_string(),
+            });
+        }
+        Ok(constant)
     }
 
     /// This function transforms the structure into a Binary stream
@@ -127,15 +148,36 @@ impl Constant {
     /// Returns an array of data. It creates an array of data the size of the frame with a constant value
     /// and pushes the residuals to the right place.
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
-        let data = vec![self.constant; frame_size];
-        data
+        let mut decoder = Decoder::new();
+        let mut output = Vec::with_capacity(frame_size);
+        self.append_to_data(frame_size, &mut decoder, &mut output)
+            .expect("failed to allocate Constant output");
+        output
+    }
+
+    pub(crate) fn append_to_data(
+        &self,
+        frame_size: usize,
+        _decoder: &mut Decoder,
+        output: &mut Vec<f64>,
+    ) -> Result<(), DecodeError> {
+        let new_len = reserve_decode(output, frame_size, "Constant output")?;
+        output.resize(new_len, self.constant);
+        Ok(())
     }
 }
 
 pub fn constant_compressor(data: &[f64], stats: DataStats) -> CompressorResult {
     debug!("Initializing Constant Compressor. Error and Stats provided");
     let c = Constant::new(data.len(), stats.min, stats.bitdepth);
-    CompressorResult::new(c.to_bytes(), 0.0)
+    let compressed_data = c.to_bytes();
+    let error = if stats.min == stats.max {
+        0.0
+    } else {
+        let reconstructed = Constant::decompress(&compressed_data).to_data(data.len());
+        calculate_error(data, &reconstructed)
+    };
+    CompressorResult::new(compressed_data, error)
 }
 
 pub fn constant_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
@@ -175,5 +217,27 @@ mod tests {
         let c2 = constant_to_data(vector1.len(), &c);
 
         assert_eq!(vector1, c2);
+    }
+
+    #[test]
+    fn bounded_result_reports_actual_nonconstant_error_without_changing_bytes() {
+        let data = [1.0, 2.0];
+        let stats = DataStats::new(&data);
+
+        let result = constant_compressor(&data, stats);
+
+        assert_eq!(result.compressed_data, [30, 3, 1]);
+        assert_eq!(result.error, 0.25);
+    }
+
+    #[test]
+    fn bounded_result_reports_exact_zero_for_constant_input() {
+        let data = [7.0; 16];
+        let stats = DataStats::new(&data);
+
+        let result = constant_compressor(&data, stats);
+
+        assert_eq!(result.compressed_data, [30, 3, 7]);
+        assert_eq!(result.error, 0.0);
     }
 }
