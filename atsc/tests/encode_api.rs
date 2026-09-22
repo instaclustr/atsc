@@ -133,23 +133,91 @@ fn invalid_compression_speed_is_typed_and_transactional() {
     assert_stream_is_empty(&stream);
 }
 
-#[test]
-fn infallible_bounded_stream_wrapper_panics_without_committing() {
-    let mut stream = CompressedStream::new();
-    let samples = [1.0, 2.0];
-
-    let panic = catch_unwind(AssertUnwindSafe(|| {
-        stream.compress_chunk_bounded_with(&samples, Compressor::RLE, -1.0, 0);
-    }))
-    .expect_err("compatibility wrapper must panic when the bound is not met");
-    let message = panic
+fn panic_message(panic: &(dyn std::any::Any + Send)) -> &str {
+    panic
         .downcast_ref::<String>()
         .map(String::as_str)
         .or_else(|| panic.downcast_ref::<&str>().copied())
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
 
-    assert!(message.contains("bounded stream compression failed"));
+fn samples_with_zeros() -> Vec<f64> {
+    (0..1024).map(|index| f64::from(index % 7)).collect()
+}
+
+#[test]
+fn infallible_bounded_stream_wrapper_commits_legacy_bytes_when_bound_is_missed() {
+    for (codec, samples) in [
+        (Compressor::RLE, vec![1.0, 2.0]),
+        (Compressor::Constant, vec![1.0, 2.0]),
+    ] {
+        let mut stream = CompressedStream::new();
+        stream.compress_chunk_bounded_with(&samples, codec, -1.0, 0);
+
+        let mut legacy = CompressedStream::new();
+        legacy.compress_chunk_with(&samples, codec);
+        assert_eq!(stream.to_bytes(), legacy.to_bytes(), "{codec:?}");
+    }
+}
+
+#[test]
+fn infallible_bounded_stream_wrapper_commits_forced_codec_when_error_is_undefined() {
+    let samples = samples_with_zeros();
+    for codec in [Compressor::FFT, Compressor::Polynomial, Compressor::Idw] {
+        let mut strict = CompressedStream::new();
+        let error = strict
+            .try_compress_chunk_bounded_with(&samples, codec, MAX_ERROR, 0)
+            .expect_err("MAPE is undefined for zero-valued samples");
+        assert!(
+            matches!(error, EncodeError::ErrorBoundNotMet { actual, .. } if !actual.is_finite()),
+            "{error:?}"
+        );
+        assert_stream_is_empty(&strict);
+
+        let mut stream = CompressedStream::new();
+        stream.compress_chunk_bounded_with(&samples, codec, MAX_ERROR, 0);
+        assert_eq!(stream.frame_count(), 1);
+        assert_eq!(stream.frame_info().next().unwrap().compressor, codec);
+        let decoded = stream
+            .try_decompress()
+            .expect("best-effort frame must decode");
+        assert_eq!(decoded.len(), samples.len());
+        assert!(decoded.iter().all(|value| value.is_finite()));
+    }
+}
+
+#[test]
+fn infallible_auto_stream_wrapper_commits_a_frame_when_no_candidate_meets_bound() {
+    let samples = samples_with_zeros();
+    let mut stream = CompressedStream::new();
+
+    stream.compress_chunk_bounded_with(&samples, Compressor::Auto, -1.0, FASTEST_SELECTION);
+
+    assert_eq!(stream.frame_count(), 1);
+    assert_eq!(stream.header.get_frame_count(), 1);
+    assert_eq!(stream.try_decompress().unwrap().len(), samples.len());
+}
+
+#[test]
+fn infallible_bounded_stream_wrapper_still_panics_on_non_bound_errors_without_committing() {
+    let mut stream = CompressedStream::new();
+    let panic = catch_unwind(AssertUnwindSafe(|| {
+        stream.compress_chunk_bounded_with(&[1.0, f64::NAN], Compressor::RLE, MAX_ERROR, 0);
+    }))
+    .expect_err("non-finite input is not a bound failure");
+    assert!(panic_message(panic.as_ref()).contains("bounded stream compression failed"));
     assert_stream_is_empty(&stream);
+
+    for _ in 0..u8::MAX {
+        stream.compress_chunk_bounded_with(&[7.0], Compressor::Constant, MAX_ERROR, 0);
+    }
+    let serialized = stream.clone().to_bytes();
+    catch_unwind(AssertUnwindSafe(|| {
+        stream.compress_chunk_bounded_with(&[9.0], Compressor::Constant, -1.0, 0);
+    }))
+    .expect_err("the compatibility wrapper must panic at the BRO v1 frame limit");
+    assert_eq!(stream.frame_count(), usize::from(u8::MAX));
+    assert_eq!(stream.clone().to_bytes(), serialized);
 }
 
 #[test]
@@ -252,16 +320,18 @@ fn every_fallible_bounded_entry_point_reports_the_non_finite_index() {
 }
 
 #[test]
-fn optimizer_plan_compatibility_wrapper_never_silently_drops_non_finite_samples() {
-    let panic = catch_unwind(|| OptimizerPlan::plan(&[1.0, f64::NEG_INFINITY]))
-        .expect_err("compatibility wrapper must reject non-finite input");
-    let message = panic
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| panic.downcast_ref::<&str>().copied())
-        .unwrap_or_default();
+fn optimizer_plan_compatibility_wrapper_drops_non_finite_samples() {
+    let samples = [1.0, f64::NAN, 2.0, f64::NEG_INFINITY, 3.0, f64::INFINITY];
 
-    assert!(message.contains("optimizer planning failed"), "{message}");
+    let plan = OptimizerPlan::plan(&samples);
+
+    assert_eq!(plan.data, [1.0, 2.0, 3.0]);
+    assert_eq!(plan.chunk_sizes, [3]);
+    assert_eq!(plan.get_execution().len(), 1);
+    assert!(matches!(
+        OptimizerPlan::try_plan(&samples),
+        Err(EncodeError::NonFiniteInput { index: 1 })
+    ));
 }
 
 #[test]

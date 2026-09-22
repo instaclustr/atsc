@@ -268,7 +268,7 @@ pub enum CliError {
     Io(#[from] io::Error),
     #[error(transparent)]
     Decode(#[from] DecodeError),
-    #[error(transparent)]
+    #[error("{}", describe_encode_error(.0))]
     Encode(#[from] EncodeError),
     #[error("{0}")]
     Usage(String),
@@ -278,6 +278,17 @@ pub enum CliError {
     Json(#[from] serde_json::Error),
     #[error("{0}")]
     Batch(BatchError),
+}
+
+fn describe_encode_error(error: &EncodeError) -> String {
+    match error {
+        EncodeError::ErrorBoundNotMet { actual, .. } if !actual.is_finite() => format!(
+            "{error}\nthe error metric divides by each original sample, so it is undefined for \
+             inputs containing zeros; try `--compressor auto`, `--compressor rle`, or \
+             `--compressor noop`"
+        ),
+        _ => error.to_string(),
+    }
 }
 
 impl CliError {
@@ -331,9 +342,12 @@ pub fn run(args: Args) -> Result<(), CliError> {
             ));
         }
         return match command {
-            Command::Compress(command) => {
-                compress_path(&command.input, command.output.as_deref(), &command.options)
-            }
+            Command::Compress(command) => compress_path(
+                &command.input,
+                command.output.as_deref(),
+                &command.options,
+                EncodeMode::Strict,
+            ),
             Command::Decompress(command) => {
                 decompress_path(&command.input, command.output.as_deref(), command.verbose)
             }
@@ -349,27 +363,37 @@ pub fn run(args: Args) -> Result<(), CliError> {
         decompress_path(&input, None, args.legacy.verbose)
     } else {
         let options = args.legacy.into_compression_options();
-        compress_path(&input, None, &options)
+        compress_path(&input, None, &options, EncodeMode::Legacy)
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum EncodeMode {
+    /// Reject non-finite samples and missed error bounds with typed errors.
+    Strict,
+    /// v0.7 root-invocation semantics: drop non-finite samples with a warning
+    /// and commit best-effort frames when the error bound is missed.
+    Legacy,
 }
 
 fn compress_path(
     input: &Path,
     output: Option<&Path>,
     options: &CompressionOptions,
+    mode: EncodeMode,
 ) -> Result<(), CliError> {
     let metadata = fs::metadata(input)?;
     if metadata.is_file() {
         let output = output
             .map(Path::to_path_buf)
             .unwrap_or_else(|| input.with_extension("bro"));
-        return compress_file(input, &output, options);
+        return compress_file(input, &output, options, mode);
     }
     if metadata.is_dir() {
         reject_directory_output(output)?;
         let extension = if options.csv { "csv" } else { "wbro" };
         return process_directory(input, extension, "bro", |path, output| {
-            compress_file(path, output, options)
+            compress_file(path, output, options, mode)
         });
     }
     Err(CliError::Usage(format!(
@@ -462,12 +486,27 @@ fn compress_file(
     input: &Path,
     output: &Path,
     options: &CompressionOptions,
+    mode: EncodeMode,
 ) -> Result<(), CliError> {
     let data = read_compression_input(input, options)?;
     if options.verbose {
         writeln!(io::stdout().lock(), "Input={data:?}")?;
     }
-    let compressed = compress_data(&data, options)?;
+    let compressed = match mode {
+        EncodeMode::Strict => compress_data(&data, options)?,
+        EncodeMode::Legacy => {
+            let finite = OptimizerPlan::clean_data(&data);
+            let dropped = data.len() - finite.len();
+            if dropped > 0 {
+                writeln!(
+                    io::stderr().lock(),
+                    "warning: {}: dropped {dropped} non-finite samples before compression",
+                    input.display()
+                )?;
+            }
+            compress_data_best_effort(&finite, options)?
+        }
+    };
     fs::write(output, compressed)?;
     Ok(())
 }
@@ -541,6 +580,32 @@ fn compress_data(data: &[f64], options: &CompressionOptions) -> Result<Vec<u8>, 
             max_error,
             usize::from(options.compression_selection_sample_level),
         )?;
+    }
+    Ok(stream.to_bytes())
+}
+
+fn compress_data_best_effort(
+    finite: &[f64],
+    options: &CompressionOptions,
+) -> Result<Vec<u8>, EncodeError> {
+    let mut plan = OptimizerPlan::try_plan(finite)?;
+    // The infallible stream wrapper panics instead of writing a 256th frame.
+    if plan.chunk_sizes.len() > usize::from(u8::MAX) {
+        return Err(EncodeError::FrameLimitExceeded {
+            limit: usize::from(u8::MAX),
+        });
+    }
+    plan.set_compressor(options.compressor.into());
+    let mut stream = CompressedStream::new();
+    let max_error = f32::from(options.error) / 100.0;
+
+    for (compressor, chunk) in plan.get_execution() {
+        stream.compress_chunk_bounded_with(
+            chunk,
+            *compressor,
+            max_error,
+            usize::from(options.compression_selection_sample_level),
+        );
     }
     Ok(stream.to_bytes())
 }

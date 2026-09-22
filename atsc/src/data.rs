@@ -17,7 +17,7 @@ limitations under the License.
 use crate::compressor::{BinConfig, Compressor};
 use crate::decoder::{Decoder, FrameInfo, FrameInfoIter};
 use crate::error::{validate_encode_input, DecodeError, DecodeLimits, EncodeError};
-use crate::frame::{BorrowedFrame, CompressorFrame};
+use crate::frame::{BorrowedFrame, BoundPolicy, CompressorFrame};
 use crate::header::CompressorHeader;
 //use bincode::{Decode, Encode};
 use log::debug;
@@ -59,6 +59,10 @@ impl CompressedStream {
     }
 
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
+    ///
+    /// Unlike [`Self::try_compress_chunk_bounded_with`], a missed error bound
+    /// still adds the frame (the forced codec's output, or Auto's smallest
+    /// candidate), as v0.7 did. Other errors panic before the stream changes.
     pub fn compress_chunk_bounded_with(
         &mut self,
         chunk: &[f64],
@@ -66,8 +70,14 @@ impl CompressedStream {
         max_error: f32,
         compression_speed: usize,
     ) {
-        self.try_compress_chunk_bounded_with(chunk, compressor, max_error, compression_speed)
-            .expect("bounded stream compression failed");
+        self.compress_chunk_bounded_with_policy(
+            chunk,
+            compressor,
+            max_error,
+            compression_speed,
+            BoundPolicy::BestEffort,
+        )
+        .expect("bounded stream compression failed");
     }
 
     pub fn try_compress_chunk_bounded_with(
@@ -76,6 +86,23 @@ impl CompressedStream {
         compressor: Compressor,
         max_error: f32,
         compression_speed: usize,
+    ) -> Result<(), EncodeError> {
+        self.compress_chunk_bounded_with_policy(
+            chunk,
+            compressor,
+            max_error,
+            compression_speed,
+            BoundPolicy::Strict,
+        )
+    }
+
+    fn compress_chunk_bounded_with_policy(
+        &mut self,
+        chunk: &[f64],
+        compressor: Compressor,
+        max_error: f32,
+        compression_speed: usize,
+        policy: BoundPolicy,
     ) -> Result<(), EncodeError> {
         validate_encode_input(chunk)?;
         self.ensure_frame_available()?;
@@ -86,10 +113,13 @@ impl CompressedStream {
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         match compressor {
             // Auto means the frame will pick the best
-            Compressor::Auto => {
-                compressor_frame.try_compress_best(chunk, max_error, compression_speed)?
-            }
-            _ => compressor_frame.try_compress_bounded(chunk, max_error)?,
+            Compressor::Auto => compressor_frame.compress_best_with_policy(
+                chunk,
+                max_error,
+                compression_speed,
+                policy,
+            )?,
+            _ => compressor_frame.compress_bounded_with_policy(chunk, max_error, policy)?,
         }
         compressor_frame.close();
         self.data_frames.push(compressor_frame);

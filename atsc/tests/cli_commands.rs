@@ -467,7 +467,7 @@ fn io_errors_use_the_stable_io_exit_code() {
 }
 
 #[test]
-fn encode_errors_are_reported_without_panicking_in_new_and_legacy_modes() {
+fn strict_compress_reports_bound_errors_while_legacy_mode_commits_best_effort_output() {
     let temp = tempdir().unwrap();
     let input = temp.path().join("nonconstant.wbro");
     write_wbro(&input, &[1.0, 2.0]);
@@ -500,14 +500,106 @@ fn encode_errors_are_reported_without_panicking_in_new_and_legacy_modes() {
         .arg("constant")
         .output()
         .unwrap();
-    assert_eq!(legacy.status.code(), Some(EXIT_ENCODE));
-    assert!(!input.with_extension("bro").exists());
-    let legacy_stderr = String::from_utf8_lossy(&legacy.stderr);
+    assert_success(&legacy);
+    assert!(legacy.stderr.is_empty());
+    let compressed = input.with_extension("bro");
+    let restored = temp.path().join("restored.wbro");
+    let decompression = command()
+        .arg("decompress")
+        .arg(&compressed)
+        .arg("-o")
+        .arg(&restored)
+        .output()
+        .unwrap();
+    assert_success(&decompression);
+    assert_eq!(WavBrro::from_file(&restored).unwrap().len(), 2);
+}
+
+#[test]
+fn legacy_mode_drops_non_finite_samples_with_one_warning() {
+    let temp = tempdir().unwrap();
+    let input = temp.path().join("gaps.wbro");
+    write_wbro(&input, &[1.0, f64::NAN, 3.0, f64::INFINITY, 5.0]);
+
+    let compression = command()
+        .arg(&input)
+        .arg("--compressor")
+        .arg("noop")
+        .output()
+        .unwrap();
+
+    assert_success(&compression);
+    let stderr = String::from_utf8_lossy(&compression.stderr);
+    assert_eq!(stderr.lines().count(), 1, "{stderr}");
+    assert!(stderr.contains("dropped 2 non-finite samples"), "{stderr}");
+    let restored = temp.path().join("restored.wbro");
+    let decompression = command()
+        .arg("decompress")
+        .arg(input.with_extension("bro"))
+        .arg("-o")
+        .arg(&restored)
+        .output()
+        .unwrap();
+    assert_success(&decompression);
+    assert_eq!(WavBrro::from_file(&restored).unwrap(), [1.0, 3.0, 5.0]);
+}
+
+fn strict_compress_fixture(fixture: &str, compressor: &str) -> (Output, bool) {
+    let temp = tempdir().unwrap();
+    let input = temp.path().join("input.wbro");
+    fs::copy(format!("tests/wbros/{fixture}"), &input).unwrap();
+    let output_path = temp.path().join("output.bro");
+    let output = command()
+        .arg("compress")
+        .arg(&input)
+        .arg("--compressor")
+        .arg(compressor)
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .unwrap();
+    (output, output_path.exists())
+}
+
+#[test]
+fn strict_compress_rejects_real_fixtures_that_legacy_mode_accepts() {
+    let (output, written) = strict_compress_fixture("memory_used.wbro", "auto");
+    assert_eq!(output.status.code(), Some(EXIT_ENCODE));
+    assert!(!written);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("index 2300 is not finite"), "{stderr}");
+
+    let (output, written) = strict_compress_fixture("go_gc_heap_goal_bytes.wbro", "fft");
+    assert_eq!(output.status.code(), Some(EXIT_ENCODE));
+    assert!(!written);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        legacy_stderr.contains("Constant compression did not meet error bound"),
-        "{legacy_stderr}"
+        stderr.contains("FFT compression did not meet error bound"),
+        "{stderr}"
     );
-    assert!(!legacy_stderr.contains("panicked at"), "{legacy_stderr}");
+    assert!(!stderr.contains("containing zeros"), "{stderr}");
+}
+
+#[test]
+fn strict_compress_explains_undefined_error_for_inputs_with_zeros() {
+    let (output, written) = strict_compress_fixture("uptime.wbro", "fft");
+
+    assert_eq!(output.status.code(), Some(EXIT_ENCODE));
+    assert!(!written);
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("FFT compression did not meet error bound"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("undefined for inputs containing zeros"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("--compressor auto"), "{stderr}");
+    assert!(stderr.contains("rle"), "{stderr}");
+    assert!(stderr.contains("noop"), "{stderr}");
+    assert!(!stderr.contains("panicked at"), "{stderr}");
 }
 
 #[test]

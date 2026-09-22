@@ -32,12 +32,23 @@ fn meets_error_bound(result: &CompressorResult, requested: f64) -> bool {
     requested.is_finite() && result.error.is_finite() && result.error <= requested
 }
 
+/// How a codec result that misses the requested error bound is handled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BoundPolicy {
+    /// Reject it with [`EncodeError::ErrorBoundNotMet`].
+    Strict,
+    /// Commit what v0.7 committed: the forced codec's result, or the smallest
+    /// Auto candidate when no candidate meets the bound.
+    BestEffort,
+}
+
 fn validate_error_bound(
     codec: Compressor,
     requested: f64,
     result: CompressorResult,
+    policy: BoundPolicy,
 ) -> Result<CompressorResult, EncodeError> {
-    if meets_error_bound(&result, requested) {
+    if policy == BoundPolicy::BestEffort || meets_error_bound(&result, requested) {
         Ok(result)
     } else {
         Err(EncodeError::ErrorBoundNotMet {
@@ -45,6 +56,24 @@ fn validate_error_bound(
             requested,
             actual: result.error,
         })
+    }
+}
+
+fn keep_smaller(
+    slot: &mut Option<(usize, Compressor, CompressorResult)>,
+    stable_rank: usize,
+    compressor: Compressor,
+    result: CompressorResult,
+) {
+    let candidate_key = (result.compressed_data.len(), stable_rank);
+    let replace = slot
+        .as_ref()
+        .map(|(best_rank, _, best_result)| {
+            candidate_key < (best_result.compressed_data.len(), *best_rank)
+        })
+        .unwrap_or(true);
+    if replace {
+        *slot = Some((stable_rank, compressor, result));
     }
 }
 
@@ -120,8 +149,11 @@ impl CompressorFrame {
     }
 
     /// Compress a data and stores the result in the frame
+    ///
+    /// Unlike [`Self::try_compress_bounded`], a missed error bound still stores
+    /// the codec's bounded output, as v0.7 did. Other errors panic.
     pub fn compress_bounded(&mut self, data: &[f64], max_error: f32) {
-        self.try_compress_bounded(data, max_error)
+        self.compress_bounded_with_policy(data, max_error, BoundPolicy::BestEffort)
             .expect("bounded frame compression failed");
     }
 
@@ -129,6 +161,15 @@ impl CompressorFrame {
         &mut self,
         data: &[f64],
         max_error: f32,
+    ) -> Result<(), EncodeError> {
+        self.compress_bounded_with_policy(data, max_error, BoundPolicy::Strict)
+    }
+
+    pub(crate) fn compress_bounded_with_policy(
+        &mut self,
+        data: &[f64],
+        max_error: f32,
+        policy: BoundPolicy,
     ) -> Result<(), EncodeError> {
         validate_encode_input(data)?;
         if self.compressor == Compressor::Auto {
@@ -142,7 +183,7 @@ impl CompressorFrame {
         let result = self
             .compressor
             .get_compress_bounded_results(data, requested);
-        let result = validate_error_bound(self.compressor, requested, result)?;
+        let result = validate_error_bound(self.compressor, requested, result, policy)?;
 
         self.sample_count = data.len();
         self.data = result.compressed_data;
@@ -150,8 +191,11 @@ impl CompressorFrame {
     }
 
     /// This function tries to detect the best compressor for use and apply it to the data size
+    ///
+    /// Unlike [`Self::try_compress_best`], when no candidate meets the error
+    /// bound the smallest candidate is stored, as v0.7 did. Other errors panic.
     pub fn compress_best(&mut self, data: &[f64], max_error: f32, compression_speed: usize) {
-        self.try_compress_best(data, max_error, compression_speed)
+        self.compress_best_with_policy(data, max_error, compression_speed, BoundPolicy::BestEffort)
             .expect("automatic frame compression failed");
     }
 
@@ -160,6 +204,16 @@ impl CompressorFrame {
         data: &[f64],
         max_error: f32,
         compression_speed: usize,
+    ) -> Result<(), EncodeError> {
+        self.compress_best_with_policy(data, max_error, compression_speed, BoundPolicy::Strict)
+    }
+
+    pub(crate) fn compress_best_with_policy(
+        &mut self,
+        data: &[f64],
+        max_error: f32,
+        compression_speed: usize,
+        policy: BoundPolicy,
     ) -> Result<(), EncodeError> {
         validate_encode_input(data)?;
         // Speed factor limits the amount of data that is sampled to calculate the best compressor.
@@ -180,7 +234,7 @@ impl CompressorFrame {
             let result = compressor.get_compress_bounded_results(data, requested);
             (
                 compressor,
-                validate_error_bound(compressor, requested, result)?,
+                validate_error_bound(compressor, requested, result, policy)?,
             )
         } else {
             let mut candidates: Vec<_> = AUTO_COMPRESSORS.iter().copied().enumerate().collect();
@@ -198,33 +252,27 @@ impl CompressorFrame {
             }
 
             let mut best: Option<(usize, Compressor, CompressorResult)> = None;
+            let mut smallest_above_bound: Option<(usize, Compressor, CompressorResult)> = None;
             let mut lowest_actual = f64::INFINITY;
             for (stable_rank, compressor) in candidates {
                 let result = compressor.get_compress_bounded_results(data, requested);
                 if result.error.is_finite() {
                     lowest_actual = lowest_actual.min(result.error);
                 }
-                if !meets_error_bound(&result, requested) {
-                    continue;
-                }
-
-                let candidate_key = (result.compressed_data.len(), stable_rank);
-                let replace = best
-                    .as_ref()
-                    .map(|(best_rank, _, best_result)| {
-                        candidate_key < (best_result.compressed_data.len(), *best_rank)
-                    })
-                    .unwrap_or(true);
-                if replace {
-                    best = Some((stable_rank, compressor, result));
+                if meets_error_bound(&result, requested) {
+                    keep_smaller(&mut best, stable_rank, compressor, result);
+                } else if policy == BoundPolicy::BestEffort {
+                    keep_smaller(&mut smallest_above_bound, stable_rank, compressor, result);
                 }
             }
 
-            let (_, compressor, result) = best.ok_or(EncodeError::ErrorBoundNotMet {
-                codec: Compressor::Auto,
-                requested,
-                actual: lowest_actual,
-            })?;
+            let (_, compressor, result) =
+                best.or(smallest_above_bound)
+                    .ok_or(EncodeError::ErrorBoundNotMet {
+                        codec: Compressor::Auto,
+                        requested,
+                        actual: lowest_actual,
+                    })?;
             (compressor, result)
         };
 
@@ -273,5 +321,89 @@ impl CompressorFrame {
 
     pub(crate) fn payload_bytes(&self) -> usize {
         self.data.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::panic::catch_unwind;
+
+    fn with_zeros() -> Vec<f64> {
+        (0..256).map(|index| f64::from(index % 5)).collect()
+    }
+
+    #[test]
+    fn infallible_forced_bounded_compression_commits_codec_output_for_undefined_error() {
+        let data = with_zeros();
+        let expected = Compressor::Polynomial.get_compress_bounded_results(&data, 0.03);
+        assert!(!expected.error.is_finite(), "{}", expected.error);
+
+        let mut strict = CompressorFrame::new(Some(Compressor::Polynomial));
+        assert!(matches!(
+            strict.try_compress_bounded(&data, 0.03),
+            Err(EncodeError::ErrorBoundNotMet { .. })
+        ));
+        assert!(strict.data.is_empty());
+
+        let mut frame = CompressorFrame::new(Some(Compressor::Polynomial));
+        frame.compress_bounded(&data, 0.03);
+        assert_eq!(frame.compressor, Compressor::Polynomial);
+        assert_eq!(frame.sample_count, data.len());
+        assert_eq!(frame.data, expected.compressed_data);
+    }
+
+    #[test]
+    fn infallible_forced_bounded_compression_commits_codec_output_above_bound() {
+        let data = [1.0, 2.0];
+        let mut frame = CompressorFrame::new(Some(Compressor::Constant));
+        frame.compress_bounded(&data, 0.03);
+
+        assert_eq!(frame.compressor, Compressor::Constant);
+        assert_eq!(frame.sample_count, data.len());
+        assert_eq!(frame.data, Compressor::Constant.compress(&data));
+    }
+
+    #[test]
+    fn infallible_auto_compression_commits_smallest_candidate_when_none_meets_bound() {
+        let data = with_zeros();
+        let (expected_result, expected_codec) = AUTO_COMPRESSORS
+            .iter()
+            .map(|codec| (codec.get_compress_bounded_results(&data, -1.0), *codec))
+            .min_by_key(|(result, _)| result.compressed_data.len())
+            .unwrap();
+
+        for speed in [0, COMPRESSION_SPEED.len() - 1] {
+            let mut strict = CompressorFrame::new(Some(Compressor::Auto));
+            assert!(matches!(
+                strict.try_compress_best(&data, -1.0, speed),
+                Err(EncodeError::ErrorBoundNotMet { .. })
+            ));
+            assert!(strict.data.is_empty());
+
+            let mut frame = CompressorFrame::new(Some(Compressor::Auto));
+            frame.compress_best(&data, -1.0, speed);
+            assert_eq!(frame.compressor, expected_codec);
+            assert_eq!(frame.sample_count, data.len());
+            assert_eq!(frame.data, expected_result.compressed_data);
+        }
+    }
+
+    #[test]
+    fn infallible_frame_wrappers_still_panic_on_non_bound_errors() {
+        let forced_auto = catch_unwind(|| {
+            CompressorFrame::new(Some(Compressor::Auto)).compress_bounded(&[1.0], 0.03);
+        });
+        assert!(forced_auto.is_err());
+
+        let non_finite = catch_unwind(|| {
+            CompressorFrame::new(Some(Compressor::Auto)).compress_best(&[f64::NAN], 0.03, 0);
+        });
+        assert!(non_finite.is_err());
+
+        let empty = catch_unwind(|| {
+            CompressorFrame::new(Some(Compressor::Noop)).compress_bounded(&[], 0.03);
+        });
+        assert!(empty.is_err());
     }
 }
