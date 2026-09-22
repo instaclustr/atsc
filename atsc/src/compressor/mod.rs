@@ -20,6 +20,7 @@ use bincode::{Decode, Encode};
 use crate::{
     decoder::Decoder,
     error::{validate_encode_input, DecodeError, EncodeError},
+    frame::BoundPolicy,
     optimizer::utils::DataStats,
     utils::is_decomposable,
 };
@@ -82,8 +83,10 @@ impl Compressor {
         }
     }
 
+    /// Unlike [`Self::try_compress_bounded`], a missed error bound still returns
+    /// the codec's bounded output, as v0.7 did. Other errors panic.
     pub fn compress_bounded(&self, data: &[f64], max_error: f64) -> Vec<u8> {
-        self.try_compress_bounded(data, max_error)
+        self.compress_bounded_with_policy(data, max_error, BoundPolicy::BestEffort)
             .expect("bounded codec compression failed")
     }
 
@@ -91,6 +94,15 @@ impl Compressor {
         &self,
         data: &[f64],
         max_error: f64,
+    ) -> Result<Vec<u8>, EncodeError> {
+        self.compress_bounded_with_policy(data, max_error, BoundPolicy::Strict)
+    }
+
+    fn compress_bounded_with_policy(
+        &self,
+        data: &[f64],
+        max_error: f64,
+        policy: BoundPolicy,
     ) -> Result<Vec<u8>, EncodeError> {
         validate_encode_input(data)?;
         if *self == Compressor::Auto {
@@ -101,7 +113,9 @@ impl Compressor {
         }
 
         let result = self.get_compress_bounded_results(data, max_error);
-        if max_error.is_finite() && result.error.is_finite() && result.error <= max_error {
+        if policy == BoundPolicy::BestEffort
+            || (max_error.is_finite() && result.error.is_finite() && result.error <= max_error)
+        {
             Ok(result.compressed_data)
         } else {
             Err(EncodeError::ErrorBoundNotMet {

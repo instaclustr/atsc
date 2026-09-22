@@ -187,6 +187,30 @@ fn infallible_bounded_stream_wrapper_commits_forced_codec_when_error_is_undefine
 }
 
 #[test]
+fn infallible_codec_bounded_wrapper_returns_bounded_bytes_when_bound_is_missed() {
+    let samples = samples_with_zeros();
+    for codec in [
+        Compressor::Noop,
+        Compressor::FFT,
+        Compressor::Idw,
+        Compressor::Constant,
+        Compressor::Polynomial,
+        Compressor::RLE,
+    ] {
+        let expected = codec.get_compress_bounded_results(&samples, -1.0);
+        assert_eq!(
+            codec.compress_bounded(&samples, -1.0),
+            expected.compressed_data,
+            "{codec:?}"
+        );
+    }
+
+    assert!(catch_unwind(|| Compressor::Auto.compress_bounded(&[1.0], 0.03)).is_err());
+    assert!(catch_unwind(|| Compressor::Noop.compress_bounded(&[f64::NAN], 0.03)).is_err());
+    assert!(catch_unwind(|| Compressor::Noop.compress_bounded(&[], 0.03)).is_err());
+}
+
+#[test]
 fn infallible_auto_stream_wrapper_commits_a_frame_when_no_candidate_meets_bound() {
     let samples = samples_with_zeros();
     let mut stream = CompressedStream::new();
