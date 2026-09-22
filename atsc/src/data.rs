@@ -17,7 +17,7 @@ limitations under the License.
 use crate::compressor::{BinConfig, Compressor};
 use crate::decoder::{Decoder, FrameInfo, FrameInfoIter};
 use crate::error::{validate_encode_input, DecodeError, DecodeLimits, EncodeError};
-use crate::frame::CompressorFrame;
+use crate::frame::{BorrowedFrame, CompressorFrame};
 use crate::header::CompressorHeader;
 //use bincode::{Decode, Encode};
 use log::debug;
@@ -168,13 +168,13 @@ impl CompressedStream {
             });
         }
 
-        let (data_frames, consumed): (Vec<CompressorFrame>, usize) =
-            bincode::decode_from_slice(binary_data, BinConfig::get_decode()).map_err(|source| {
-                DecodeError::Bincode {
+        let (borrowed_frames, consumed): (Vec<BorrowedFrame<'_>>, usize) =
+            bincode::borrow_decode_from_slice(binary_data, BinConfig::get_decode()).map_err(
+                |source| DecodeError::Bincode {
                     context: "BRO frame vector",
                     source,
-                }
-            })?;
+                },
+            )?;
 
         if consumed != binary_data.len() {
             return Err(DecodeError::TrailingBytes {
@@ -182,7 +182,7 @@ impl CompressedStream {
             });
         }
 
-        let body_frames = data_frames.len();
+        let body_frames = borrowed_frames.len();
         if header_frames != body_frames {
             return Err(DecodeError::FrameCountMismatch {
                 header: header_frames,
@@ -191,7 +191,7 @@ impl CompressedStream {
         }
 
         let mut samples = 0_usize;
-        for frame in &data_frames {
+        for frame in &borrowed_frames {
             samples = samples.checked_add(frame.sample_count()).ok_or(
                 DecodeError::SampleLimitExceeded {
                     actual: usize::MAX,
@@ -208,7 +208,10 @@ impl CompressedStream {
 
         Ok(CompressedStream {
             header,
-            data_frames,
+            data_frames: borrowed_frames
+                .into_iter()
+                .map(CompressorFrame::from)
+                .collect(),
         })
     }
 

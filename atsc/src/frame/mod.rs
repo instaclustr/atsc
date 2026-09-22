@@ -20,7 +20,7 @@ use crate::{
     error::{validate_encode_input, DecodeError, EncodeError},
     optimizer::utils::DataStats,
 };
-use bincode::{Decode, Encode};
+use bincode::{BorrowDecode, Decode, Encode};
 use log::debug;
 use std::mem::size_of_val;
 
@@ -61,6 +61,33 @@ pub struct CompressorFrame {
     compressor: Compressor,
     /// Output from the compressor
     data: Vec<u8>,
+}
+
+/// Wire-identical view of [`CompressorFrame`] whose payload borrows from the
+/// input, so a forged payload length fails before any buffer is allocated.
+#[derive(BorrowDecode)]
+pub(crate) struct BorrowedFrame<'a> {
+    frame_size: usize,
+    sample_count: usize,
+    compressor: Compressor,
+    data: &'a [u8],
+}
+
+impl BorrowedFrame<'_> {
+    pub(crate) fn sample_count(&self) -> usize {
+        self.sample_count
+    }
+}
+
+impl From<BorrowedFrame<'_>> for CompressorFrame {
+    fn from(frame: BorrowedFrame<'_>) -> Self {
+        CompressorFrame {
+            frame_size: frame.frame_size,
+            sample_count: frame.sample_count,
+            compressor: frame.compressor,
+            data: frame.data.to_vec(),
+        }
+    }
 }
 
 impl CompressorFrame {
