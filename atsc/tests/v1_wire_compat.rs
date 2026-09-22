@@ -1,5 +1,9 @@
 use atsc::{compressor::Compressor, data::CompressedStream};
 
+/// 9-byte header, then frame vector length, frame_size, varint sample_count
+/// (3 bytes), codec, payload length, FFT id, frequency count and position.
+const FIRST_FFT_COEFFICIENT_LOW_BYTE: usize = 19;
+
 fn encode(compressor: Compressor, samples: &[f64]) -> Vec<u8> {
     let mut stream = CompressedStream::new();
     stream.compress_chunk_with(samples, compressor);
@@ -50,6 +54,47 @@ fn assert_lossy_fixture(name: &str, compressor: Compressor, samples: &[f64], fix
     );
 }
 
+/// rustfft picks architecture-specific SIMD kernels, so FFT coefficients may
+/// differ by an f32 ULP between hosts. Decoded samples are rounded to five
+/// decimals (quantum 1e-5); 1e-4 absorbs one rounding flip plus f32 IFFT drift.
+const FFT_CROSS_ARCH_TOLERANCE: f64 = 1e-4;
+
+fn decode_fixture(name: &str, bytes: &[u8]) -> Vec<f64> {
+    CompressedStream::try_from_bytes(bytes)
+        .unwrap_or_else(|error| panic!("{name} BRO v1 bytes no longer parse: {error}"))
+        .try_decompress()
+        .unwrap_or_else(|error| panic!("{name} BRO v1 bytes no longer decode: {error}"))
+}
+
+fn assert_fft_fixture(samples: &[f64], fixture: &[u8]) {
+    let fixture_decoded = decode_fixture("fft fixture", fixture);
+    assert_eq!(
+        fixture_decoded.len(),
+        samples.len(),
+        "fft BRO v1 fixture decoded to the wrong sample count"
+    );
+    assert!(
+        fixture_decoded.iter().all(|value| value.is_finite()),
+        "fft BRO v1 fixture decoded to a non-finite value"
+    );
+
+    let generated = encode(Compressor::FFT, samples);
+    assert_eq!(
+        generated.len(),
+        fixture.len(),
+        "fft BRO v1 encoded size changed"
+    );
+    let generated_decoded = decode_fixture("fft generated", &generated);
+    assert_eq!(generated_decoded.len(), fixture_decoded.len());
+    for (index, (generated, fixture)) in generated_decoded.iter().zip(&fixture_decoded).enumerate()
+    {
+        assert!(
+            (generated - fixture).abs() <= FFT_CROSS_ARCH_TOLERANCE,
+            "fft decoded sample {index} drifted: generated {generated}, fixture {fixture}"
+        );
+    }
+}
+
 fn wave() -> Vec<f64> {
     (0..256).map(|i| ((i as f64) / 8.0).sin()).collect()
 }
@@ -86,13 +131,14 @@ fn rle_v1_wire_compatibility() {
 
 #[test]
 fn fft_v1_wire_compatibility() {
-    let samples = wave();
-    assert_lossy_fixture(
-        "fft",
-        Compressor::FFT,
-        &samples,
-        include_bytes!("fixtures/v1/fft.bro"),
-    );
+    assert_fft_fixture(&wave(), include_bytes!("fixtures/v1/fft.bro"));
+}
+
+#[test]
+fn fft_v1_check_accepts_one_ulp_coefficient_drift() {
+    let mut fixture = include_bytes!("fixtures/v1/fft.bro").to_vec();
+    fixture[FIRST_FFT_COEFFICIENT_LOW_BYTE] ^= 1;
+    assert_fft_fixture(&wave(), &fixture);
 }
 
 #[test]
