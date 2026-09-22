@@ -125,17 +125,24 @@ and filters the initial entries, rejects duplicate derived output paths, then
 processes each eligible input once.
 `-o/--output` is only valid for a single input file.
 BRO, WBRO, and CSV reads default to 256 MiB and 33,423,360 samples. WBRO
-metadata and CSV structure are validated before unbounded allocations, and
-non-finite encoder inputs report their sample index. File open/read/write
-failures retain the I/O exit status.
+metadata and CSV structure are validated before unbounded allocations.
+`compress` is strict: non-finite samples are rejected with their sample index,
+and a codec that misses the error bound fails without writing output. File
+open/read/write failures retain the I/O exit status.
 
-Existing invocations remain available as compatibility mode and use the same
-safe implementation:
+The 0.7 root invocations remain available as legacy mode:
 
 ```bash
 atsc [OPTIONS] <INPUT>
 atsc -u <INPUT>
 ```
+
+Legacy compression keeps 0.7's best-effort behavior: non-finite samples are
+dropped with a warning on stderr, and output is still written when the error
+bound is missed. Legacy mode otherwise shares the new implementation, so it
+also uses the safe parser, directory filtering, input limits, and stable exit
+codes described in [the usage guide](docs/usage.md) and
+[the changelog](CHANGELOG.md).
 
 For a legacy file named `inspect`, `verify`, `compress`, or `decompress`, use
 `atsc -- <name>` or an explicit path such as `atsc ./inspect`. ATSC does not
@@ -160,6 +167,13 @@ See [the usage guide](docs/usage.md) for all compression options, output naming,
 JSON behavior, and stable exit codes.
 
 ## Releases
+
+### v0.8
+
+* Strict, typed-error library APIs and a reusable decoder
+* `compress`, `decompress`, `inspect`, and `verify` subcommands with stable exit codes
+* Bounded BRO, WBRO, and CSV parsing
+* BRO v1 wire compatibility; see [CHANGELOG.md](CHANGELOG.md) for behavior changes
 
 ### v0.7 - 20/11/2024
 

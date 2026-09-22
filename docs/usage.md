@@ -60,8 +60,14 @@ BRO, WBRO, and CSV readers default to a 256 MiB input limit and a 33,423,360
 sample limit. WBRO archive shape is validated before archived vectors are
 deserialized. CSV readers bound individual records and report invalid UTF-8,
 unequal record lengths, missing fields, and invalid values as input-format
-errors instead of panicking. Non-finite compression inputs are rejected with
-their sample index. File open and read failures remain I/O errors.
+errors instead of panicking. File open and read failures remain I/O errors.
+
+`compress` is strict. Non-finite samples are rejected with their sample index,
+and if the selected codec cannot meet `--error` the command fails with exit
+code 4 and writes no output. The error metric is a mean absolute percentage
+error, so it is undefined (NaN or infinite) for inputs containing zeros with
+lossy codecs; the error message then suggests `--compressor auto`, `rle`, or
+`noop`. Use [legacy mode](#legacy-compatibility) for 0.7's best-effort output.
 
 Without `-o`, a file keeps its base name and receives the `.bro` extension.
 For directory input, ATSC snapshots the initial entries and processes each
@@ -83,7 +89,7 @@ Duplicate derived `.wbro` paths are rejected before any output is written.
 
 ## Legacy compatibility
 
-Existing root-level invocations remain supported:
+The 0.7 root-level invocations remain supported:
 
 ```text
 atsc [OPTIONS] <INPUT>
@@ -99,9 +105,30 @@ atsc --csv --no-header values.csv
 atsc -u metrics.bro
 ```
 
-Legacy mode uses the same bounded, fallible implementation as `compress` and
-the same safe parser and decoder as `decompress`. Existing file and directory
-output naming is unchanged.
+Legacy compression keeps 0.7's best-effort semantics, unlike `compress`:
+
+- Non-finite samples (NaN, infinity) are dropped before compression, and one
+  warning line with the dropped count is printed to stderr per file. The
+  restored series is shorter than the input by that count.
+- When the codec misses `--error`, output is still written: a forced codec
+  writes its bounded result, and `auto` writes the smallest candidate when no
+  candidate meets the bound. Compare the restored data if the bound matters.
+
+The remaining behavior is shared with the explicit commands and differs from
+0.7:
+
+- `-u` uses the bounded parser and decoder of `decompress`; corrupt BRO input
+  fails with exit code 3 instead of panicking.
+- Errors are printed to stderr and use the [exit codes](#exit-status) below;
+  0.7 exited with `1` on any failure.
+- Directory input is filtered by extension, processed once per file, and
+  rejected before writing if derived output paths collide.
+- WBRO and CSV input is validated and limited as described above.
+- `auto` evaluates every candidate on the full frame, so
+  `-c/--compression-selection-sample-level` no longer changes the chosen
+  codec.
+
+File output naming (`.bro` for compression, `.wbro` for `-u`) is unchanged.
 
 The four subcommand names are reserved command words. Disambiguate a legacy
 file with one of the standard path forms; ATSC does not guess based on whether
@@ -117,13 +144,16 @@ The same forms apply to legacy files named `verify`, `compress`, or
 
 ## Exit status
 
-ATSC uses stable exit codes:
+ATSC uses stable exit codes in both explicit and legacy modes (0.7 exited with
+`1` on any failure):
 
 - `0`: success
 - `1`: file open/read/write I/O or output-serialization error
 - `2`: command usage error, including mixed legacy/subcommand syntax
 - `3`: BRO parse or decode error
-- `4`: bounded compression error
+- `4`: compression error (strict input or error-bound failure; in legacy mode,
+  only input that is empty after dropping non-finite samples or needs more than
+  255 frames)
 - `5`: malformed WBRO header/body or CSV UTF-8/shape/field/value error
 
 For a directory with multiple failures, every eligible entry is attempted
