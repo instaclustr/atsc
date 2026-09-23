@@ -15,13 +15,19 @@ limitations under the License.
 */
 
 use std::fs::File;
-use std::os::unix::prelude::FileExt;
+use std::io::{self, Write};
 use std::path::Path;
 
+/// Header written in front of every WAVBRRO body: magic, format marker, magic.
+pub const FILE_HEADER: [u8; 12] = *b"WBRO0001WBRO";
+
+/// Writes `FILE_HEADER` followed by an archived WAVBRRO body.
+pub fn try_write_wavbrro_file(file_path: &Path, content: &[u8]) -> io::Result<()> {
+    let mut file = File::create(file_path)?;
+    file.write_all(&FILE_HEADER)?;
+    file.write_all(content)
+}
+
 pub fn write_wavbrro_file(file_path: &Path, content: &[u8]) {
-    let header: [u8; 12] = *b"WBRO0000WBRO";
-    let file = File::create(file_path).expect("Can't create file!");
-    file.write_at(&header, 0).expect("Fail to write header");
-    file.write_at(content, header.len() as u64)
-        .expect("Fail to write content");
+    try_write_wavbrro_file(file_path, content).expect("Fail to write WAVBRRO file");
 }

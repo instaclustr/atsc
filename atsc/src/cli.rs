@@ -37,6 +37,7 @@ use atsc::{
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use wavbrro::wavbrro::{Error as WavBrroError, ReadLimits as WavBrroReadLimits, WavBrro};
+use wavbrro::write::try_write_wavbrro_file;
 
 /// Stable process exit codes for failures handled by the CLI boundary.
 pub const EXIT_IO: i32 = 1;
@@ -630,11 +631,7 @@ fn write_wbro(output: &Path, data: &[f64]) -> Result<(), CliError> {
     for sample in data {
         wbro.add_sample(*sample);
     }
-    let payload = wbro.to_bytes();
-    let mut bytes = Vec::with_capacity(12 + payload.len());
-    bytes.extend_from_slice(b"WBRO0000WBRO");
-    bytes.extend_from_slice(&payload);
-    fs::write(output, bytes)?;
+    try_write_wavbrro_file(output, &wbro.to_bytes())?;
     Ok(())
 }
 
