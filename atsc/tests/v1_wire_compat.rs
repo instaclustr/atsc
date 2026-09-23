@@ -58,6 +58,11 @@ fn assert_lossy_fixture(name: &str, compressor: Compressor, samples: &[f64], fix
 /// differ by an f32 ULP between hosts. Decoded samples are rounded to five
 /// decimals (quantum 1e-5); 1e-4 absorbs one rounding flip plus f32 IFFT drift.
 const FFT_CROSS_ARCH_TOLERANCE: f64 = 1e-4;
+/// The unbounded FFT fixture keeps few frequencies, so it decodes `wave()` with
+/// a max absolute error of 1.35408 and a mean of 0.48054; the bounds add 1e-3
+/// (10x the cross-architecture tolerance) so decoder regressions still fail.
+const FFT_FIXTURE_MAX_INPUT_ERROR: f64 = 1.3551;
+const FFT_FIXTURE_MEAN_INPUT_ERROR: f64 = 0.4815;
 
 fn decode_fixture(name: &str, bytes: &[u8]) -> Vec<f64> {
     CompressedStream::try_from_bytes(bytes)
@@ -76,6 +81,22 @@ fn assert_fft_fixture(samples: &[f64], fixture: &[u8]) {
     assert!(
         fixture_decoded.iter().all(|value| value.is_finite()),
         "fft BRO v1 fixture decoded to a non-finite value"
+    );
+    let max_input_error = fixture_decoded
+        .iter()
+        .zip(samples)
+        .map(|(decoded, sample)| (decoded - sample).abs())
+        .fold(0.0, f64::max);
+    let mean_input_error = fixture_decoded
+        .iter()
+        .zip(samples)
+        .map(|(decoded, sample)| (decoded - sample).abs())
+        .sum::<f64>()
+        / samples.len() as f64;
+    assert!(
+        max_input_error <= FFT_FIXTURE_MAX_INPUT_ERROR
+            && mean_input_error <= FFT_FIXTURE_MEAN_INPUT_ERROR,
+        "fft BRO v1 fixture drifted from its input: max {max_input_error}, mean {mean_input_error}"
     );
 
     let generated = encode(Compressor::FFT, samples);
