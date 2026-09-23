@@ -14,7 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use std::path::Path;
+
 use tempfile::tempdir;
+use wavbrro::wavbrro::WavBrro;
+
+const REAL_FIXTURES: [&str; 3] = [
+    "tests/wbros/memory_used.wbro",
+    "tests/wbros/uptime.wbro",
+    "tests/wbros/go_gc_heap_goal_bytes.wbro",
+];
 
 #[test]
 fn test_noop() {
@@ -58,7 +67,7 @@ fn test_compression_speed() {
 
 fn test_suite(compressor: &str) {
     compress_dir(compressor);
-    compress_file(compressor);
+    compress_files(compressor);
 }
 
 fn test_speed() {
@@ -75,21 +84,23 @@ fn compress_dir(compressor: &str) {
     std::fs::copy("tests/wbros/uptime.wbro", input.join("2.wbro")).unwrap();
 
     run_compressor(&[input.to_str().unwrap(), "--compressor", compressor]);
-    assert!(input.join("1.bro").is_file());
-    assert!(input.join("2.bro").is_file());
+    assert_valid_legacy_output(&input.join("1.bro"), REAL_FIXTURES[0]);
+    assert_valid_legacy_output(&input.join("2.bro"), REAL_FIXTURES[1]);
 }
 
-fn compress_file(compressor: &str) {
-    let tmp_dir = tempdir().unwrap();
-    let path = tmp_dir.path();
-    std::fs::copy("tests/wbros/memory_used.wbro", path.join("1.wbro")).unwrap();
+fn compress_files(compressor: &str) {
+    for fixture in REAL_FIXTURES {
+        let tmp_dir = tempdir().unwrap();
+        let path = tmp_dir.path();
+        std::fs::copy(fixture, path.join("1.wbro")).unwrap();
 
-    run_compressor(&[
-        path.join("1.wbro").to_str().unwrap(),
-        "--compressor",
-        compressor,
-    ]);
-    assert!(path.join("1.bro").is_file());
+        run_compressor(&[
+            path.join("1.wbro").to_str().unwrap(),
+            "--compressor",
+            compressor,
+        ]);
+        assert_valid_legacy_output(&path.join("1.bro"), fixture);
+    }
 }
 
 fn compress_file_with_speed(speed: u8) {
@@ -102,22 +113,47 @@ fn compress_file_with_speed(speed: u8) {
         "--compression-selection-sample-level",
         &speed.to_string(),
     ]);
-    assert!(path.join("1.bro").is_file());
+    assert_valid_legacy_output(&path.join("1.bro"), REAL_FIXTURES[0]);
+}
+
+/// Legacy mode drops non-finite samples, so the restored series must contain
+/// exactly the finite input samples, all of them finite.
+fn assert_valid_legacy_output(compressed: &Path, original: &str) {
+    let tmp_dir = tempdir().unwrap();
+    let round_trip = tmp_dir.path().join("round-trip.bro");
+    std::fs::copy(compressed, &round_trip).unwrap();
+
+    run_compressor(&["-u", round_trip.to_str().unwrap()]);
+
+    let restored = WavBrro::from_file(&round_trip.with_extension("wbro")).unwrap();
+    let finite_samples = WavBrro::from_file(Path::new(original))
+        .unwrap()
+        .into_iter()
+        .filter(|sample| sample.is_finite())
+        .count();
+    assert_eq!(restored.len(), finite_samples, "{original}");
+    assert!(
+        restored.iter().all(|sample| sample.is_finite()),
+        "{original}"
+    );
 }
 
 fn run_compressor(args: &[&str]) {
     // path to binary set by cargo: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
     let command = std::env!("CARGO_BIN_EXE_atsc");
 
-    let status = std::process::Command::new(command)
+    let output = std::process::Command::new(command)
         .args(args)
-        .status()
+        .output()
         .unwrap();
 
-    if !status.success() {
+    if !output.status.success() {
         panic!(
-            "Failed to run command {} {:?}, exited with {:?}",
-            command, args, status
+            "Failed to run command {} {:?}, exited with {:?}: {}",
+            command,
+            args,
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 }

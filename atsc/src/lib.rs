@@ -21,6 +21,8 @@ extern crate core;
 
 pub mod compressor;
 pub mod data;
+pub mod decoder;
+pub mod error;
 pub mod frame;
 pub mod header;
 pub mod utils;

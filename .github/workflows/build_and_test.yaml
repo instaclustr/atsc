@@ -17,50 +17,22 @@ env:
 
 jobs:
   build_and_test:
-    strategy:
-      matrix:
-        include:
-          - name: Ubuntu 20.04 - Release
-            runner: ubuntu-20.04
-            cargo_flags: --release
-
-          - name: Ubuntu 20.04 - Debug
-            runner: ubuntu-20.04
-            cargo_flags:
-
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+    name: Ubuntu 24.04
+    runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-      with:
-        # rust-cache already handles all the sane defaults for caching rust builds.
-        # However, because we are running separate debug/release builds in parallel,
-        # we also need to add the runner and cargo_flags to the key so that a separate cache is used.
-        # Otherwise, only the last build to finish would get saved to the cache.
-        key: ${{ matrix.runner }} - ${{ matrix.cargo_flags }}
-    - name: Install external deps for the prom-remote-api crate
-      run: sudo apt-get install protobuf-compiler
-    - name: Install cargo-hack
-      run: cargo install cargo-hack --version 0.5.8
-    - name: Check `cargo fmt` was run
-      run: cargo fmt --all -- --check
-    - name: Ensure that all crates compile and have no warnings under every possible combination of features
-      # some things to explicitly point out:
-      # * clippy also reports rustc warnings and errors
-      # * clippy --all-targets causes clippy to run against tests and examples which it doesn't do by default.
-      run: |
-        # Display all clippy lint failures as warnings
-        cargo hack --feature-powerset clippy --all-targets --locked ${{ matrix.cargo_flags }}
-        # Fail CI on the first crate to fail clippy lints
-        cargo hack --feature-powerset clippy --all-targets --locked ${{ matrix.cargo_flags }} -- -D warnings
-    - name: Ensure that tests pass
-      run: |
-        cargo test --doc ${{ matrix.cargo_flags }} --all-features -- --show-output --nocapture
-        cargo test ${{ matrix.cargo_flags }} --all-features --all-targets -- --nocapture
-    - name: Ensure that tests did not create or modify any files that arent .gitignore'd
-      run: |
-        if [ -n "$(git status --porcelain)" ]; then
-          git status
-          exit 1
-        fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Check `cargo fmt` was run
+        run: cargo fmt --all -- --check
+      - name: Ensure that all targets compile without warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Ensure that all tests pass
+        run: cargo test --workspace --all-targets --locked
+      - name: Ensure that the decompression benchmark compiles
+        run: cargo bench -p atsc --bench decompression_bench --no-run
+      - name: Ensure that tests did not create or modify any files that arent .gitignore'd
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status
+            exit 1
+          fi

@@ -16,10 +16,12 @@ limitations under the License.
 
 use crate::{
     compressor::CompressorResult,
+    decoder::Decoder,
+    error::{reserve_decode, DecodeError},
     optimizer::utils::{Bitdepth, DataStats},
 };
 
-use super::BinConfig;
+use super::{decode_payload, BinConfig, Compressor};
 use bincode::{Decode, Encode};
 use log::{debug, trace};
 use std::collections::BTreeMap;
@@ -190,9 +192,27 @@ impl IndexRLE {
 
     /// Receives a data stream and generates a Constant
     pub fn decompress(data: &[u8]) -> Self {
-        let config = BinConfig::get();
-        let (ct, _) = bincode::decode_from_slice(data, config).unwrap();
-        ct
+        Self::try_decompress(data).expect("failed to decompress RLE payload")
+    }
+
+    pub fn try_decompress(data: &[u8]) -> Result<Self, DecodeError> {
+        let rle: Self = decode_payload(data, "RLE payload")?;
+        if rle.id != RLE_COMPRESSOR_ID {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::RLE,
+                reason: format!(
+                    "expected compressor ID {RLE_COMPRESSOR_ID}, found {}",
+                    rle.id
+                ),
+            });
+        }
+        if rle.rle.iter().any(|(value, _)| !value.is_finite()) {
+            return Err(DecodeError::InvalidFrame {
+                codec: Compressor::RLE,
+                reason: "run values must be finite".to_string(),
+            });
+        }
+        Ok(rle)
     }
 
     /// This function transforms the structure into a Binary stream
@@ -202,13 +222,32 @@ impl IndexRLE {
     }
 
     pub fn to_data(&self, frame_size: usize) -> Vec<f64> {
-        let mut data: Vec<f64> = vec![0.0; frame_size];
+        let mut decoder = Decoder::new();
+        let mut output = Vec::with_capacity(frame_size);
+        self.append_to_data(frame_size, &mut decoder, &mut output)
+            .expect("failed to allocate RLE output");
+        output
+    }
 
-        // Optimize allocation, 1st: Calculate the total number of elements in the flattened vector
-        let total_elements: usize = self.rle.iter().map(|(_, indices)| indices.len()).sum();
-
-        // 2nd: Reserve the exact capacity for the flattened vector
-        let mut flattened: Vec<(usize, f64)> = Vec::with_capacity(total_elements);
+    pub(crate) fn append_to_data(
+        &self,
+        frame_size: usize,
+        decoder: &mut Decoder,
+        output: &mut Vec<f64>,
+    ) -> Result<(), DecodeError> {
+        let total_elements = self
+            .rle
+            .iter()
+            .try_fold(0_usize, |total, (_, indices)| {
+                total.checked_add(indices.len())
+            })
+            .ok_or(DecodeError::AllocationFailed {
+                context: "RLE run scratch",
+                requested: usize::MAX,
+            })?;
+        let flattened = decoder.rle_scratch();
+        flattened.clear();
+        reserve_decode(flattened, total_elements, "RLE run scratch")?;
 
         // Flatten the RLE representation into a vector of (index, value) pairs
         for (value, indices) in &self.rle {
@@ -220,6 +259,10 @@ impl IndexRLE {
         // Sort the flattened vector by index
         flattened.sort_unstable_by_key(|&(index, _)| index);
 
+        let base = output.len();
+        let new_len = reserve_decode(output, frame_size, "RLE output")?;
+        output.resize(new_len, 0.0);
+
         // Fill the sequence based on the sorted (index, value) pairs
         for i in 0..flattened.len() {
             let (start_index, value) = flattened[i];
@@ -228,11 +271,14 @@ impl IndexRLE {
             } else {
                 frame_size
             };
-            for idx in data.iter_mut().take(end_index).skip(start_index) {
-                *idx = value;
+            let start_index = start_index.min(frame_size);
+            let end_index = end_index.min(frame_size);
+            if start_index >= end_index {
+                continue;
             }
+            output[base + start_index..base + end_index].fill(value);
         }
-        data
+        Ok(())
     }
 }
 
@@ -289,6 +335,16 @@ mod tests {
     #[test]
     fn test_for_constant() {
         assert_roundtrip(&[1.0; 512], &[60, 3, 1, 1, 1, 0]);
+    }
+
+    #[test]
+    fn legacy_decode_clamps_runs_to_smaller_frame() {
+        let source = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0];
+        let rle = IndexRLE::new(&source, DataStats::new(&source).bitdepth);
+        let encoded = rle.to_bytes();
+
+        assert_eq!(rle.to_data(3), [1.0, 1.0, 2.0]);
+        assert_eq!(rle_to_data(3, &encoded), [1.0, 1.0, 2.0]);
     }
 
     #[test]

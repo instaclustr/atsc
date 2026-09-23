@@ -16,6 +16,7 @@ limitations under the License.
 
 use crate::{
     compressor::Compressor,
+    error::{validate_encode_input, EncodeError},
     utils::{f64_to_u64, prev_power_of_two},
 };
 
@@ -44,8 +45,22 @@ pub struct OptimizerPlan {
 
 impl OptimizerPlan {
     /// Creates an optimal data compression plan
+    ///
+    /// Non-finite samples are dropped, as in v0.7; [`Self::try_plan`] rejects
+    /// them instead. Panics if no samples remain.
     pub fn plan(data: &[f64]) -> Self {
         let c_data = OptimizerPlan::clean_data(data);
+        validate_encode_input(&c_data).expect("optimizer planning failed");
+        OptimizerPlan::from_clean_data(c_data)
+    }
+
+    /// Creates an optimal compression plan after validating all input samples.
+    pub fn try_plan(data: &[f64]) -> Result<Self, EncodeError> {
+        validate_encode_input(data)?;
+        Ok(OptimizerPlan::from_clean_data(data.to_vec()))
+    }
+
+    fn from_clean_data(c_data: Vec<f64>) -> Self {
         let chunks = OptimizerPlan::get_chunks_sizes(c_data.len());
         let optimizer = OptimizerPlan::assign_compressor(&c_data, &chunks, None);
         OptimizerPlan {
