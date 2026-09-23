@@ -54,7 +54,9 @@ atsc compress values.csv --csv --no-header
 
 Compression defaults to `--compressor auto` and `--error 3`. Available codecs
 are `auto`, `noop`, `fft`, `constant`, `polynomial`, `idw`, and `rle`.
-`-c/--compression-selection-sample-level` accepts 0 through 6.
+`-c/--compression-selection-sample-level` accepts 0 through 6. In `compress`,
+`auto` evaluates every candidate on the full frame and picks the smallest one
+that meets `--error`, so `-c` does not change the chosen codec.
 
 BRO, WBRO, and CSV readers default to a 256 MiB input limit and a 33,423,360
 sample limit. WBRO archive shape is validated before archived vectors are
@@ -66,8 +68,8 @@ errors instead of panicking. File open and read failures remain I/O errors.
 and if the selected codec cannot meet `--error` the command fails with exit
 code 4 and writes no output. The error metric is a mean absolute percentage
 error, so it is undefined (NaN or infinite) for inputs containing zeros with
-lossy codecs; the error message then suggests `--compressor auto`, `rle`, or
-`noop`. Use [legacy mode](#legacy-compatibility) for 0.7's best-effort output.
+lossy codecs; the error message then suggests `--compressor auto` (unless
+`auto` already failed), `rle`, or `noop`. Use [legacy mode](#legacy-compatibility) for 0.7's best-effort output.
 
 Without `-o`, a file keeps its base name and receives the `.bro` extension.
 For directory input, ATSC snapshots the initial entries and processes each
@@ -113,6 +115,10 @@ Legacy compression keeps 0.7's best-effort semantics, unlike `compress`:
 - When the codec misses `--error`, output is still written: a forced codec
   writes its bounded result, and `auto` writes the smallest candidate when no
   candidate meets the bound. Compare the restored data if the bound matters.
+- `auto` selects codecs as 0.7 did. With `-c` 1 through 6 it picks the codec
+  from the first 4096 (`-c 1`) down to 128 (`-c 6`) samples of each frame long
+  enough to sample, and writes that codec's full-frame result even if it
+  misses `--error` on the whole frame.
 
 The remaining behavior is shared with the explicit commands and differs from
 0.7:
@@ -124,9 +130,6 @@ The remaining behavior is shared with the explicit commands and differs from
 - Directory input is filtered by extension, processed once per file, and
   rejected before writing if derived output paths collide.
 - WBRO and CSV input is validated and limited as described above.
-- `auto` evaluates every candidate on the full frame, so
-  `-c/--compression-selection-sample-level` no longer changes the chosen
-  codec.
 
 File output naming (`.bro` for compression, `.wbro` for `-u`) is unchanged.
 

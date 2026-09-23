@@ -282,11 +282,17 @@ pub enum CliError {
 
 fn describe_encode_error(error: &EncodeError) -> String {
     match error {
-        EncodeError::ErrorBoundNotMet { actual, .. } if !actual.is_finite() => format!(
-            "{error}\nthe error metric divides by each original sample, so it is undefined for \
-             inputs containing zeros; try `--compressor auto`, `--compressor rle`, or \
-             `--compressor noop`"
-        ),
+        EncodeError::ErrorBoundNotMet { codec, actual, .. } if !actual.is_finite() => {
+            let alternatives = if *codec == Compressor::Auto {
+                "`--compressor rle` or `--compressor noop`"
+            } else {
+                "`--compressor auto`, `--compressor rle`, or `--compressor noop`"
+            };
+            format!(
+                "{error}\nthe error metric divides by each original sample, so it is undefined \
+                 for inputs containing zeros; try {alternatives}"
+            )
+        }
         _ => error.to_string(),
     }
 }
@@ -782,6 +788,25 @@ fn compressor_name(compressor: Compressor) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn undefined_error_hint_only_suggests_auto_for_forced_codecs() {
+        let bound_error = |codec| EncodeError::ErrorBoundNotMet {
+            codec,
+            requested: 0.03,
+            actual: f64::NAN,
+        };
+
+        let forced = describe_encode_error(&bound_error(Compressor::FFT));
+        assert!(forced.contains("containing zeros"), "{forced}");
+        assert!(forced.contains("`--compressor auto`"), "{forced}");
+
+        let auto = describe_encode_error(&bound_error(Compressor::Auto));
+        assert!(auto.contains("containing zeros"), "{auto}");
+        assert!(!auto.contains("`--compressor auto`"), "{auto}");
+        assert!(auto.contains("`--compressor rle`"), "{auto}");
+        assert!(auto.contains("`--compressor noop`"), "{auto}");
+    }
 
     #[test]
     fn duplicate_derived_outputs_are_rejected_without_processing() {

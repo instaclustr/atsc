@@ -21,16 +21,21 @@ BRO v1 stays wire compatible: streams written by 0.7 decode unchanged, and
   `atsc::csv::CsvReadLimits` and `wavbrro::wavbrro::ReadLimits` bound CSV and
   WBRO reads.
 - Legacy infallible APIs keep 0.7 best-effort semantics:
-  `OptimizerPlan::plan` drops non-finite samples, and
-  `compress_chunk_bounded_with`, `CompressorFrame::compress_bounded`/
-  `compress_best`, and `Compressor::compress_bounded` still commit the
-  forced codec's output (or Auto's smallest candidate) when the error bound
-  is missed. They now panic, before mutating the stream, on empty or
-  non-finite chunks and at the 255-frame BRO v1 limit instead of writing a
-  corrupt frame count.
-- Auto evaluates every candidate on the full frame and never picks one that
-  misses the bound when another meets it. As a result
-  `-c/--compression-selection-sample-level` no longer changes the selected
+  - `OptimizerPlan::plan` drops non-finite samples and panics only when no
+    samples remain.
+  - `compress_chunk_bounded_with`, `CompressorFrame::compress_bounded`/
+    `compress_best`, and `Compressor::compress_bounded` still commit the
+    forced codec's output when the error bound is missed, and Auto selects
+    codecs as 0.7 did (from the sample prefix when a sampling speed is set,
+    otherwise the smallest candidate meeting the bound, or the smallest
+    candidate when none does).
+  - They now panic, before mutating the stream, on empty or non-finite chunks
+    and at the 255-frame BRO v1 limit instead of writing a corrupt frame
+    count.
+- Strict Auto (`try_compress_best`, `try_compress_chunk_bounded_with`)
+  evaluates every candidate on the full frame and never picks one that misses
+  the bound, so in strict mode the sampling speed
+  (`-c/--compression-selection-sample-level`) does not change the selected
   codec.
 
 ### CLI
@@ -38,10 +43,13 @@ BRO v1 stays wire compatible: streams written by 0.7 decode unchanged, and
 - New subcommands: `compress`, `decompress` (both with `-o/--output`),
   `inspect` (with `--json` for one machine-readable document), and `verify`.
   `compress` is strict: non-finite samples and missed error bounds fail with a
-  typed error and no output file.
+  typed error and no output file. When the error is undefined (NaN or
+  infinite) because the input contains zeros, the message says so and
+  suggests `--compressor auto` (unless Auto already failed), `rle`, or `noop`.
 - Legacy root syntax (`atsc [OPTIONS] <INPUT>`, `atsc -u <INPUT>`) keeps
   best-effort compression: non-finite samples are dropped with one warning
-  line on stderr, and a missed error bound still writes output.
+  line on stderr, a missed error bound still writes output, and Auto selection
+  (including `-c`) reproduces 0.7's output.
 - Errors are printed to stderr and use stable exit codes: `1` I/O, `2` usage,
   `3` decode, `4` encode, `5` input format. 0.7 exited `1` on any failure.
 - Directory input only processes files with the input extension (`.wbro`,
