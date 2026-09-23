@@ -37,8 +37,9 @@ fn meets_error_bound(result: &CompressorResult, requested: f64) -> bool {
 pub(crate) enum BoundPolicy {
     /// Reject it with [`EncodeError::ErrorBoundNotMet`].
     Strict,
-    /// Commit what v0.7 committed: the forced codec's result, or the smallest
-    /// Auto candidate when no candidate meets the bound.
+    /// Commit what v0.7 committed: the forced codec's result, Auto's
+    /// sample-selected codec, or the smallest Auto candidate when no candidate
+    /// meets the bound.
     BestEffort,
 }
 
@@ -57,6 +58,23 @@ fn validate_error_bound(
             actual: result.error,
         })
     }
+}
+
+/// v0.7 picked the smallest candidate that met the bound on the sample prefix
+/// and committed its full-frame result without re-checking the bound; it
+/// panicked when no candidate met the bound on the sample.
+fn v0_7_sampled_choice(sample: &[f64], requested: f64) -> Option<Compressor> {
+    AUTO_COMPRESSORS
+        .iter()
+        .map(|compressor| {
+            (
+                compressor.get_compress_bounded_results(sample, requested),
+                *compressor,
+            )
+        })
+        .filter(|(result, _)| result.error <= requested)
+        .min_by_key(|(result, _)| result.compressed_data.len())
+        .map(|(_, compressor)| compressor)
 }
 
 fn keep_smaller(
@@ -192,8 +210,11 @@ impl CompressorFrame {
 
     /// This function tries to detect the best compressor for use and apply it to the data size
     ///
-    /// Unlike [`Self::try_compress_best`], when no candidate meets the error
-    /// bound the smallest candidate is stored, as v0.7 did. Other errors panic.
+    /// Unlike [`Self::try_compress_best`], this selects the codec as v0.7 did:
+    /// with a sampling speed, from the sample prefix without re-checking the
+    /// bound on the full frame; otherwise, or if nothing met the bound on the
+    /// sample, the smallest candidate is stored when none meets the bound.
+    /// Other errors panic.
     pub fn compress_best(&mut self, data: &[f64], max_error: f32, compression_speed: usize) {
         self.compress_best_with_policy(data, max_error, compression_speed, BoundPolicy::BestEffort)
             .expect("automatic frame compression failed");
@@ -227,6 +248,7 @@ impl CompressorFrame {
         let requested = f64::from(max_error);
         // Do a statistical analysis of the data, let's see if we can pick a compressor out of this.
         let stats = DataStats::new(data);
+        let sampled = data_sample != usize::MAX && data.len() >= data_sample;
         // Checking the statistical analysis and chose, if possible, a compressor
         // If the data is constant, well, constant frame
         let (compressor, result) = if stats.min == stats.max {
@@ -236,10 +258,18 @@ impl CompressorFrame {
                 compressor,
                 validate_error_bound(compressor, requested, result, policy)?,
             )
+        } else if let Some(compressor) = (policy == BoundPolicy::BestEffort && sampled)
+            .then(|| v0_7_sampled_choice(&data[..data_sample], requested))
+            .flatten()
+        {
+            (
+                compressor,
+                compressor.get_compress_bounded_results(data, requested),
+            )
         } else {
             let mut candidates: Vec<_> = AUTO_COMPRESSORS.iter().copied().enumerate().collect();
 
-            if data_sample != usize::MAX && data.len() >= data_sample {
+            if policy == BoundPolicy::Strict && sampled {
                 let sample = &data[..data_sample];
                 candidates.sort_by_key(|(stable_rank, compressor)| {
                     let result = compressor.get_compress_bounded_results(sample, requested);
@@ -387,6 +417,52 @@ mod tests {
             assert_eq!(frame.sample_count, data.len());
             assert_eq!(frame.data, expected_result.compressed_data);
         }
+    }
+
+    fn smooth_prefix_then_noise() -> Vec<f64> {
+        (0..512_u32)
+            .map(|index| {
+                if index < 128 {
+                    100.0 + (f64::from(index) / 16.0).sin()
+                } else {
+                    100.0 + f64::from(index.wrapping_mul(2_654_435_761) % 97)
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn infallible_sampled_auto_reproduces_v0_7_selection() {
+        let data = smooth_prefix_then_noise();
+        let speed = COMPRESSION_SPEED.len() - 1;
+        let sample = &data[..COMPRESSION_SPEED[speed]];
+        let requested = f64::from(0.03_f32);
+        let (_, sampled_codec) = AUTO_COMPRESSORS
+            .iter()
+            .map(|codec| {
+                (
+                    codec.get_compress_bounded_results(sample, requested),
+                    *codec,
+                )
+            })
+            .filter(|(result, _)| result.error <= requested)
+            .min_by_key(|(result, _)| result.compressed_data.len())
+            .unwrap();
+
+        let mut strict = CompressorFrame::new(Some(Compressor::Auto));
+        strict.try_compress_best(&data, 0.03, speed).unwrap();
+        assert_ne!(strict.compressor, sampled_codec);
+
+        let mut frame = CompressorFrame::new(Some(Compressor::Auto));
+        frame.compress_best(&data, 0.03, speed);
+        assert_eq!(frame.compressor, sampled_codec);
+        assert_eq!(frame.sample_count, data.len());
+        assert_eq!(
+            frame.data,
+            sampled_codec
+                .get_compress_bounded_results(&data, requested)
+                .compressed_data
+        );
     }
 
     #[test]

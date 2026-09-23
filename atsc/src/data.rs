@@ -61,8 +61,9 @@ impl CompressedStream {
     /// Compress a chunk of data with a specific compressor adding it as a new frame to the current stream
     ///
     /// Unlike [`Self::try_compress_chunk_bounded_with`], a missed error bound
-    /// still adds the frame (the forced codec's output, or Auto's smallest
-    /// candidate), as v0.7 did. Other errors panic before the stream changes.
+    /// still adds the frame, and Auto selects codecs as v0.7 did (see
+    /// [`CompressorFrame::compress_best`]). Other errors panic before the
+    /// stream changes.
     pub fn compress_chunk_bounded_with(
         &mut self,
         chunk: &[f64],
