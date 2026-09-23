@@ -62,15 +62,15 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     #[test]
     fn test_write_samples_to_csv_file() {
         let expected_contents = "timestamp,value\n1,1.01\n5,1.22\n";
         let samples = vec![Sample::new(1, 1.01), Sample::new(5, 1.22)];
 
-        let temp_dir =
-            TempDir::new("test_write_samples").expect("Unable to create temporary directory");
+        let temp_dir = TempDir::with_prefix("test_write_samples")
+            .expect("Unable to create temporary directory");
         let path = temp_dir.path().join("samples.csv");
 
         let result = write_samples_to_csv_file(&path, &samples);
@@ -85,8 +85,8 @@ mod tests {
         let csv_content = "timestamp,value\n1,1.01\n5,1.22\n";
         let expected_samples = vec![Sample::new(1, 1.01), Sample::new(5, 1.22)];
 
-        let temp_dir =
-            TempDir::new("test_read_samples").expect("Unable to create temporary directory");
+        let temp_dir = TempDir::with_prefix("test_read_samples")
+            .expect("Unable to create temporary directory");
         let path = temp_dir.path().join("samples.csv");
 
         let mut file = File::create(&path).expect("Unable to create test file");
@@ -104,7 +104,7 @@ mod tests {
     fn test_write_and_read_samples() {
         let samples = vec![Sample::new(1, 1.01), Sample::new(5, 1.22)];
 
-        let temp_dir = TempDir::new("test_write_and_read_samples")
+        let temp_dir = TempDir::with_prefix("test_write_and_read_samples")
             .expect("Unable to create temporary directory");
         let path = temp_dir.path().join("samples.csv");
 

@@ -107,10 +107,7 @@ impl CompressedStream {
     ) -> Result<(), EncodeError> {
         validate_encode_input(chunk)?;
         self.ensure_frame_available()?;
-        debug!(
-            "Compressing chunk bounded with a max error of {}",
-            max_error
-        );
+        debug!("Compressing chunk bounded with a max error of {max_error}");
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         match compressor {
             // Auto means the frame will pick the best

@@ -166,7 +166,7 @@ impl<'__de> ::bincode::BorrowDecode<'__de> for FFT {
 impl FFT {
     /// Creates a new instance of the Constant compressor with the size needed to handle the worst case
     pub fn new(sample_count: usize, min: f64, max: f64) -> Self {
-        debug!("FFT compressor: min:{} max:{}", min, max);
+        debug!("FFT compressor: min:{min} max:{max}");
         FFT {
             id: FFT_COMPRESSOR_ID,
             frequencies: Vec::with_capacity(sample_count),
@@ -191,7 +191,7 @@ impl FFT {
         let data_len = data.len();
         let next_size = next_size(data_len);
         let added_len = next_size - data_len;
-        debug!("Gibbs sizing, padding with {}", added_len);
+        debug!("Gibbs sizing, padding with {added_len}");
         let prefix_len = added_len / 2;
         let suffix_len = added_len - prefix_len;
         // Extend the beginning and the end with the first and last value
@@ -358,7 +358,7 @@ impl FFT {
                 .map(|&f| self.round(f.re / len_f32, DECIMAL_PRECISION.into()))
                 .collect();
             current_err = calculate_error(g_data, &out_data);
-            trace!("Current Err: {}", current_err);
+            trace!("Current Err: {current_err}");
             // Max iterations is 22 (We start at 10%, we can go to 95% and 1% at a time)
             match iterations {
                 1..=17 => jump += (max_freq / 2).max(1),
@@ -386,7 +386,7 @@ impl FFT {
         // First thing, always try to get the data len as a power of 2.
         let v = data.len();
         let max_freq = if 3 >= (v / 100) { 3 } else { v / 100 };
-        debug!("Setting max_freq count to: {}", max_freq);
+        debug!("Setting max_freq count to: {max_freq}");
         if !v.is_power_of_two() {
             warn!("Slow FFT, data segment is not a power of 2!");
         }
@@ -492,10 +492,7 @@ impl FFT {
             let added_len = gibbs_frame_size - frame_size;
             let prefix_len = added_len / 2;
             let suffix_len = added_len - prefix_len;
-            debug!(
-                "Gibbs sizing detected, removing padding with {} len",
-                added_len
-            );
+            debug!("Gibbs sizing detected, removing padding with {added_len} len");
             (prefix_len, suffix_len)
         } else {
             (0, 0)
@@ -580,7 +577,7 @@ pub fn fft_to_data(sample_number: usize, compressed_data: &[u8]) -> Vec<f64> {
 /// Compress targeting a specific max error allowed. This is very computational intensive,
 /// as the FFT will be calculated over and over until the specific error threshold is achived.
 pub fn fft_allowed_error(data: &[f64], allowed_error: f64) -> CompressorResult {
-    info!("Initializing FFT Compressor. Max error: {}", allowed_error);
+    info!("Initializing FFT Compressor. Max error: {allowed_error}");
     let mut min = data[0];
     let mut max = data[0];
     for e in data.iter() {

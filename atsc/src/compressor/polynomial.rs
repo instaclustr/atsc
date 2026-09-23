@@ -189,10 +189,7 @@ impl Polynomial {
         ptype: PolynomialType,
         bitdepth: Bitdepth,
     ) -> Self {
-        debug!(
-            "Polynomial compressor: min:{} max:{}, Type: {:?}",
-            min, max, ptype
-        );
+        debug!("Polynomial compressor: min:{min} max:{max}, Type: {ptype:?}");
         Polynomial {
             id: ptype,
             min,
@@ -236,8 +233,7 @@ impl Polynomial {
         let target_error = round_f64(max_err, 3);
         while target_error < round_f64(current_err, 4) {
             trace!(
-                "Method: {:?} Iterations: {} Error: {} Target: {}",
-                method, iterations, current_err, target_error
+                "Method: {method:?} Iterations: {iterations} Error: {current_err} Target: {target_error}"
             );
             iterations += 1;
             self.compress_hinted(data, baseline_points + jump);
@@ -245,10 +241,10 @@ impl Polynomial {
                 Method::CatmullRom => self.polynomial_to_data(data_len),
                 Method::Idw => self.idw_to_data(data_len),
             };
-            trace!("Calculated Values: {:?}", out_data);
-            trace!("Data Values: {:?}", data);
+            trace!("Calculated Values: {out_data:?}");
+            trace!("Data Values: {data:?}");
             current_err = calculate_error(data, &out_data);
-            trace!("Current Err: {}", current_err);
+            trace!("Current Err: {current_err}");
             // Max iterations is 18 (We start at 10%, we can go to 95% and 1% at a time)
             match iterations {
                 // We should always increase by 1 in worst case
@@ -300,8 +296,8 @@ impl Polynomial {
         // I need to extract the values for those points
         let values: Vec<f64> = points.iter().map(|&f| data[f as usize]).collect();
 
-        debug!("Compressed Hinted Points: {:?}", points);
-        debug!("Compressed Hinted Values: {:?}", values);
+        debug!("Compressed Hinted Points: {points:?}");
+        debug!("Compressed Hinted Values: {values:?}");
 
         self.data_points = values;
         self.point_step = step as u8;
@@ -418,7 +414,7 @@ impl Polynomial {
         if points.last() != Some(&(frame_size - 1)) {
             points.push(frame_size - 1);
         }
-        trace!("points {:?}", points);
+        trace!("points {points:?}");
         Ok(points)
     }
 

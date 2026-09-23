@@ -85,7 +85,7 @@ struct Args {
 fn main() {
     env_logger::init();
     let arguments = Args::parse();
-    debug!("{:?}", arguments);
+    debug!("{arguments:?}");
     let filename = arguments.input.to_str().unwrap();
     assert!(is_wav_file(&arguments.input));
     let wav_data = read_metrics_from_wav(filename);

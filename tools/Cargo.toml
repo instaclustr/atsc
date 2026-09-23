@@ -12,15 +12,9 @@ description = "Tools for testing/supporting the development/validation of the co
 [dependencies]
 wavbrro.workspace = true
 hound.workspace = true
-chrono.workspace = true
-claxon.workspace = true
-symphonia.workspace = true
 env_logger.workspace = true
 log.workspace = true
 clap.workspace = true
-regex.workspace = true
-median.workspace = true
-dtw_rs.workspace = true
 
 [lints]
 workspace = true

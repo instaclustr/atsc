@@ -157,7 +157,7 @@ fn test_lossy_compression(compressor: &str) {
 #[test]
 fn test_compressor_constant() {
     // tests/wbros/uptime.wbro constant data which can be compressed by constant compressor
-    let test_dir = tempfile::tempdir().unwrap().into_path();
+    let test_dir = tempfile::tempdir().unwrap().keep();
     fs::copy("tests/wbros/uptime.wbro", test_dir.join("uptime.wbro")).unwrap();
 
     run_compressor(&[
@@ -209,14 +209,14 @@ fn test_compression_decompression_flow(
 
 /// Prepares test directory and copies test wbro file there.
 fn prepare_test_dir() -> PathBuf {
-    let test_dir = tempfile::tempdir().unwrap().into_path();
+    let test_dir = tempfile::tempdir().unwrap().keep();
     fs::copy(TEST_WBRO_PATH, test_dir.join(TEST_FILE_NAME)).unwrap();
     test_dir
 }
 
 /// Prepares test directory and copies file to it.
 fn prepare_test_dir_and_copy_file(filepath: &Path) -> PathBuf {
-    let test_dir = tempfile::tempdir().unwrap().into_path();
+    let test_dir = tempfile::tempdir().unwrap().keep();
     fs::copy(filepath, test_dir.join(filepath.file_name().unwrap())).unwrap();
     test_dir
 }

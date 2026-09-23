@@ -154,12 +154,12 @@ impl IndexRLE {
             let value = data[i];
 
             if i + 1 >= len || data[i + 1] != value {
-                trace!("Value Change! Storing value: {}", value);
+                trace!("Value Change! Storing value: {value}");
                 // Next value is different so store the current index
                 // First check if we have the value in the map
                 match encoded.get(&value.to_bits()) {
                     Some(indices) => {
-                        trace!("Found value in map: {:?}", indices);
+                        trace!("Found value in map: {indices:?}");
                         // We have the value in the map, so we need to add the current index
                         let mut indices = indices.clone();
                         indices.push(current_index);
@@ -176,13 +176,13 @@ impl IndexRLE {
             }
             i += 1;
         }
-        trace!("Encoded: {:?}", encoded);
+        trace!("Encoded: {encoded:?}");
         // Convert HashMap to Vec<(RLE, Vec<usize>)>
         let mut result: Vec<(f64, Vec<usize>)> = Vec::with_capacity(encoded.len());
         for (value, indices) in encoded {
             result.push((f64::from_bits(value), indices));
         }
-        trace!("Vector: {:?}", result);
+        trace!("Vector: {result:?}");
         IndexRLE {
             id: RLE_COMPRESSOR_ID,
             rle: result,

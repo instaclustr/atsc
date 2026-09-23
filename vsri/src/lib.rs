@@ -136,14 +136,14 @@ impl Vsri {
     /// Get the sample for this timestamp or the next one
     pub fn get_this_or_next(&self, y: i32) -> Option<i32> {
         let r = self.get_sample(y).or_else(|| self.get_next_sample(y));
-        debug!("[INDEX] This or next location {:?} for TS {}", r, y);
+        debug!("[INDEX] This or next location {r:?} for TS {y}");
         r
     }
 
     /// Get the sample for this timestamp or the previous one
     pub fn get_this_or_previous(&self, y: i32) -> Option<i32> {
         let r = self.get_sample(y).or(self.get_previous_sample(y));
-        debug!("[INDEX] This or previous location {:?} for TS {}", r, y);
+        debug!("[INDEX] This or previous location {r:?} for TS {y}");
         r
     }
 
@@ -273,7 +273,7 @@ impl Vsri {
             // Check ownership by the current segment
             if self.fits_segment(y) {
                 // It fits, increase the sample count and it's done
-                debug!("[INDEX] Same segment, updating. TS: {}", y);
+                debug!("[INDEX] Same segment, updating. TS: {y}");
                 self.vsri_segments[segment_count - 1][3] += 1;
                 return Ok(());
             }
@@ -386,7 +386,7 @@ impl Vsri {
     /// x is the previous segment sample number
     /// We only have the first y0 point, nothing else
     fn create_fake_segment(&self, y: i32) -> [i32; 4] {
-        debug!("[INDEX] New segment, creating for point: {}", y);
+        debug!("[INDEX] New segment, creating for point: {y}");
         let segment = self.current_segment();
         // First point of the new segment: Prior starting point + Number of samples
         let x = segment[1] + segment[3];

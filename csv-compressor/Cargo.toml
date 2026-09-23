@@ -21,7 +21,7 @@ env_logger.workspace = true
 vsri.workspace = true
 
 [dev-dependencies]
-tempdir.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
