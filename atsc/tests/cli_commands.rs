@@ -5,7 +5,7 @@ use std::{
 };
 
 use atsc::{
-    compressor::{constant::Constant, BinConfig, Compressor},
+    compressor::{BinConfig, Compressor, constant::Constant},
     optimizer::utils::Bitdepth,
 };
 use serde_json::Value;
@@ -451,8 +451,10 @@ fn output_option_is_rejected_for_directory_input() {
 
     assert_eq!(output.status.code(), Some(EXIT_USAGE));
     assert!(!output_path.exists());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("--output can only be used with a single input file"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("--output can only be used with a single input file")
+    );
 }
 
 #[test]
@@ -710,8 +712,10 @@ fn legacy_compressor_option_cannot_be_mixed_with_compress_subcommand() {
 
     assert_eq!(output.status.code(), Some(EXIT_USAGE));
     assert!(!input.with_extension("bro").exists());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("legacy root input/options cannot be combined"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("legacy root input/options cannot be combined")
+    );
 }
 
 #[test]
@@ -729,8 +733,10 @@ fn legacy_uncompress_option_cannot_be_mixed_with_verify_subcommand() {
 
     assert_eq!(output.status.code(), Some(EXIT_USAGE));
     assert!(output.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("legacy root input/options cannot be combined"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("legacy root input/options cannot be combined")
+    );
 }
 
 #[test]
@@ -750,8 +756,10 @@ fn legacy_input_cannot_be_mixed_with_verify_subcommand() {
 
     assert_eq!(output.status.code(), Some(EXIT_USAGE));
     assert!(output.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("legacy root input/options cannot be combined"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("legacy root input/options cannot be combined")
+    );
 }
 
 #[test]

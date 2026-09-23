@@ -26,8 +26,8 @@ use std::{
 use atsc::{
     compressor::Compressor,
     csv::{
-        read_values_with_headers_and_limits, read_values_with_limits, CsvReadLimits,
-        Error as CsvError,
+        CsvReadLimits, Error as CsvError, read_values_with_headers_and_limits,
+        read_values_with_limits,
     },
     data::CompressedStream,
     decoder::Decoder,

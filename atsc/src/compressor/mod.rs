@@ -19,17 +19,17 @@ use bincode::{Decode, Encode};
 
 use crate::{
     decoder::Decoder,
-    error::{validate_encode_input, DecodeError, EncodeError},
+    error::{DecodeError, EncodeError, validate_encode_input},
     frame::BoundPolicy,
     optimizer::utils::DataStats,
     utils::is_decomposable,
 };
 
-use self::constant::{constant_compressor, Constant};
-use self::fft::{fft, fft_compressor, FFT};
-use self::noop::{noop, noop_compressor, Noop};
-use self::polynomial::{polynomial, polynomial_allowed_error, Polynomial, PolynomialType};
-use self::rle::{rle_compressor, IndexRLE};
+use self::constant::{Constant, constant_compressor};
+use self::fft::{FFT, fft, fft_compressor};
+use self::noop::{Noop, noop, noop_compressor};
+use self::polynomial::{Polynomial, PolynomialType, polynomial, polynomial_allowed_error};
+use self::rle::{IndexRLE, rle_compressor};
 
 const BINCODE_DECODE_LIMIT: usize = 256 * 1024 * 1024;
 type BincodeDecodeConfig =

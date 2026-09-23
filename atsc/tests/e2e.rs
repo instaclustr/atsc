@@ -78,10 +78,7 @@ fn test_csv_input_compression_with_header() {
 
     assert!(
         err <= 0.05,
-        "Error: {}\nOriginal    : {:?}\nUncompressed: {:?}",
-        err,
-        original_samples,
-        uncompressed_samples
+        "Error: {err}\nOriginal    : {original_samples:?}\nUncompressed: {uncompressed_samples:?}"
     );
 }
 
@@ -109,10 +106,7 @@ fn test_csv_input_compression_with_header_no_fields() {
 
     assert!(
         err <= 0.05,
-        "Error: {}\nOriginal    : {:?}\nUncompressed: {:?}",
-        err,
-        original_samples,
-        uncompressed_samples
+        "Error: {err}\nOriginal    : {original_samples:?}\nUncompressed: {uncompressed_samples:?}"
     );
 }
 
@@ -148,10 +142,7 @@ fn test_csv_input_compression_without_header() {
 
     assert!(
         err <= 0.05,
-        "Error: {}\nOriginal    : {:?}\nUncompressed: {:?}",
-        err,
-        original_samples,
-        uncompressed_samples
+        "Error: {err}\nOriginal    : {original_samples:?}\nUncompressed: {uncompressed_samples:?}"
     );
 }
 
@@ -256,10 +247,7 @@ fn compare_samples_with_allowed_error(original: &Path, uncompressed: &Path) {
 
     assert!(
         err <= MAX_ALLOWED_ERROR,
-        "Error: {}\nOriginal    : {:?}\nUncompressed: {:?}",
-        err,
-        original_samples,
-        uncompressed_samples
+        "Error: {err}\nOriginal    : {original_samples:?}\nUncompressed: {uncompressed_samples:?}"
     );
 }
 

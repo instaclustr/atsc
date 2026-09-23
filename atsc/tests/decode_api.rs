@@ -1,11 +1,11 @@
 use atsc::{
     compressor::{
+        BinConfig, Compressor,
         constant::Constant,
-        fft::{FrequencyPoint, FFT},
+        fft::{FFT, FrequencyPoint},
         noop::Noop,
         polynomial::{Polynomial, PolynomialType},
         rle::IndexRLE,
-        BinConfig, Compressor,
     },
     data::CompressedStream,
     decoder::{Decoder, FrameInfo},
@@ -343,10 +343,12 @@ fn decode_range_accepts_empty_ranges_including_stream_end() {
     let mut decoder = Decoder::new();
 
     for position in [0, 3, stream.sample_count()] {
-        assert!(decoder
-            .decode_range(&stream, position..position)
-            .expect("empty range must decode")
-            .is_empty());
+        assert!(
+            decoder
+                .decode_range(&stream, position..position)
+                .expect("empty range must decode")
+                .is_empty()
+        );
 
         let mut output = vec![-1.0];
         assert_eq!(

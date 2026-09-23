@@ -15,13 +15,13 @@ limitations under the License.
 */
 
 use crate::decoder::Decoder;
-use crate::error::{reserve_decode, DecodeError};
+use crate::error::{DecodeError, reserve_decode};
 use crate::optimizer::utils::{Bitdepth, DataStats};
-use crate::utils::{error::calculate_error, round_and_limit_f64, round_f64, DECIMAL_PRECISION};
+use crate::utils::{DECIMAL_PRECISION, error::calculate_error, round_and_limit_f64, round_f64};
 
-use super::{decode_payload, BinConfig, Compressor, CompressorResult};
+use super::{BinConfig, Compressor, CompressorResult, decode_payload};
 use bincode::{
-    de::Decoder as BincodeDecoder, error::DecodeError as BincodeDecodeError, Decode, Encode,
+    Decode, Encode, de::Decoder as BincodeDecoder, error::DecodeError as BincodeDecodeError,
 };
 use log::{debug, info, trace};
 use splines::{Interpolation, Key, Spline};
@@ -237,10 +237,7 @@ impl Polynomial {
         while target_error < round_f64(current_err, 4) {
             trace!(
                 "Method: {:?} Iterations: {} Error: {} Target: {}",
-                method,
-                iterations,
-                current_err,
-                target_error
+                method, iterations, current_err, target_error
             );
             iterations += 1;
             self.compress_hinted(data, baseline_points + jump);
@@ -641,7 +638,9 @@ mod tests {
         let vector1 = vec![1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         assert_eq!(
             polynomial(&vector1, PolynomialType::Polynomial),
-            [0, 3, 4, 1, 2, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4]
+            [
+                0, 3, 4, 1, 2, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4
+            ]
         );
     }
 
@@ -712,7 +711,9 @@ mod tests {
         let out = Polynomial::decompress(&idw_data).to_data(frame_size);
         assert_eq!(
             out,
-            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+            [
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0
+            ]
         );
     }
 
@@ -733,7 +734,9 @@ mod tests {
         let vector1 = vec![1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 3.0, 1.0, 1.0, 5.0];
         assert_eq!(
             polynomial(&vector1, PolynomialType::Idw),
-            [1, 3, 4, 1, 2, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4]
+            [
+                1, 3, 4, 1, 2, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 64, 4
+            ]
         );
     }
 
@@ -788,7 +791,9 @@ mod tests {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0];
         assert_eq!(
             polynomial(&vector1, PolynomialType::Polynomial),
-            [0, 3, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1]
+            [
+                0, 3, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1
+            ]
         );
     }
 
@@ -797,7 +802,9 @@ mod tests {
         let vector1 = vec![1.0, 1.0, 1.0, 1.0];
         assert_eq!(
             polynomial(&vector1, PolynomialType::Idw),
-            [1, 3, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1]
+            [
+                1, 3, 0, 0, 0, 0, 0, 0, 0, 240, 63, 0, 0, 0, 0, 0, 0, 240, 63, 1
+            ]
         );
     }
 }

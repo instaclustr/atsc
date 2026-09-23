@@ -16,15 +16,15 @@ limitations under the License.
 
 use crate::{
     decoder::Decoder,
-    error::{reserve_decode, DecodeError},
+    error::{DecodeError, reserve_decode},
     optimizer::utils::DataStats,
     utils::{error::calculate_error, next_size},
 };
 use bincode::{Decode, Encode};
-use rustfft::{num_complex::Complex, FftPlanner};
+use rustfft::{FftPlanner, num_complex::Complex};
 use std::{cmp::Ordering, collections::BinaryHeap};
 
-use super::{decode_payload, BinConfig, Compressor, CompressorResult};
+use super::{BinConfig, Compressor, CompressorResult, decode_payload};
 use log::{debug, error, info, trace, warn};
 
 const FFT_COMPRESSOR_ID: u8 = 15;
@@ -59,7 +59,7 @@ impl FrequencyPoint {
     pub fn to_inv_complex(self) -> Complex<f32> {
         Complex {
             re: self.freq_real,
-            im: self.freq_img * -1.0,
+            im: -self.freq_img,
         }
     }
 

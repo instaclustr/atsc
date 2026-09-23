@@ -256,13 +256,10 @@ impl<R: Read> Read for BoundedReader<R> {
         let read_limit = self.remaining.saturating_add(1).min(buffer.len());
         let read = self.inner.read(&mut buffer[..read_limit])?;
         if read > self.remaining {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                InputLimitIoError {
-                    actual: self.limit.saturating_add(1),
-                    limit: self.limit,
-                },
-            ));
+            return Err(io::Error::other(InputLimitIoError {
+                actual: self.limit.saturating_add(1),
+                limit: self.limit,
+            }));
         }
         self.remaining -= read;
         Ok(read)

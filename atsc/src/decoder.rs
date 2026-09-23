@@ -19,10 +19,10 @@ use std::{fmt, iter::FusedIterator, mem, ops::Range, slice};
 use crate::{
     compressor::Compressor,
     data::CompressedStream,
-    error::{reserve_decode, DecodeError},
+    error::{DecodeError, reserve_decode},
     frame::CompressorFrame,
 };
-use rustfft::{num_complex::Complex, FftPlanner};
+use rustfft::{FftPlanner, num_complex::Complex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameInfo {

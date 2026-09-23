@@ -89,7 +89,7 @@ pub fn start_day_ts(dt: DateTime<Utc>) -> i64 {
 /// # use vsri::Vsri;
 /// let vsri = Vsri::get_sample_location("metric_name", 5);
 /// ```
-
+///
 /// Index Structure
 /// index_name: Name of the index file we are indexing
 /// min_ts: the minimum TS available in this file

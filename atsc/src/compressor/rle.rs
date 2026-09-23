@@ -17,11 +17,11 @@ limitations under the License.
 use crate::{
     compressor::CompressorResult,
     decoder::Decoder,
-    error::{reserve_decode, DecodeError},
+    error::{DecodeError, reserve_decode},
     optimizer::utils::{Bitdepth, DataStats},
 };
 
-use super::{decode_payload, BinConfig, Compressor};
+use super::{BinConfig, Compressor, decode_payload};
 use bincode::{Decode, Encode};
 use log::{debug, trace};
 use std::collections::BTreeMap;
