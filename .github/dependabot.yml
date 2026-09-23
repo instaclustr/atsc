@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    ignore:
+      # Pinned until they are replaced in a follow-up PR; upgrades could change BRO encoding or decoding.
+      - dependency-name: "bincode"
+      - dependency-name: "bincode_derive"
+      - dependency-name: "splines"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
