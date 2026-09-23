@@ -60,7 +60,10 @@ that meets `--error`, so `-c` does not change the chosen codec.
 
 BRO, WBRO, and CSV readers default to a 256 MiB input limit and a 33,423,360
 sample limit. WBRO archive shape is validated before archived vectors are
-deserialized. CSV readers bound individual records and report invalid UTF-8,
+deserialized. WBRO input must carry the `WBRO0001WBRO` header (rkyv 0.8 body);
+files written before the rkyv 0.8 migration have the `WBRO0000WBRO` header,
+are reported as a legacy-format input error, and must be regenerated from
+their source data. CSV readers bound individual records and report invalid UTF-8,
 unequal record lengths, missing fields, and invalid values as input-format
 errors instead of panicking. File open and read failures remain I/O errors.
 
@@ -158,7 +161,8 @@ ATSC uses stable exit codes in both explicit and legacy modes (0.7 exited with
 - `4`: compression error (strict input or error-bound failure; in legacy mode,
   only input that is empty after dropping non-finite samples or needs more than
   255 frames)
-- `5`: malformed WBRO header/body or CSV UTF-8/shape/field/value error
+- `5`: malformed or legacy (`WBRO0000WBRO`) WBRO header/body, or CSV
+  UTF-8/shape/field/value error
 
 For a directory with multiple failures, every eligible entry is attempted
 once and the highest applicable failure code is returned.

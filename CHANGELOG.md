@@ -1,5 +1,53 @@
 # Changelog
 
+## Unreleased
+
+BRO v1 is unchanged: the same streams are written and decoded byte for byte.
+
+### Breaking: WBRO format
+
+- `wavbrro` 0.2.0 stores the WBRO body as an rkyv 0.8 archive (was rkyv 0.7).
+  Bytes 4..8 of the 12-byte header are now a format marker: new files start
+  with `WBRO0001WBRO`, and readers accept only the `0001` marker.
+- Files with the `WBRO0000WBRO` header written by earlier releases (rkyv 0.7
+  body) can no longer be read. `wavbrro` returns `Error::LegacyFormat` and the
+  `atsc` CLI exits with the input-format code `5`, stating that the file must
+  be regenerated. Any other marker is a format error.
+- Migration: regenerate `.wbro` files from their source data (for example with
+  `csv-compressor` or `wav2wbro`), or decompress existing `.bro` files with this
+  release, which writes the new header. BRO files do not need migration.
+- The `atsc` CLI now writes WBRO through `wavbrro::write::try_write_wavbrro_file`
+  and the shared `wavbrro::write::FILE_HEADER` instead of its own copy of the
+  header.
+
+### Toolchain and dependencies
+
+- The minimum supported Rust version is 1.88 and every crate uses edition 2024.
+  Package metadata and dependency versions are inherited from the workspace,
+  which uses resolver 3 and denies unsafe code.
+- Removed unused dependencies: `average`, `median`, `regex`, `num-traits`,
+  `hound`, `inverse_distance_weight`, and the `rand` dev-dependency from
+  `atsc`; `claxon`, `symphonia`, `dtw_rs`, `regex`, `median`, and `chrono` from
+  `tools`; `log` and `env_logger` from `wavbrro`. `tempfile` is now a
+  dev-dependency, and `csv-compressor` uses `tempfile` instead of the
+  deprecated `tempdir`.
+- Upgraded rustfft 6.4, clap 4.6, csv 1.4, thiserror 2.0.20, serde 1.0.229,
+  serde_json 1.0.151, log 0.4.34, env_logger 0.11.11, tempfile 3.27,
+  chrono 0.4.45, criterion 0.8, and rkyv 0.8. bincode stays pinned to
+  `=2.0.0-rc.3` and splines to 4.3.x until they are replaced.
+- `rand` 0.8, `remove_dir_all`, and `tempdir` are gone from `Cargo.lock`.
+
+### CI
+
+- Workflows default to read-only `contents` permissions; only the release
+  publishing job gets `contents: write`. Actions are pinned by SHA
+  (actions/checkout v7.0.1, Swatinem/rust-cache v2.9.2), and pushes to `main`
+  no longer cancel each other.
+- cargo-deny checks advisories, bans, licenses, and sources with a new
+  `deny.toml`; the unmaintained-bincode advisory (RUSTSEC-2025-0141) is ignored
+  until bincode is replaced.
+- Dependabot checks Cargo and GitHub Actions dependencies weekly.
+
 ## 0.8.0
 
 BRO v1 stays wire compatible: streams written by 0.7 decode unchanged, and

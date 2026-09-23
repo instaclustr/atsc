@@ -91,7 +91,7 @@ For full documentation please go to [Docs](https://github.com/instaclustr/atsc/t
 
 ### Prerequisites
 
-* Ensure you have [Rust 1.81 or newer](https://www.rust-lang.org/tools/install) installed on your system.
+* Ensure you have [Rust 1.88 or newer](https://www.rust-lang.org/tools/install) installed on your system. With rustup, `rust-toolchain.toml` selects 1.88 automatically.
 
 ### Usage
 
@@ -126,6 +126,9 @@ processes each eligible input once.
 `-o/--output` is only valid for a single input file.
 BRO, WBRO, and CSV reads default to 256 MiB and 33,423,360 samples. WBRO
 metadata and CSV structure are validated before unbounded allocations.
+WBRO files use the `WBRO0001WBRO` header and an rkyv 0.8 body; files with the
+older `WBRO0000WBRO` header (rkyv 0.7 body) are rejected with an input-format
+error and must be regenerated from their source data.
 `compress` is strict: non-finite samples are rejected with their sample index,
 and a codec that misses the error bound fails without writing output. File
 open/read/write failures retain the I/O exit status.
