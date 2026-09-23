@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use super::{decode_payload, BinConfig, Compressor, CompressorResult};
+use super::{BinConfig, Compressor, CompressorResult, decode_payload};
 use crate::{
     decoder::Decoder,
-    error::{reserve_decode, DecodeError},
+    error::{DecodeError, reserve_decode},
 };
 use bincode::{Decode, Encode};
 use log::{debug, info};

@@ -29,14 +29,14 @@ pub struct CompressorHeader {
 
 fn verify_header_versions(version: u32) -> Result<(), DecodeError> {
     let current_version = CURRENT_VERSION;
-    trace!("Versions: c:{} h:{}", current_version, version);
+    trace!("Versions: c:{current_version} h:{version}");
     match current_version.cmp(&version) {
         std::cmp::Ordering::Less => Err(DecodeError::UnsupportedVersion {
             found: version,
             supported: current_version,
         }),
         std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => {
-            debug!("File version: {}", version);
+            debug!("File version: {version}");
             Ok(())
         }
     }

@@ -15,8 +15,9 @@ limitations under the License.
 */
 
 // Import necessary libraries
-use atsc::compressor::polynomial::{polynomial, polynomial_allowed_error, to_data, PolynomialType};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use atsc::compressor::polynomial::{PolynomialType, polynomial, polynomial_allowed_error, to_data};
+use criterion::{Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
 
 // Define example sample data
 const SAMPLE_DATA: &[f64] = &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];

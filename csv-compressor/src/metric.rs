@@ -17,7 +17,7 @@ limitations under the License.
 use crate::csv::Sample;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
-use vsri::{day_elapsed_seconds, Vsri};
+use vsri::{Vsri, day_elapsed_seconds};
 use wavbrro::wavbrro::WavBrro;
 
 /// Metric is responsible for generating WavBrro and VSRI from parsed Samples
@@ -37,7 +37,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::UpdateForPointError(sample) => {
-                write!(f, "updating for point failed, sample: {:?}", sample)
+                write!(f, "updating for point failed, sample: {sample:?}")
             }
             Error::UnknownError => write!(f, "unknown error occurred"),
         }

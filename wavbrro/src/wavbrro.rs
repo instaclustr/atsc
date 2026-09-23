@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use rkyv::util::AlignedVec;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::fs::File;
 use std::io::Read;
@@ -22,10 +23,11 @@ use std::{error, fmt, io, result};
 
 #[cfg(test)]
 use crate::read::is_wavbrro_file;
-use crate::write::write_wavbrro_file;
+use crate::write::{FILE_HEADER, write_wavbrro_file};
 
 const MAX_CHUNK_SIZE: usize = 2048;
-const FILE_HEADER_LEN: usize = 12;
+const FILE_HEADER_LEN: usize = FILE_HEADER.len();
+const LEGACY_RKYV_07_MARKER: &[u8] = b"0000";
 const DEFAULT_MAX_INPUT_BYTES: usize = 256 * 1024 * 1024;
 const DEFAULT_MAX_SAMPLES: usize = 131_072 * u8::MAX as usize;
 
@@ -45,16 +47,7 @@ impl Default for ReadLimits {
 }
 
 #[derive(Archive, Deserialize, Serialize, Debug, PartialEq, Clone)]
-#[archive(
-    // This will generate a PartialEq impl between our unarchived and archived
-    // types:
-    compare(PartialEq),
-    // bytecheck can be used to validate your data if you want. To use the safe
-    // API, you have to derive CheckBytes for the archived type:
-    check_bytes,
-)]
-// Derives can be passed through to the generated type:
-#[archive_attr(derive(Debug))]
+#[rkyv(compare(PartialEq), derive(Debug))]
 pub struct WavBrro {
     // We can infer chunk count from here -> chunk count = ceil(sample_count/MAX_CHUNK_SIZE)
     pub sample_count: u32,
@@ -138,12 +131,10 @@ impl WavBrro {
 
         let mut header = [0_u8; FILE_HEADER_LEN];
         file.read_exact(&mut header)?;
-        if &header[..4] != b"WBRO" || &header[8..] != b"WBRO" {
-            return Err(Error::FormatError);
-        }
+        check_file_header(&header)?;
 
         let body_capacity = metadata_len - FILE_HEADER_LEN;
-        let mut body = rkyv::AlignedVec::with_capacity(body_capacity);
+        let mut body = AlignedVec::<16>::with_capacity(body_capacity);
         let max_body_bytes = limits.max_input_bytes - FILE_HEADER_LEN;
         let mut buffer = [0_u8; 16 * 1024];
         loop {
@@ -180,8 +171,8 @@ impl WavBrro {
         write_wavbrro_file(file_path, &bytes);
     }
 
-    pub fn to_bytes(&self) -> rkyv::AlignedVec {
-        rkyv::to_bytes::<_, 1024>(self).expect("Failed to serialize data!")
+    pub fn to_bytes(&self) -> AlignedVec {
+        rkyv::to_bytes::<rkyv::rancor::Error>(self).expect("Failed to serialize data!")
     }
 
     /// Validates and deserializes an archived WAVBRRO body.
@@ -206,10 +197,21 @@ impl WavBrro {
     }
 }
 
+fn check_file_header(header: &[u8; FILE_HEADER_LEN]) -> Result<(), Error> {
+    if header[..4] != FILE_HEADER[..4] || header[8..] != FILE_HEADER[8..] {
+        return Err(Error::FormatError);
+    }
+    match &header[4..8] {
+        marker if marker == &FILE_HEADER[4..8] => Ok(()),
+        LEGACY_RKYV_07_MARKER => Err(Error::LegacyFormat),
+        _ => Err(Error::FormatError),
+    }
+}
+
 fn validate_archived(bytes: &[u8], limits: ReadLimits) -> Result<&ArchivedWavBrro, Error> {
-    let archived = rkyv::check_archived_root::<WavBrro>(bytes)
+    let archived = rkyv::access::<ArchivedWavBrro, rkyv::rancor::Error>(bytes)
         .map_err(|error| Error::DeserializationError(error.to_string()))?;
-    let sample_count = archived.sample_count as usize;
+    let sample_count = archived.sample_count.to_native() as usize;
     if sample_count > limits.max_samples {
         return Err(Error::SampleLimitExceeded {
             actual: sample_count,
@@ -267,11 +269,11 @@ fn validate_archived(bytes: &[u8], limits: ReadLimits) -> Result<&ArchivedWavBrr
 }
 
 fn archived_samples(archived: &ArchivedWavBrro) -> Result<Vec<f64>, Error> {
-    let sample_count = archived.sample_count as usize;
+    let sample_count = archived.sample_count.to_native() as usize;
     let mut samples = Vec::new();
     reserve(&mut samples, sample_count, "WAVBRRO samples")?;
     for chunk in archived.chunks.iter() {
-        samples.extend(chunk.iter().copied());
+        samples.extend(chunk.iter().map(|sample| sample.to_native()));
     }
     Ok(samples)
 }
@@ -282,11 +284,11 @@ fn archived_to_owned(archived: &ArchivedWavBrro) -> Result<WavBrro, Error> {
     for archived_chunk in archived.chunks.iter() {
         let mut chunk = Vec::new();
         reserve(&mut chunk, archived_chunk.len(), "WAVBRRO chunk samples")?;
-        chunk.extend(archived_chunk.iter().copied());
+        chunk.extend(archived_chunk.iter().map(|sample| sample.to_native()));
         chunks.push(chunk);
     }
     Ok(WavBrro {
-        sample_count: archived.sample_count,
+        sample_count: archived.sample_count.to_native(),
         bitdepth: archived.bitdepth,
         chunks,
     })
@@ -313,6 +315,8 @@ pub enum Error {
     IoError(io::Error),
     /// It's not WAVBRRO
     FormatError,
+    /// The file header carries the `0000` marker of the legacy rkyv 0.7 body.
+    LegacyFormat,
     /// The archived WAVBRRO body failed validation or deserialization.
     DeserializationError(String),
     /// The archived metadata is structurally valid but semantically invalid.
@@ -352,6 +356,10 @@ impl fmt::Display for Error {
         match *self {
             Error::IoError(ref err) => err.fmt(formatter),
             Error::FormatError => formatter.write_str("Wrong WAVBRRO file!"),
+            Error::LegacyFormat => formatter.write_str(
+                "WAVBRRO file uses the legacy rkyv 0.7 WBRO body (header marker 0000), which is \
+                 no longer supported; regenerate it from the source data",
+            ),
             Error::DeserializationError(ref error) => {
                 write!(formatter, "Failed to deserialize WAVBRRO data: {error}")
             }
@@ -409,6 +417,7 @@ impl error::Error for Error {
             Error::Unsupported => "the wave format of the file is not supported",
             Error::InvalidSampleFormat => "the sample format differs from the destination format",
             Error::FormatError => "the file is not of the WAVBRRO format",
+            Error::LegacyFormat => "the legacy rkyv 0.7 WAVBRRO format is no longer supported",
         }
     }
 
@@ -424,6 +433,7 @@ impl error::Error for Error {
             Error::Unsupported => None,
             Error::InvalidSampleFormat => None,
             Error::FormatError => None,
+            Error::LegacyFormat => None,
         }
     }
 }
@@ -454,8 +464,8 @@ mod tests {
         assert_eq!(
             wb.to_bytes().as_slice(),
             &[
-                0, 0, 0, 0, 0, 0, 240, 63, 248, 255, 255, 255, 1, 0, 0, 0, 248, 255, 255, 255, 1,
-                0, 0, 0, 1, 0, 0, 0, 5, 0, 0, 0
+                0, 0, 0, 0, 0, 0, 240, 63, 248, 255, 255, 255, 1, 0, 0, 0, 1, 0, 0, 0, 5, 0, 0, 0,
+                240, 255, 255, 255, 1, 0, 0, 0
             ]
         );
     }
@@ -562,12 +572,51 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn bounded_file_reader_accepts_exact_limit_and_ignores_legacy_size_text() {
+    fn read_with_header(header: &[u8; FILE_HEADER_LEN]) -> Result<Vec<f64>, Error> {
         let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("legacy-size.wbro");
+        let path = temp.path().join("header.wbro");
+        let mut file = header.to_vec();
+        file.extend_from_slice(&WavBrro::from_slice(&[1.0, 2.0]).to_bytes());
+        std::fs::write(&path, &file).unwrap();
+        WavBrro::from_file(&path)
+    }
+
+    #[test]
+    fn file_header_format_marker_is_checked() {
+        assert_eq!(read_with_header(b"WBRO0001WBRO").unwrap(), [1.0, 2.0]);
+        assert!(matches!(
+            read_with_header(b"WBRO0000WBRO"),
+            Err(Error::LegacyFormat)
+        ));
+        for header in [
+            b"WBROABCDWBRO",
+            b"WBRO0002WBRO",
+            b"XBRO0001WBRO",
+            b"WBRO0001WBRX",
+        ] {
+            assert!(matches!(read_with_header(header), Err(Error::FormatError)));
+        }
+    }
+
+    #[test]
+    fn writer_emits_versioned_header() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("header.wbro");
+        WavBrro::to_file_with_data(&path, &[1.0]);
+        let file = std::fs::read(&path).unwrap();
+        assert_eq!(&file[..FILE_HEADER_LEN], b"WBRO0001WBRO");
+        assert_eq!(
+            &file[FILE_HEADER_LEN..],
+            WavBrro::from_slice(&[1.0]).to_bytes().as_slice()
+        );
+    }
+
+    #[test]
+    fn bounded_file_reader_accepts_exact_limit() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("limit.wbro");
         let body = WavBrro::from_slice(&[1.0, 2.0]).to_bytes();
-        let mut file = b"WBROABCDWBRO".to_vec();
+        let mut file = FILE_HEADER.to_vec();
         file.extend_from_slice(&body);
         std::fs::write(&path, &file).unwrap();
 

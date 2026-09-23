@@ -4,11 +4,13 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
 
-# Cancel already running jobs
+permissions:
+  contents: read
+
+# Cancel superseded pull request runs; every push to main gets its own group
 concurrency:
-  group: build_and_test_${{ github.head_ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -20,8 +22,8 @@ jobs:
     name: Ubuntu 24.04
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Check `cargo fmt` was run
         run: cargo fmt --all -- --check
       - name: Ensure that all targets compile without warnings
@@ -29,7 +31,14 @@ jobs:
       - name: Ensure that all tests pass
         run: cargo test --workspace --all-targets --locked
       - name: Ensure that the decompression benchmark compiles
-        run: cargo bench -p atsc --bench decompression_bench --no-run
+        run: cargo bench -p atsc --bench decompression_bench --no-run --locked
+      - name: Check dependency advisories, bans, licenses and sources
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          rust-version: "1.88"
+          arguments: --all-features --locked
+          command: check
+          command-arguments: advisories bans licenses sources
       - name: Ensure that tests did not create or modify any files that arent .gitignore'd
         run: |
           if [ -n "$(git status --porcelain)" ]; then

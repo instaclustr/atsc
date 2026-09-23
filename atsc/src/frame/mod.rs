@@ -17,7 +17,7 @@ limitations under the License.
 use crate::{
     compressor::{Compressor, CompressorResult},
     decoder::Decoder,
-    error::{validate_encode_input, DecodeError, EncodeError},
+    error::{DecodeError, EncodeError, validate_encode_input},
     optimizer::utils::DataStats,
 };
 use bincode::{BorrowDecode, Decode, Encode};

@@ -1,7 +1,8 @@
 use atsc::{
     compressor::Compressor, data::CompressedStream, decoder::Decoder, optimizer::OptimizerPlan,
 };
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
 
 const LARGE_SAMPLES: usize = 131_072;
 const LOSSY_SAMPLES: usize = 8_192;

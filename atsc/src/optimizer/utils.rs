@@ -73,10 +73,7 @@ impl DataStats {
         if !fractional {
             recommended_bitdepth = DataStats::bitdepth(max_int, min_int);
         }
-        debug!(
-            "Recommended Bitdepth: {:?}, Fractional: {}",
-            recommended_bitdepth, fractional
-        );
+        debug!("Recommended Bitdepth: {recommended_bitdepth:?}, Fractional: {fractional}");
         DataStats {
             max,
             max_loc,

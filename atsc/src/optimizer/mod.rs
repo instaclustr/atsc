@@ -16,7 +16,7 @@ limitations under the License.
 
 use crate::{
     compressor::Compressor,
-    error::{validate_encode_input, EncodeError},
+    error::{EncodeError, validate_encode_input},
     utils::{f64_to_u64, prev_power_of_two},
 };
 

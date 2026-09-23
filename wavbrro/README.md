@@ -10,15 +10,26 @@ The spec for WAVBRRO is the following:
 
 Extension: .wbro
 
-- Header, 12 Bytes
-  - 0..3 "WBRO"
-  - 4..7 Sample number (u32)
+- Header, 12 Bytes: `WBRO0001WBRO`
+  - 0..4 "WBRO"
+  - 4..8 Format marker, ASCII `0001`
   - 8..12 "WBRO"
-- Internal Structure
+- Body: an [rkyv](https://rkyv.org) 0.8 archive (little-endian, aligned,
+  32-bit relative pointers) validated with bytecheck before any sample vector is
+  materialized
   - Sample number: u32
-  - Bitdepth: u8 [0 -> u8, 1 -> i16, 2 -> i32, 3 -> i64, 4 -> f32, 5 -> f64]
+  - Bitdepth: u8 [0 -> u8, 1 -> i16, 2 -> i32, 3 -> i64, 4 -> f32, 5 -> f64];
+    only 5 (f64) is accepted
   - Samples
-    - Blocks of 2048 samples
+    - Blocks of 2048 samples; only the final block may be shorter, and it holds
+      at least one sample
+    - The block lengths must sum to the sample number; an empty file has no blocks
+
+Readers accept only the `0001` marker. Files written by wavbrro 0.1 carry the
+marker `0000` and an rkyv 0.7 body, which is no longer readable; reading one
+returns `Error::LegacyFormat`. Regenerate such files from the source data (for
+example with `csv-compressor` or `wav2wbro`). Any other marker returns
+`Error::FormatError`.
 
 ### WAVBRRO API
 

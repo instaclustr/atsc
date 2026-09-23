@@ -5,7 +5,7 @@ use std::{
 };
 
 use atsc::{
-    compressor::{constant::Constant, BinConfig, Compressor},
+    compressor::{BinConfig, Compressor, constant::Constant},
     optimizer::utils::Bitdepth,
 };
 use serde_json::Value;
@@ -271,6 +271,7 @@ fn explicit_compress_and_decompress_round_trip_to_exact_output_paths() {
         .unwrap();
     assert_success(&decompression);
     assert_eq!(WavBrro::from_file(&restored).unwrap(), samples);
+    assert_eq!(&fs::read(&restored).unwrap()[..12], b"WBRO0001WBRO");
 }
 
 #[test]
@@ -451,8 +452,10 @@ fn output_option_is_rejected_for_directory_input() {
 
     assert_eq!(output.status.code(), Some(EXIT_USAGE));
     assert!(!output_path.exists());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("--output can only be used with a single input file"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("--output can only be used with a single input file")
+    );
 }
 
 #[test]
@@ -623,10 +626,41 @@ fn invalid_wbro_uses_the_stable_input_format_exit_code() {
 }
 
 #[test]
+fn legacy_rkyv_07_wbro_is_reported_as_input_format_error() {
+    let temp = tempdir().unwrap();
+    let input = temp.path().join("legacy.wbro");
+    // A single 1.0 sample as written by wavbrro 0.1 (rkyv 0.7 body).
+    let mut bytes = b"WBRO0000WBRO".to_vec();
+    bytes.extend_from_slice(&[
+        0, 0, 0, 0, 0, 0, 240, 63, 248, 255, 255, 255, 1, 0, 0, 0, 248, 255, 255, 255, 1, 0, 0, 0,
+        1, 0, 0, 0, 5, 0, 0, 0,
+    ]);
+    fs::write(&input, bytes).unwrap();
+    let output_path = temp.path().join("output.bro");
+
+    let output = command()
+        .arg("compress")
+        .arg(&input)
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(EXIT_INPUT_FORMAT));
+    assert!(!output_path.exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("legacy rkyv 0.7 WBRO body"), "{stderr}");
+    assert!(
+        stderr.contains("regenerate it from the source data"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn truncated_wbro_body_is_reported_as_input_format_error_without_panicking() {
     let temp = tempdir().unwrap();
     let input = temp.path().join("truncated.wbro");
-    let mut bytes = b"WBRO0000WBRO".to_vec();
+    let mut bytes = b"WBRO0001WBRO".to_vec();
     bytes.push(0);
     fs::write(&input, bytes).unwrap();
     let output_path = temp.path().join("output.bro");
@@ -710,8 +744,10 @@ fn legacy_compressor_option_cannot_be_mixed_with_compress_subcommand() {
 
     assert_eq!(output.status.code(), Some(EXIT_USAGE));
     assert!(!input.with_extension("bro").exists());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("legacy root input/options cannot be combined"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("legacy root input/options cannot be combined")
+    );
 }
 
 #[test]
@@ -729,8 +765,10 @@ fn legacy_uncompress_option_cannot_be_mixed_with_verify_subcommand() {
 
     assert_eq!(output.status.code(), Some(EXIT_USAGE));
     assert!(output.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("legacy root input/options cannot be combined"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("legacy root input/options cannot be combined")
+    );
 }
 
 #[test]
@@ -750,8 +788,10 @@ fn legacy_input_cannot_be_mixed_with_verify_subcommand() {
 
     assert_eq!(output.status.code(), Some(EXIT_USAGE));
     assert!(output.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .contains("legacy root input/options cannot be combined"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("legacy root input/options cannot be combined")
+    );
 }
 
 #[test]

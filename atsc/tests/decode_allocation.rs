@@ -1,3 +1,6 @@
+// Implementing `GlobalAlloc` requires unsafe code.
+#![allow(unsafe_code)]
+
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     sync::atomic::{AtomicUsize, Ordering},
@@ -14,22 +17,28 @@ static LARGEST: AtomicUsize = AtomicUsize::new(0);
 
 unsafe impl GlobalAlloc for LargestAllocation {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        LARGEST.fetch_max(layout.size(), Ordering::Relaxed);
-        System.alloc(layout)
+        unsafe {
+            LARGEST.fetch_max(layout.size(), Ordering::Relaxed);
+            System.alloc(layout)
+        }
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        LARGEST.fetch_max(layout.size(), Ordering::Relaxed);
-        System.alloc_zeroed(layout)
+        unsafe {
+            LARGEST.fetch_max(layout.size(), Ordering::Relaxed);
+            System.alloc_zeroed(layout)
+        }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        LARGEST.fetch_max(new_size, Ordering::Relaxed);
-        System.realloc(ptr, layout, new_size)
+        unsafe {
+            LARGEST.fetch_max(new_size, Ordering::Relaxed);
+            System.realloc(ptr, layout, new_size)
+        }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        System.dealloc(ptr, layout)
+        unsafe { System.dealloc(ptr, layout) }
     }
 }
 

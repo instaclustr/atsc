@@ -256,13 +256,10 @@ impl<R: Read> Read for BoundedReader<R> {
         let read_limit = self.remaining.saturating_add(1).min(buffer.len());
         let read = self.inner.read(&mut buffer[..read_limit])?;
         if read > self.remaining {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                InputLimitIoError {
-                    actual: self.limit.saturating_add(1),
-                    limit: self.limit,
-                },
-            ));
+            return Err(io::Error::other(InputLimitIoError {
+                actual: self.limit.saturating_add(1),
+                limit: self.limit,
+            }));
         }
         self.remaining -= read;
         Ok(read)
@@ -292,7 +289,7 @@ mod tests {
     #[test]
     fn test_valid_csv() {
         let temp_dir = tempdir().unwrap();
-        let filepath = temp_dir.into_path().join("test_valid.csv");
+        let filepath = temp_dir.path().join("test_valid.csv");
 
         let content = "timestamp,value\n1625097600,123.45\n1625184000,678.90\n";
         create_csv_file(content, &filepath);
@@ -319,7 +316,7 @@ mod tests {
     #[test]
     fn test_single_column_csv_no_headers() {
         let temp_dir = tempdir().unwrap();
-        let filepath = temp_dir.into_path().join("test_single_column.csv");
+        let filepath = temp_dir.path().join("test_single_column.csv");
 
         let content = "123.45\n678.90\n";
         create_csv_file(content, &filepath);
@@ -346,7 +343,7 @@ mod tests {
     #[test]
     fn test_incorrect_format_single_column() {
         let temp_dir = tempdir().unwrap();
-        let filepath = temp_dir.into_path().join("test_incorrect_format.csv");
+        let filepath = temp_dir.path().join("test_incorrect_format.csv");
 
         let content = "value\n123.45\ninvalid_value\n678.90\n";
         create_csv_file(content, &filepath);
@@ -358,9 +355,7 @@ mod tests {
     #[test]
     fn test_missing_timestamp_column() {
         let temp_dir = tempdir().unwrap();
-        let filepath = temp_dir
-            .into_path()
-            .join("test_missing_timestamp_column.csv");
+        let filepath = temp_dir.path().join("test_missing_timestamp_column.csv");
 
         let content = "time,value\n1625097600,123.45\n1625184000,678.90\n";
         create_csv_file(content, &filepath);
@@ -372,7 +367,7 @@ mod tests {
     #[test]
     fn test_missing_value_column() {
         let temp_dir = tempdir().unwrap();
-        let filepath = temp_dir.into_path().join("test_missing_value_column.csv");
+        let filepath = temp_dir.path().join("test_missing_value_column.csv");
 
         let content = "timestamp,price\n1625097600,123.45\n1625184000,678.90\n";
         create_csv_file(content, &filepath);
@@ -384,7 +379,7 @@ mod tests {
     #[test]
     fn test_parsing_error_value() {
         let temp_dir = tempdir().unwrap();
-        let filepath = temp_dir.into_path().join("test_parsing_error_value.csv");
+        let filepath = temp_dir.path().join("test_parsing_error_value.csv");
 
         let content = "timestamp,value\n1625097600,invalid_value\n1625184000,678.90\n";
         create_csv_file(content, &filepath);
@@ -407,7 +402,7 @@ mod tests {
     #[test]
     fn test_no_headers_csv() {
         let temp_dir = tempdir().unwrap();
-        let filepath = temp_dir.into_path().join("test_no_headers.csv");
+        let filepath = temp_dir.path().join("test_no_headers.csv");
 
         let content = "timestamp,value\n1625097600,123.45\n1625184000,678.90\n";
         create_csv_file(content, &filepath);

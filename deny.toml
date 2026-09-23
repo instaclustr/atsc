@@ -1,0 +1,22 @@
+[advisories]
+unmaintained = "all"
+yanked = "deny"
+ignore = [
+    # bincode is unmaintained; replaced in a follow-up PR.
+    { id = "RUSTSEC-2025-0141", reason = "replaced in a follow-up PR" },
+]
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "MIT",
+    "Unicode-3.0",
+]
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

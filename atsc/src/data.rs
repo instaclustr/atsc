@@ -16,7 +16,7 @@ limitations under the License.
 
 use crate::compressor::{BinConfig, Compressor};
 use crate::decoder::{Decoder, FrameInfo, FrameInfoIter};
-use crate::error::{validate_encode_input, DecodeError, DecodeLimits, EncodeError};
+use crate::error::{DecodeError, DecodeLimits, EncodeError, validate_encode_input};
 use crate::frame::{BorrowedFrame, BoundPolicy, CompressorFrame};
 use crate::header::CompressorHeader;
 //use bincode::{Decode, Encode};
@@ -107,10 +107,7 @@ impl CompressedStream {
     ) -> Result<(), EncodeError> {
         validate_encode_input(chunk)?;
         self.ensure_frame_available()?;
-        debug!(
-            "Compressing chunk bounded with a max error of {}",
-            max_error
-        );
+        debug!("Compressing chunk bounded with a max error of {max_error}");
         let mut compressor_frame = CompressorFrame::new(Some(compressor));
         match compressor {
             // Auto means the frame will pick the best
@@ -324,7 +321,9 @@ mod tests {
         let b = cs.to_bytes();
         assert_eq!(
             b,
-            [66, 82, 82, 79, 1, 0, 0, 0, 1, 1, 41, 251, 0, 4, 3, 3, 30, 3, 1]
+            [
+                66, 82, 82, 79, 1, 0, 0, 0, 1, 1, 41, 251, 0, 4, 3, 3, 30, 3, 1
+            ]
         );
     }
 
