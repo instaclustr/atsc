@@ -28,7 +28,8 @@ BRO v1 stays wire compatible: streams written by 0.7 decode unchanged, and
     forced codec's output when the error bound is missed, and Auto selects
     codecs as 0.7 did (from the sample prefix when a sampling speed is set,
     otherwise the smallest candidate meeting the bound, or the smallest
-    candidate when none does).
+    candidate when none does). Where 0.7 panicked because no candidate met
+    the bound on the sample, 0.8 falls back to full-frame selection.
   - They now panic, before mutating the stream, on empty or non-finite chunks
     and at the 255-frame BRO v1 limit instead of writing a corrupt frame
     count.

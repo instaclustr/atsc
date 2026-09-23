@@ -114,7 +114,8 @@ Legacy compression keeps 0.7's best-effort semantics, unlike `compress`:
   restored series is shorter than the input by that count.
 - When the codec misses `--error`, output is still written: a forced codec
   writes its bounded result, and `auto` writes the smallest candidate when no
-  candidate meets the bound. Compare the restored data if the bound matters.
+  candidate meets the bound (see sampling below). Compare the restored data if
+  the bound matters.
 - `auto` selects codecs as 0.7 did. With `-c` 1 through 6 it picks the codec
   from the first 4096 (`-c 1`) down to 128 (`-c 6`) samples of each frame long
   enough to sample, and writes that codec's full-frame result even if it
