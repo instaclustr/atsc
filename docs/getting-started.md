@@ -4,7 +4,7 @@ How to build and/or run ATSC
 
 ## Compiling from source
 
-1. Get [Rust](https://www.rust-lang.org/) 1.88 or newer (with rustup, `rust-toolchain.toml` selects 1.88) 1.88 or newer (with rustup, `rust-toolchain.toml` selects 1.88)
+1. Get [Rust](https://www.rust-lang.org/) 1.88 or newer (with rustup, `rust-toolchain.toml` selects 1.88)
 2. Checkout the repository:
 
     ```bash

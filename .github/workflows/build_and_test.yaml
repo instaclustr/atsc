@@ -11,7 +11,7 @@ permissions:
 
 # Cancel superseded pull request runs; every push to main gets its own group
 concurrency:
-  group: build_and_test_${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -37,6 +37,7 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           rust-version: "1.88"
+          arguments: --all-features --locked
           command: check
           command-arguments: advisories bans licenses sources
       - name: Ensure that tests did not create or modify any files that arent .gitignore'd
